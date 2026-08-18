@@ -136,7 +136,117 @@ class ContentExtractorTest {
         assertThat(result.getTitle()).isEqualTo("Council approves transit plan");
         // Relative image paths are resolved against the page URL, or the
         // stored value would be unusable.
-        assertThat(result.getImageUrl()).isEqualTo("https://example.com/img/lead.jpg");
+        assertThat(result.leadImage()).isNotNull();
+        assertThat(result.leadImage().getUrl()).isEqualTo("https://example.com/img/lead.jpg");
+        assertThat(result.leadImage().getRole()).isEqualTo(ImageRole.LEAD);
+    }
+
+    @Test
+    void extract_imageWithoutAFigure_fallsBackToAltAsCaption() {
+        String html = """
+                <article><p>%s</p>
+                <img src="https://example.com/img/a.jpg" width="800" height="600"
+                     alt="A tram at the northern terminus"/></article>
+                """.formatted(PROSE_1);
+
+        ExtractedArticle result = extractor.extract(html, "https://example.com/story");
+
+        assertThat(result.getImages()).singleElement().satisfies(image -> {
+            assertThat(image.getCaption()).isEqualTo("A tram at the northern terminus");
+            assertThat(image.getRole()).isEqualTo(ImageRole.INLINE);
+            assertThat(image.getWidth()).isEqualTo(800);
+        });
+    }
+
+    @Test
+    void extract_promoImageWithNoCaptionNoAltAndNoSize_isDropped() {
+        // A newspaper's own front-page thumbnail advertising a subscription
+        // sits inside the article container but carries none of the signals
+        // that mark an image as meant to be looked at.
+        String html = """
+                <article><p>%s</p>
+                <a href="/abo"><img src="https://example.com/covers/latest.jpg"/></a>
+                </article>
+                """.formatted(PROSE_1);
+
+        ExtractedArticle result = extractor.extract(html, "https://example.com/story");
+
+        assertThat(result.getImages()).isEmpty();
+    }
+
+    @Test
+    void extract_figureWithoutCaptionOrSize_isStillKept() {
+        // Being wrapped in a figure is itself a statement that the image is
+        // part of the content.
+        String html = """
+                <article><p>%s</p>
+                <figure><img src="https://example.com/img/photo.jpg"/></figure></article>
+                """.formatted(PROSE_1);
+
+        ExtractedArticle result = extractor.extract(html, "https://example.com/story");
+
+        assertThat(result.getImages()).hasSize(1);
+    }
+
+    @Test
+    void extract_captionCreditIsNotGluedToTheDescription() {
+        String html = """
+                <article><p>%s</p>
+                <figure>
+                  <img src="https://example.com/img/a.jpg" alt="x"/>
+                  <figcaption>An aerial view of the construction site.<span
+                    class="credit">picture alliance/dpa</span></figcaption>
+                </figure></article>
+                """.formatted(PROSE_1);
+
+        ExtractedArticle result = extractor.extract(html, "https://example.com/story");
+
+        assertThat(result.getImages()).singleElement().satisfies(image ->
+                assertThat(image.getCaption())
+                        .isEqualTo("An aerial view of the construction site. picture alliance/dpa"));
+    }
+
+    @Test
+    void extract_iconSizedImages_areDropped() {
+        String html = """
+                <article><p>%s</p>
+                <img src="https://example.com/img/icon.png" width="16" height="16" alt="icon"/>
+                </article>
+                """.formatted(PROSE_1);
+
+        ExtractedArticle result = extractor.extract(html, "https://example.com/story");
+
+        assertThat(result.getImages()).isEmpty();
+    }
+
+    @Test
+    void extract_imagesOutsideTheArticleContainer_areNotCollected() {
+        // Position is the discriminator: inside the container that survived
+        // stripping and won the scoring means part of the reporting.
+        String html = """
+                <html><body>
+                  <article><p>%s</p>
+                    <img src="https://example.com/img/inside.jpg" alt="inside"/></article>
+                  <div class="promo"><img src="https://example.com/img/outside.jpg" alt="ad"/></div>
+                </body></html>
+                """.formatted(PROSE_1);
+
+        ExtractedArticle result = extractor.extract(html, "https://example.com/story");
+
+        assertThat(result.getImages()).extracting(ExtractedImage::getUrl)
+                .containsExactly("https://example.com/img/inside.jpg");
+    }
+
+    @Test
+    void extract_readsTheCanonicalUrlWithoutActingOnIt() {
+        String html = """
+                <html><head><link rel="canonical" href="/news/canonical-path"/></head>
+                <body><article><p>%s</p></article></body></html>
+                """.formatted(PROSE_1);
+
+        ExtractedArticle result = extractor.extract(html, "https://example.com/news/tracked");
+
+        assertThat(result.getCanonicalUrl()).isEqualTo("https://example.com/news/canonical-path");
     }
 
     @Test

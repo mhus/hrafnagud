@@ -3,6 +3,7 @@ package de.mhus.hrafnagud.munin.content;
 import de.mhus.hrafnagud.api.article.ContentStatus;
 import de.mhus.hrafnagud.munin.article.ArticleContentDocument;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
+import de.mhus.hrafnagud.munin.article.ArticleImage;
 import de.mhus.hrafnagud.munin.article.ArticleService;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
 import de.mhus.hrafnagud.munin.net.HttpFetchResult;
@@ -113,20 +114,36 @@ public class ContentFetchService {
             return status;
         }
 
+        ExtractedImage lead = extracted.leadImage();
         ArticleContentDocument content = ArticleContentDocument.builder()
                 .articleId(articleId)
                 .text(TextCleaner.truncate(extracted.getText(), config.getMaxTextChars()))
                 .wordCount(extracted.getWordCount())
                 .extractedTitle(extracted.getTitle())
-                .imageUrl(extracted.getImageUrl())
+                .imageUrl(lead == null ? null : lead.getUrl())
+                .images(extracted.getImages().stream().map(ContentFetchService::toEmbedded).toList())
+                .author(extracted.getAuthor())
+                .publishedAt(extracted.getPublishedAt())
+                .language(extracted.getLanguage())
+                .canonicalUrl(extracted.getCanonicalUrl())
                 .finalUrl(response.getFinalUrl())
                 .extractor(extracted.getExtractor())
                 .build();
 
         articleService.recordContentSuccess(articleId, content, now);
-        log.debug("Fetched body for {} — {} words via {}", article.getUrl(),
-                extracted.getWordCount(), extracted.getExtractor());
+        log.debug("Fetched body for {} — {} words, {} images, via {}", article.getUrl(),
+                extracted.getWordCount(), extracted.getImages().size(), extracted.getExtractor());
         return ContentStatus.FETCHED;
+    }
+
+    private static ArticleImage toEmbedded(ExtractedImage image) {
+        return ArticleImage.builder()
+                .url(image.getUrl())
+                .caption(image.getCaption())
+                .role(image.getRole().name())
+                .width(image.getWidth())
+                .height(image.getHeight())
+                .build();
     }
 
     /** {@code true} for statuses that say the document will not come back. */

@@ -92,4 +92,33 @@ class TextCleanerTest {
         assertThat(TextCleaner.wordCount("  ")).isZero();
         assertThat(TextCleaner.wordCount(null)).isZero();
     }
+
+    @Test
+    void wordCount_japaneseText_isNotCountedAsAHandfulOfWords() {
+        // Japanese uses no spaces. Counting tokens would score a full
+        // article as one "word", and every length threshold downstream
+        // would then reject every CJK article as a stub.
+        String sentence = "市議会は火曜日の夜、交通計画を賛成多数で可決した。";
+
+        assertThat(TextCleaner.wordCount(sentence)).isGreaterThan(8);
+    }
+
+    @Test
+    void wordCount_chineseAndThai_areCountedTheSameWay() {
+        assertThat(TextCleaner.wordCount("市议会星期二晚上通过了交通计划")).isGreaterThan(5);
+        assertThat(TextCleaner.wordCount("สภาเทศบาลอนุมัติแผนการขนส่ง")).isGreaterThan(5);
+    }
+
+    @Test
+    void wordCount_mixedScripts_countBothHalves() {
+        // A Japanese article quoting an English name.
+        int mixed = TextCleaner.wordCount("市議会は Daimler Truck について報じた");
+
+        assertThat(mixed).isGreaterThan(TextCleaner.wordCount("Daimler Truck"));
+    }
+
+    @Test
+    void wordCount_latinText_isUnaffectedByTheScriptHandling() {
+        assertThat(TextCleaner.wordCount("The council approved the plan")).isEqualTo(5);
+    }
 }

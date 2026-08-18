@@ -2,11 +2,13 @@ package de.mhus.hrafnagud.munin.web;
 
 import de.mhus.hrafnagud.api.article.ArticleContentDto;
 import de.mhus.hrafnagud.api.article.ArticleDto;
+import de.mhus.hrafnagud.api.article.ArticleImageDto;
 import de.mhus.hrafnagud.api.article.ArticleTranslationDto;
 import de.mhus.hrafnagud.api.source.SourceDto;
 import de.mhus.hrafnagud.api.source.SourceListDto;
 import de.mhus.hrafnagud.munin.article.ArticleContentDocument;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
+import de.mhus.hrafnagud.munin.article.ArticleImage;
 import de.mhus.hrafnagud.munin.article.ArticleTranslation;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
 import de.mhus.hrafnagud.munin.sourcelist.SourceListDocument;
@@ -125,10 +127,25 @@ public final class MuninMapper {
                 .wordCount(content.getWordCount())
                 .extractedTitle(content.getExtractedTitle())
                 .imageUrl(content.getImageUrl())
+                .images(content.getImages().stream().map(MuninMapper::toDto).toList())
+                .author(content.getAuthor())
+                .publishedAt(content.getPublishedAt())
+                .language(content.getLanguage())
+                .canonicalUrl(content.getCanonicalUrl())
                 .finalUrl(content.getFinalUrl())
                 .extractor(content.getExtractor())
                 .fetchedAt(content.getFetchedAt())
                 .translations(new LinkedHashMap<>(content.getTranslations()))
+                .build();
+    }
+
+    private static ArticleImageDto toDto(ArticleImage image) {
+        return ArticleImageDto.builder()
+                .url(image.getUrl())
+                .caption(image.getCaption())
+                .role(image.getRole())
+                .width(image.getWidth())
+                .height(image.getHeight())
                 .build();
     }
 }

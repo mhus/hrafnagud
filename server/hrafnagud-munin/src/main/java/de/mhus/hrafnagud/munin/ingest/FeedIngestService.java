@@ -6,7 +6,6 @@ import de.mhus.hrafnagud.api.source.SourceFetchReport;
 import de.mhus.hrafnagud.api.source.SourceType;
 import de.mhus.hrafnagud.munin.article.ArticleCandidate;
 import de.mhus.hrafnagud.munin.article.ArticleService;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
 import de.mhus.hrafnagud.munin.lang.LanguageResolver;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
 import de.mhus.hrafnagud.munin.source.SourceService;
@@ -22,8 +21,8 @@ import org.springframework.stereotype.Service;
  * Polls one source and files what it returned.
  *
  * <p>The step between reading and storing: resolve each entry's language,
- * decide whether its body should be fetched, hand it to the archive, and
- * fold the per-entry outcomes into the source's schedule and statistics.
+ * hand it to the archive, queue it for the body fetcher, and fold the
+ * per-entry outcomes into the source's schedule and statistics.
  *
  * <p>Deliberately synchronous and per-source. Concurrency lives one level
  * up in {@link FeedIngestTick}, which means this method can be called
@@ -37,16 +36,13 @@ public class FeedIngestService {
     private final SourceService sourceService;
     private final ArticleService articleService;
     private final LanguageResolver languageResolver;
-    private final MuninProperties.Content contentConfig;
     private final Map<SourceType, SourceReader> readers = new EnumMap<>(SourceType.class);
 
     public FeedIngestService(SourceService sourceService, ArticleService articleService,
-            LanguageResolver languageResolver, List<SourceReader> readerBeans,
-            MuninProperties properties) {
+            LanguageResolver languageResolver, List<SourceReader> readerBeans) {
         this.sourceService = sourceService;
         this.articleService = articleService;
         this.languageResolver = languageResolver;
-        this.contentConfig = properties.getContent();
         for (SourceReader reader : readerBeans) {
             readers.put(reader.type(), reader);
         }
@@ -74,12 +70,13 @@ public class FeedIngestService {
         int crossSource = 0;
 
         if (read.getOutcome() == FetchOutcome.OK) {
-            // Everything the body fetcher will be asked to do is decided
-            // once, here, rather than per entry — it depends on the
-            // installation's configuration, not on the article.
-            ContentStatus initialStatus = contentConfig.isEnabled()
-                    ? ContentStatus.PENDING
-                    : ContentStatus.SKIPPED;
+            // Every ingested article is queued for the body fetcher,
+            // unconditionally. Whether that queue is worked is the fetcher's
+            // business, not ours: a producer that consulted the consumer's
+            // configuration would bake a runtime decision into stored state,
+            // and switching the fetcher on later would leave every article
+            // collected until then permanently unfetchable.
+            ContentStatus initialStatus = ContentStatus.PENDING;
 
             for (ArticleCandidate candidate : read.getCandidates()) {
                 LanguageResolver.Resolution language = languageResolver.resolve(

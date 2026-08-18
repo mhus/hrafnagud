@@ -21,8 +21,11 @@ package de.mhus.hrafnagud.api.article;
  *       {@link #FAILED} — this is a "we must not", not a "we could not".</li>
  *   <li>{@link #FAILED} — retry budget exhausted on transport or extraction
  *       errors. Terminal until an operator requeues it.</li>
- *   <li>{@link #SKIPPED} — not attempted on purpose, e.g. the source is
- *       configured teaser-only or the entry already carried a full body.</li>
+ *   <li>{@link #SKIPPED} — an operator excluded this article from body
+ *       fetching. Terminal, and never assigned automatically: ingest queues
+ *       <em>every</em> article as {@link #PENDING} regardless of whether the
+ *       fetcher is switched on, so that enabling it later works through the
+ *       backlog instead of leaving it stranded.</li>
  * </ul>
  */
 public enum ContentStatus {

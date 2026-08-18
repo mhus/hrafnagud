@@ -323,6 +323,25 @@ public class ArticleService {
                 ArticleDocument.class);
     }
 
+    /**
+     * Excludes an article from body fetching.
+     *
+     * <p>The only producer of {@link ContentStatus#SKIPPED}: ingest queues
+     * everything, so taking one article out of the queue is an explicit act.
+     * Useful against a source that reliably yields nothing extractable —
+     * without it the only options are letting it burn its retry budget every
+     * time or disabling the source entirely.
+     */
+    public void skipContent(String articleId, Instant now) {
+        mongoTemplate.updateFirst(
+                Query.query(Criteria.where("_id").is(articleId)),
+                new Update()
+                        .set(F_CONTENT_STATUS, ContentStatus.SKIPPED)
+                        .set("contentError", "excluded from body fetching at " + now)
+                        .unset(F_CONTENT_NEXT_ATTEMPT_AT),
+                ArticleDocument.class);
+    }
+
     /** Puts an article back in the content queue, resetting its budget. */
     public void requeueContent(String articleId, Instant now) {
         mongoTemplate.updateFirst(

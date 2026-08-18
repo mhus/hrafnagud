@@ -108,11 +108,53 @@ public final class TextCleaner {
         return value;
     }
 
-    /** Counts whitespace-separated words. */
+    /**
+     * Characters from scripts that do not separate words with spaces:
+     * Han, Hiragana, Katakana, Hangul and Thai.
+     */
+    private static final java.util.regex.Pattern UNSPACED_SCRIPT =
+            java.util.regex.Pattern.compile(
+                    "[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}\\p{IsThai}]");
+
+    /**
+     * Average characters per word in the unspaced scripts. Two is the
+     * conventional figure for Japanese and Chinese and is close enough for
+     * Korean and Thai — the number is used for length thresholds, not for
+     * linguistics.
+     */
+    private static final int CHARS_PER_UNSPACED_WORD = 2;
+
+    /**
+     * Approximate word count, usable across writing systems.
+     *
+     * <p>Counting whitespace-separated tokens is the obvious implementation
+     * and is wrong for a large part of the world: Japanese, Chinese, Korean
+     * and Thai do not put spaces between words, so a full article scores a
+     * handful of "words". Every length threshold built on that then
+     * misfires in the same direction — a complete Japanese article looks
+     * like a stub, gets rejected as too short, and the archive quietly ends
+     * up holding no CJK bodies at all.
+     *
+     * <p>So characters from unspaced scripts are counted separately and
+     * divided by an average word length, and the remainder is tokenised as
+     * usual. Mixed text (a Japanese article quoting an English name) is
+     * handled by both halves at once.
+     */
     public static int wordCount(@Nullable String text) {
         if (StringUtils.isBlank(text)) {
             return 0;
         }
-        return text.trim().split("\\s+").length;
+        String value = text.trim();
+
+        int unspacedChars = 0;
+        java.util.regex.Matcher matcher = UNSPACED_SCRIPT.matcher(value);
+        while (matcher.find()) {
+            unspacedChars++;
+        }
+
+        String spaced = UNSPACED_SCRIPT.matcher(value).replaceAll(" ").trim();
+        int spacedWords = spaced.isEmpty() ? 0 : spaced.split("\\s+").length;
+
+        return spacedWords + unspacedChars / CHARS_PER_UNSPACED_WORD;
     }
 }

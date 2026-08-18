@@ -107,6 +107,20 @@ public class ArticleController {
         return MuninMapper.toDto(articleService.requireById(id));
     }
 
+    /**
+     * Takes the article out of the body-fetch queue for good.
+     *
+     * <p>The inverse of {@code fetch-content}. Ingest queues every article
+     * regardless of whether the fetcher is running, so excluding one is an
+     * explicit decision rather than a side effect of configuration.
+     */
+    @PostMapping("/{id}/skip-content")
+    public ArticleDto skipContent(@PathVariable("id") String id) {
+        articleService.requireById(id);
+        articleService.skipContent(id, Instant.now());
+        return MuninMapper.toDto(articleService.requireById(id));
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable("id") String id) {

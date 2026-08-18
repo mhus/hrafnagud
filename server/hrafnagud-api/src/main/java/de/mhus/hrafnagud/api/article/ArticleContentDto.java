@@ -2,7 +2,9 @@ package de.mhus.hrafnagud.api.article;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -37,13 +39,35 @@ public class ArticleContentDto {
      */
     private @Nullable String extractedTitle;
 
-    /** Lead image declared by the page, typically {@code og:image}. */
+    /** Lead image URL, also present as the {@code LEAD} entry in {@link #images}. */
     private @Nullable String imageUrl;
+
+    /** Every image belonging to the article: the lead one, then the inline ones. */
+    private List<ArticleImageDto> images = new ArrayList<>();
+
+    /** Byline the page declared. */
+    private @Nullable String author;
+
+    /** Publication time the page declared — usually better than the feed's. */
+    private @Nullable Instant publishedAt;
+
+    /** Language the page declared, as a BCP-47 primary subtag. */
+    private @Nullable String language;
+
+    /** Canonical URL the page claims for itself. Informational. */
+    private @Nullable String canonicalUrl;
 
     /** URL actually delivered after redirects. */
     private @Nullable String finalUrl;
 
-    /** Name of the extraction strategy that produced the text. */
+    /**
+     * Which rung of the extraction ladder produced the text:
+     * {@code json-ld} (the publisher's own metadata), {@code semantic} (a
+     * container the page marks as its body), {@code scored} (highest
+     * paragraph text over link density) or {@code body} (last resort).
+     * Aggregating on this shows which publishers fall through to the
+     * guessing rungs.
+     */
     private @Nullable String extractor;
 
     private @Nullable Instant fetchedAt;
