@@ -44,6 +44,14 @@ munin:
     connectTimeout: PT10S
     readTimeout: PT30S
     maxBodyBytes: 8388608
+    # Outbound proxy for every request — feeds, source lists, article pages
+    # and robots.txt alike. Leave the host empty (or drop the block) to
+    # connect directly. A host without a valid port fails at startup rather
+    # than silently going direct, which in an environment that requires the
+    # proxy would break every fetch far away from the mistake.
+    proxy:
+      host: ${HRAFNAGUD_PROXY_HOST:}
+      port: ${HRAFNAGUD_PROXY_PORT:0}
     # Across all workers, per host. The single most important politeness
     # control once a directory import puts fifty feeds of one publisher into
     # the registry.

@@ -5,6 +5,8 @@ import de.mhus.hrafnagud.munin.util.Slugs;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
+import java.net.ProxySelector;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -32,6 +34,10 @@ import org.springframework.stereotype.Component;
  * <p>Failures are returned, not thrown. A crawl over thousands of hosts
  * fails constantly and in every possible way; treating that as exceptional
  * would mean wrapping every call site in the same catch block.
+ *
+ * <p>Being the only exit point is also what makes an outbound proxy a
+ * single setting rather than a change in four workers: feeds, source lists,
+ * article pages and {@code robots.txt} all leave through here.
  */
 @Component
 @Slf4j
@@ -44,13 +50,49 @@ public class HttpFetcher {
     public HttpFetcher(MuninProperties properties) {
         this.config = properties.getHttp();
         this.rateLimiter = new HostRateLimiter(config.getMinHostInterval());
-        this.client = HttpClient.newBuilder()
+
+        HttpClient.Builder builder = HttpClient.newBuilder()
                 .connectTimeout(config.getConnectTimeout())
                 // NORMAL follows redirects but refuses an HTTPS→HTTP
                 // downgrade, which is the behaviour we want and would
                 // otherwise have to implement by hand.
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .build();
+                .followRedirects(HttpClient.Redirect.NORMAL);
+
+        MuninProperties.Proxy proxy = config.getProxy();
+        proxySelector(proxy).ifPresentOrElse(
+                selector -> {
+                    builder.proxy(selector);
+                    log.info("Outbound HTTP goes through proxy {}:{}",
+                            proxy.getHost(), proxy.getPort());
+                },
+                () -> log.info("Outbound HTTP goes out directly (no proxy configured)"));
+
+        this.client = builder.build();
+    }
+
+    /**
+     * Builds the proxy selector, or empty when no proxy is configured.
+     *
+     * <p>Extracted and static so the three cases — unset, valid, and
+     * half-configured — can be tested without constructing a client.
+     *
+     * @throws IllegalArgumentException when a host is given without a usable
+     *         port; see {@link MuninProperties.Proxy} for why that fails
+     *         loudly instead of falling back to a direct connection
+     */
+    static Optional<ProxySelector> proxySelector(MuninProperties.Proxy proxy) {
+        if (!proxy.isConfigured()) {
+            return Optional.empty();
+        }
+        int port = proxy.getPort();
+        if (port < 1 || port > 65535) {
+            throw new IllegalArgumentException(
+                    "munin.http.proxy.host is set to '" + proxy.getHost()
+                            + "' but munin.http.proxy.port is " + port
+                            + " — a proxy needs a port in 1..65535");
+        }
+        return Optional.of(ProxySelector.of(
+                new InetSocketAddress(proxy.getHost().trim(), port)));
     }
 
     /** Unconditional GET. */

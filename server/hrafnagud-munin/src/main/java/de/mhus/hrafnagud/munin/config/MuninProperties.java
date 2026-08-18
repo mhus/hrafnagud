@@ -29,6 +29,9 @@ public class MuninProperties {
     @Data
     public static class Http {
 
+        /** Optional outbound proxy. Unset means direct connections. */
+        private final Proxy proxy = new Proxy();
+
         /**
          * Identifies the crawler and gives publishers somebody to contact.
          * An anonymous or browser-impersonating agent is how a crawler ends
@@ -57,6 +60,32 @@ public class MuninProperties {
          * the same second.
          */
         private Duration minHostInterval = Duration.ofSeconds(2);
+    }
+
+    /**
+     * Outbound HTTP proxy.
+     *
+     * <p>Opt-in by presence: leaving {@code host} unset means every request
+     * goes out directly, which is what an installation without a proxy
+     * wants and needs no configuration to express.
+     *
+     * <p>A configured host with no usable port is rejected at startup rather
+     * than ignored. Silently falling back to direct connections would be the
+     * worst outcome of the three — an environment that requires a proxy
+     * would fail every fetch, and the reason would be nowhere near the
+     * mistake.
+     */
+    @Data
+    public static class Proxy {
+
+        /** Proxy host or IP. Empty or unset disables proxying. */
+        private String host = "";
+
+        private int port;
+
+        public boolean isConfigured() {
+            return !host.isBlank();
+        }
     }
 
     /** Feed polling and the adaptive interval. */

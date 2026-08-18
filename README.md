@@ -40,6 +40,24 @@ java -jar hrafnagud-server/target/hrafnagud.jar
 Listens on `:9800`. Override with `HRAFNAGUD_PORT`, `HRAFNAGUD_MONGO_URI`,
 `HRAFNAGUD_MONGO_DB`.
 
+To route all outbound traffic through a proxy — feeds, source lists,
+article pages and `robots.txt` alike, since they all leave through the same
+client:
+
+```yaml
+munin:
+  http:
+    proxy:
+      host: 10.42.10.24
+      port: 8888
+```
+
+or `HRAFNAGUD_PROXY_HOST` / `HRAFNAGUD_PROXY_PORT`. Leaving the host empty
+connects directly, which is the default. A host set without a valid port
+fails at startup rather than quietly going direct — in an environment that
+requires the proxy that would break every fetch, and the reason would be
+nowhere near the mistake.
+
 Add a curated directory of feeds and collect from it:
 
 ```bash
