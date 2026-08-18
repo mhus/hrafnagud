@@ -1,0 +1,103 @@
+spring:
+  application:
+    name: hrafnagud
+  mongodb: # since spring 7 the connection properties live under spring.mongodb.*
+    uri: ${HRAFNAGUD_MONGO_URI:mongodb://root:example@localhost:27017/hrafnagud?authSource=admin}
+    database: ${HRAFNAGUD_MONGO_DB:hrafnagud}
+  data:
+    mongodb:
+      # Makes Spring Data honour @Indexed / @CompoundIndex / @TextIndexed on
+      # the entities. Without it the annotations are dead decoration: the
+      # unique index on articles.dedupKey would not exist, deduplication
+      # would degrade to a best-effort application check, and the claim
+      # queries would run as collection scans.
+      auto-index-creation: true
+  threads:
+    virtual:
+      # Ingest is almost entirely blocked on remote servers. Virtual threads
+      # make a request-per-thread model cheap enough that no pool tuning is
+      # needed for it.
+      enabled: true
+
+server:
+  port: ${HRAFNAGUD_PORT:9800}
+  error:
+    # Let the message through so a 400 from validation is diagnosable with
+    # curl. Stack traces stay off.
+    include-message: always
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+munin:
+  http:
+    # Identify the crawler and give publishers somebody to contact. Replace
+    # the URL with a real contact before running this at any scale — an
+    # anonymous crawler is one that gets blocked.
+    userAgent: "Hrafnagud/0.1 (+https://github.com/mhus/hrafnagud; news aggregator)"
+    connectTimeout: PT10S
+    readTimeout: PT30S
+    maxBodyBytes: 8388608
+    # Across all workers, per host. The single most important politeness
+    # control once a directory import puts fifty feeds of one publisher into
+    # the registry.
+    minHostInterval: PT2S
+
+  feed:
+    enabled: true
+    tickInterval: PT30S
+    batchSize: 20
+    defaultInterval: PT30M
+    minInterval: PT5M
+    maxInterval: PT12H
+    busyThreshold: 5
+    maxFailureInterval: PT24H
+    claimLease: PT10M
+    maxItemsPerFeed: 500
+    maxSummaryChars: 4000
+    maxFutureSkew: PT6H
+
+  content:
+    # Off by default. Fetching publisher pages is a different activity from
+    # reading the feeds they publish for polling, and should be a decision
+    # the operator makes rather than one that happens by installing this.
+    enabled: false
+    tickInterval: PT15S
+    batchSize: 20
+    maxAttempts: 3
+    retryDelay: PT10M
+    claimLease: PT5M
+    minWordCount: 60
+    maxTextChars: 200000
+    respectRobots: true
+    robotsCacheTtl: PT6H
+
+  source-list:
+    enabled: true
+    tickInterval: PT5M
+    defaultInterval: PT24H
+    maxEntries: 10000
+    claimLease: PT15M
+
+  language:
+    enabled: true
+    # Below this many characters of title plus teaser, detection abstains.
+    # A confident wrong language is worse than an honest unknown.
+    minChars: 40
+    # All languages in high-accuracy mode costs several GB of heap. Low
+    # accuracy costs a few hundred MB and only differs on very short input,
+    # which minChars already excludes.
+    lowAccuracyMode: true
+    # Empty means every language Lingua knows. Narrowing it to the languages
+    # actually present in the registry is both faster and more accurate.
+    languages: []
+
+logging:
+  level:
+    de.mhus.hrafnagud: INFO

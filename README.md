@@ -1,0 +1,200 @@
+# Hrafnagud
+
+A news collector. Pulls articles from many sources worldwide, deduplicates
+them across those sources, classifies their language, optionally fetches the
+full article text, and stores the result in MongoDB.
+
+Named after the raven-god. **Munin** (memory) is the part that collects and
+stores; a future **Hugin** (thought) will be the part that queries and
+analyses. Today only Munin exists.
+
+> **Status:** backend only, REST, no authentication. Bind it to localhost or
+> put it behind a reverse proxy — see [Known gaps](#known-gaps).
+
+## Modules
+
+```
+server/
+  hrafnagud-api/      DTOs and enums crossing the REST boundary. No Spring, no MongoDB.
+  hrafnagud-munin/    Source registry, feed ingest, deduplication, full-text fetch, persistence.
+  hrafnagud-server/   Boot module: entrypoint plus runtime configuration, nothing else.
+```
+
+`hrafnagud-server` is deliberately thin so that a second feature module
+(Hugin) can be added beside Munin without either of them owning the
+application.
+
+**Stack:** Java 25, Spring Boot 4.1, Maven multi-module, Lombok, JSpecify,
+Spring Data MongoDB, Rome (feed parsing), jsoup (HTML), Lingua (language
+detection), JUnit 5 + Mockito + AssertJ.
+
+## Running
+
+Needs a MongoDB. The defaults expect one on `localhost:27017`:
+
+```bash
+cd server && mvn install
+java -jar hrafnagud-server/target/hrafnagud.jar
+```
+
+Listens on `:9800`. Override with `HRAFNAGUD_PORT`, `HRAFNAGUD_MONGO_URI`,
+`HRAFNAGUD_MONGO_DB`.
+
+Add a curated directory of feeds and collect from it:
+
+```bash
+# awesome-rss-feeds (CC0) ships one OPML per country and per topic
+curl -X POST localhost:9800/api/v1/source-lists -H 'Content-Type: application/json' -d '{
+  "url": "https://raw.githubusercontent.com/plenaryapp/awesome-rss-feeds/master/countries/with_category/Germany.opml",
+  "name": "awesome-germany",
+  "type": "OPML",
+  "defaultCountry": "DE"
+}'
+
+curl -X POST localhost:9800/api/v1/source-lists/awesome-germany/refresh
+curl localhost:9800/api/v1/stats
+curl 'localhost:9800/api/v1/articles?language=de&size=5'
+```
+
+## Data model
+
+| Collection | Holds |
+|---|---|
+| `sources` | one feed each: URL, poll schedule, failure history, statistics |
+| `source_lists` | directories that populate `sources` |
+| `articles` | article metadata, deduplicated across sources |
+| `article_contents` | extracted article bodies, separate because they are ~50× larger |
+
+## Design decisions
+
+These are the choices that were not obvious, with the reasoning, because
+each of them is somewhere a reasonable person would do it differently.
+
+**A source's identity is its normalised URL — not its name, not its Mongo id.**
+Two entries pointing at the same feed are the same source however they were
+spelled. Without this, a publisher who starts appending a campaign parameter
+to its own feed link gets imported a second time, along with a second copy
+of its archive.
+
+**Deduplication is a unique index, not an application check.** The dedup key
+is a SHA-256 over the normalised article URL, and the index is unique, so two
+workers racing on the same feed entry resolve at the database. A wire report
+reaches us from every outlet that carries it; without this the archive would
+be mostly duplicates and every query would return the same story a dozen
+times.
+
+**URL normalisation leans conservative.** Over-normalising merges distinct
+articles and loses content, which is unrecoverable; under-normalising costs
+disk. Tracking parameters, AMP markers, fragments, `www.`, default ports and
+query-parameter order are folded. An `m.` host prefix and an `amp.`
+subdomain are *not* — those are frequently distinct hosts with distinct
+content. IRIs are converted to URIs (punycode plus percent-encoding) rather
+than rejected, because `java.net.URI` refuses non-ASCII outright and a
+worldwide collector cannot drop every internationalised domain.
+
+**An article records every source that delivered it.** Once articles are
+deduplicated across sources, "which feed did this come from" has more than
+one answer, and keeping only the first would discard exactly the information
+that makes the deduplication measurable.
+
+**The ingest path does not write in the common case.** A feed re-serves its
+whole window on every poll, so most ingest calls concern an article the same
+source already delivered. Those resolve to an upsert that matches, adds
+nothing and modifies nothing. There is deliberately no "still there"
+timestamp — it would make the archive's largest write load a field with no
+reader. `lastSourceAddedAt` is named for what it actually is: the last time
+a feed that *did not already have* the article delivered it.
+
+**Ordering uses `firstSeenAt`, never `publishedAt`.** Publishers backdate,
+forward-date and mis-timezone their dates often enough that one broken feed
+would dominate any sort built on them. `publishedAt` is kept as the
+publisher's claim, sanity-checked and nulled when implausible.
+
+**Language is stored with its provenance.** `SOURCE` (a human configured it)
+beats `FEED` (the publisher declared it) beats `DETECTED` (we classified
+it). A feed's `<language>` element is frequently absent or simply wrong, so
+a consumer filtering on "German articles" needs to know whether it is
+trusting a publisher or a classifier. Detection abstains rather than guesses
+on short input — `UNKNOWN` is more useful than a confident wrong answer.
+
+**Categories are stored verbatim, never normalised.** Publishers disagree
+completely about what a category is; some emit sections, some emit tags,
+some emit both in one field. Folding them into a taxonomy at ingest would
+destroy information no later step could recover. A `topics` layer can be
+built on top later.
+
+**Poll intervals adapt per feed.** A fixed interval is wrong in both
+directions at once: a wire service outruns it and entries are lost when its
+feed window rolls over, while a regional weekly gets polled two thousand
+times per published item. Delivering a lot halves the interval, delivering
+nothing grows it gently, failing backs off geometrically. Adjustment is
+asymmetric on purpose — reacting fast to a feed we are behind on, slowly to
+a quiet weekend.
+
+**A failing source is never auto-disabled.** Outages end, certificates get
+renewed, DNS changes settle. Backoff is capped at a daily retry so a feed
+that returns resumes by itself. A registry that quietly shrinks on every
+transient problem is one nobody can trust.
+
+**A source list is authoritative except where a human has spoken.** Every
+field written through the API is recorded in `lockedFields` and becomes
+off-limits to the list. Without it, disabling a feed that publishes garbage
+lasts until the next refresh — and then nobody bothers correcting anything
+again. Sources the list has dropped are *disabled*, not deleted: effective
+without being destructive, so a briefly truncated upstream response cannot
+delete half the registry.
+
+**A `304 Not Modified` on a source list skips reconciliation entirely.** Not
+an optimisation but a correctness requirement: reconciliation decides which
+sources the list has dropped, and a document we did not read cannot support
+that conclusion. Treating "unchanged" as "empty" would disable every source
+the list owns.
+
+**Full-text fetching is a separate queue, separate state machine, and off by
+default.** It is an order of magnitude slower than a feed poll, fails in far
+more ways, and is a qualitatively different act — reading a document
+published for polling, versus fetching a page that was not. Each rejection
+gets a status that says *why* (`BLOCKED`, `PAYWALL`, `FAILED`, or staying
+`PENDING`), because the four call for four different responses and
+collapsing them would keep retrying pages that can never succeed.
+
+**Politeness is centralised, not conventional.** One HTTP client, one user
+agent, one per-host rate limiter, one body cap. A directory import easily
+puts fifty feeds of one publisher into the registry; without per-host pacing
+they all get polled in the same second and the publisher responds the way
+any operator would. `robots.txt` is obeyed for article pages — and
+deliberately not consulted for feeds, which are published expressly to be
+polled.
+
+**Extraction scores containers by link density.** Navigation and
+related-story rails are text-heavy too, but nearly all of their text sits
+inside anchors while article prose sits outside them. That one ratio
+separates the two more reliably than any word count.
+
+**Translations are a map keyed by language, not `titleDe`/`titleEn`
+fields.** No translation engine exists yet; the shape is defined now so the
+third target language is not a schema change.
+
+## Known gaps
+
+Named rather than left to be discovered:
+
+- **No authentication or authorisation.** Every endpoint is open. Do not
+  expose this to a network you do not control.
+- **No retention policy.** At ten thousand articles a day the archive grows
+  quickly and nothing prunes it yet. A TTL or archival tier is needed before
+  this runs for months.
+- **Near-duplicate clustering is not implemented.** `contentHash` is stored
+  and indexed so the same story republished at a different URL can be found,
+  but nothing groups them yet. Exact-URL dedup is what works today.
+- **Single instance assumed.** Claims are leases in MongoDB, so a second
+  instance would not corrupt anything, but this has not been tested.
+- **Storing full article text has copyright implications.** Fine for private
+  research; if this output is ever published, quote-plus-link is the
+  defensible form.
+- **One source type.** `SourceType` and the reader SPI exist so a scraper or
+  API client is a new bean, but only `RSS` (covering Atom) is implemented.
+
+## Licence
+
+GPLv3 — see `LICENSE`.

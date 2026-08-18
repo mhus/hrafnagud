@@ -1,0 +1,148 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.0</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>de.mhus.hrafnagud</groupId>
+    <artifactId>hrafnagud</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <name>hrafnagud</name>
+    <description>News aggregation service — collects, deduplicates and stores news from worldwide sources</description>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>hrafnagud-api</module>
+        <module>hrafnagud-munin</module>
+        <module>hrafnagud-server</module>
+    </modules>
+
+    <properties>
+        <java.version>25</java.version>
+        <spring.boot.version>4.1.0</spring.boot.version>
+        <lombok.version>1.18.46</lombok.version>
+        <jspecify.version>1.0.1</jspecify.version>
+        <!-- Rome: RSS 0.9x/1.0/2.0 + Atom 0.3/1.0 parsing. The feed zoo in the
+             wild is broken in every way imaginable; Rome's XmlReader does
+             encoding sniffing (XML decl vs. HTTP charset vs. BOM) which a
+             plain JAXB/Jackson-XML route does not. -->
+        <rome.version>2.1.0</rome.version>
+        <!-- jsoup: HTML → text extraction for the full-article fetch, plus the
+             XML parser used for OPML source lists. Tolerant of broken markup. -->
+        <jsoup.version>1.23.1</jsoup.version>
+        <!-- Lingua: statistical language detection over 75 languages, no
+             transitive deps beyond kotlin-stdlib. Built lazily and in
+             low-accuracy mode by default — see LinguaLanguageDetector for the
+             memory trade-off. -->
+        <lingua.version>1.2.2</lingua.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <build.timestamp>${maven.build.timestamp}</build.timestamp>
+        <maven.build.timestamp.format>yyyy-MM-dd'T'HH:mm:ss'Z'</maven.build.timestamp.format>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring.boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.jspecify</groupId>
+                <artifactId>jspecify</artifactId>
+                <version>${jspecify.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.rometools</groupId>
+                <artifactId>rome</artifactId>
+                <version>${rome.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jsoup</groupId>
+                <artifactId>jsoup</artifactId>
+                <version>${jsoup.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.pemistahl</groupId>
+                <artifactId>lingua</artifactId>
+                <version>${lingua.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                Publishes one build property per resolved dependency, named
+                `groupId:artifactId:type` and holding the jar's path in the
+                local repository. Sole consumer is the Mockito `-javaagent` in
+                the Surefire argLine below.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>dependency-jar-properties</id>
+                        <goals>
+                            <goal>properties</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!--
+                        Mockito's inline mock-maker rewrites bytecode of loaded
+                        classes, which needs a JVM instrumentation agent. Left
+                        alone it self-attaches, which JEP 451 deprecated for
+                        removal. Passing the agent at JVM start is the supported
+                        route. The path expands from the `dependency:properties`
+                        execution above, so the version stays owned by
+                        spring-boot-starter-test.
+                    -->
+                    <argLine>
+                        -javaagent:${org.mockito:mockito-core:jar}
+                    </argLine>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

@@ -1,0 +1,49 @@
+package de.mhus.hrafnagud.api.common;
+
+import com.fasterxml.jackson.annotation.JsonInclude;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * Aggregate state of the archive — the operator's single-glance answer to
+ * "is it collecting, and from where".
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public class MuninStatsDto {
+
+    private long sourcesTotal;
+
+    private long sourcesEnabled;
+
+    /** Sources whose last poll failed. The number to watch. */
+    private long sourcesFailing;
+
+    private long sourceListsTotal;
+
+    private long articlesTotal;
+
+    /** Articles first seen in the last 24 hours. */
+    private long articlesLast24h;
+
+    /** Article count per body-fetch state, keyed by {@code ContentStatus}. */
+    private Map<String, Long> articlesByContentStatus = new LinkedHashMap<>();
+
+    /** Article count per language, most frequent first, top 20. */
+    private Map<String, Long> articlesByLanguage = new LinkedHashMap<>();
+
+    private @Nullable Instant newestArticleAt;
+
+    private @Nullable Instant oldestArticleAt;
+
+    private Instant serverTime = Instant.EPOCH;
+}

@@ -1,0 +1,43 @@
+package de.mhus.hrafnagud.munin.article;
+
+import de.mhus.hrafnagud.api.article.ContentStatus;
+import java.time.Instant;
+import lombok.Builder;
+import lombok.Value;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * Filter for an article listing. Every field is optional; unset means
+ * unfiltered.
+ *
+ * <p>A value object rather than a long parameter list so that adding a
+ * filter does not ripple through the controller, the service and every
+ * test.
+ */
+@Value
+@Builder
+public class ArticleQuery {
+
+    /** Articles delivered by this source, at any point. */
+    @Nullable String sourceName;
+
+    /** BCP-47 primary subtag. */
+    @Nullable String language;
+
+    /** Exact match against one of the article's verbatim categories. */
+    @Nullable String category;
+
+    /** Full-text search over title and teaser. */
+    @Nullable String text;
+
+    @Nullable ContentStatus contentStatus;
+
+    /** Lower bound on {@code firstSeenAt}, inclusive. */
+    @Nullable Instant since;
+
+    /** Upper bound on {@code firstSeenAt}, exclusive. */
+    @Nullable Instant until;
+
+    /** Ascending by {@code firstSeenAt} instead of the default descending. */
+    boolean oldestFirst;
+}

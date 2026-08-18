@@ -1,0 +1,400 @@
+package de.mhus.hrafnagud.munin.article;
+
+import de.mhus.hrafnagud.api.article.ContentStatus;
+import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.error.NotFoundException;
+import de.mhus.hrafnagud.munin.lang.LanguageResolver;
+import de.mhus.hrafnagud.munin.source.SourceDocument;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import org.bson.Document;
+import org.jspecify.annotations.Nullable;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.AggregationResults;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.TextCriteria;
+import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.stereotype.Service;
+import com.mongodb.client.result.UpdateResult;
+
+/**
+ * Owns the {@code articles} and {@code article_contents} collections.
+ *
+ * <p>The ingest path is the hot one and is written accordingly: one upsert
+ * per feed entry, no read first, and <em>no write at all</em> in the
+ * dominant case. A feed re-serves its entire window on every poll, so most
+ * ingest calls concern an article the same source already delivered; those
+ * resolve to an upsert that matches, adds nothing to the source set and
+ * modifies nothing. The alternative — stamping a "still there" timestamp —
+ * would make the archive's largest write load a field with no reader.
+ *
+ * <p>The upsert's return tells the three cases apart without a second
+ * query: an upserted id means the article is new, a modified count means
+ * this source is new to an article somebody else already had, and neither
+ * means we have seen this exact pairing before.
+ */
+@Service
+@Slf4j
+public class ArticleService {
+
+    private static final String F_DEDUP_KEY = "dedupKey";
+    private static final String F_SOURCE_NAMES = "sourceNames";
+    private static final String F_FIRST_SEEN_AT = "firstSeenAt";
+    private static final String F_LAST_SOURCE_ADDED_AT = "lastSourceAddedAt";
+    private static final String F_LANGUAGE = "language";
+    private static final String F_CATEGORIES = "categories";
+    private static final String F_CONTENT_STATUS = "contentStatus";
+    private static final String F_CONTENT_NEXT_ATTEMPT_AT = "contentNextAttemptAt";
+    private static final String F_CONTENT_ATTEMPTS = "contentAttempts";
+
+    /** Languages reported by the statistics endpoint. */
+    private static final int TOP_LANGUAGES = 20;
+
+    private final ArticleRepository repository;
+    private final ArticleContentRepository contentRepository;
+    private final MongoTemplate mongoTemplate;
+    private final MuninProperties.Content contentConfig;
+
+    public ArticleService(ArticleRepository repository, ArticleContentRepository contentRepository,
+            MongoTemplate mongoTemplate, MuninProperties properties) {
+        this.repository = repository;
+        this.contentRepository = contentRepository;
+        this.mongoTemplate = mongoTemplate;
+        this.contentConfig = properties.getContent();
+    }
+
+    /** What one ingest call did. */
+    public enum IngestOutcome {
+
+        /** The article did not exist. */
+        CREATED,
+
+        /** It existed, delivered by other sources only; this source was added. */
+        DUPLICATE_CROSS_SOURCE,
+
+        /** This source had already delivered it. Nothing was written. */
+        DUPLICATE_SAME_SOURCE
+    }
+
+    // ─── Ingest ───
+
+    /**
+     * Stores a feed entry, deduplicating against the whole archive.
+     *
+     * @param contentStatus initial body state; {@code PENDING} enqueues the
+     *                      article for the content worker
+     */
+    public IngestOutcome ingest(ArticleCandidate candidate, SourceDocument source,
+            LanguageResolver.Resolution language, ContentStatus contentStatus, Instant now) {
+
+        ArticleDocument document =
+                ArticleFactory.build(candidate, source, language, contentStatus, now);
+
+        try {
+            return upsert(document, source.getName(), now);
+        } catch (DuplicateKeyException e) {
+            // Another worker inserted the same article between our upsert's
+            // match and its insert. The article now exists, so the retry is
+            // a plain update and cannot hit the same race again.
+            log.trace("Article {} was inserted concurrently — retrying as update",
+                    document.getUrl());
+            return upsert(document, source.getName(), now);
+        }
+    }
+
+    private IngestOutcome upsert(ArticleDocument document, String sourceName, Instant now) {
+        Update update = new Update()
+                .setOnInsert("url", document.getUrl())
+                .setOnInsert("originalUrl", document.getOriginalUrl())
+                .setOnInsert("contentHash", document.getContentHash())
+                .setOnInsert("title", document.getTitle())
+                .setOnInsert("summary", document.getSummary())
+                .setOnInsert("author", document.getAuthor())
+                .setOnInsert("imageUrl", document.getImageUrl())
+                .setOnInsert("guid", document.getGuid())
+                .setOnInsert(F_LANGUAGE, document.getLanguage())
+                .setOnInsert("languageSource", document.getLanguageSource())
+                .setOnInsert(F_CATEGORIES, document.getCategories())
+                .setOnInsert("firstSourceName", document.getFirstSourceName())
+                .setOnInsert("publishedAt", document.getPublishedAt())
+                .setOnInsert(F_FIRST_SEEN_AT, document.getFirstSeenAt())
+                .setOnInsert(F_LAST_SOURCE_ADDED_AT, document.getLastSourceAddedAt())
+                .setOnInsert(F_CONTENT_STATUS, document.getContentStatus())
+                .setOnInsert(F_CONTENT_NEXT_ATTEMPT_AT, document.getContentNextAttemptAt())
+                .setOnInsert(F_CONTENT_ATTEMPTS, 0)
+                .setOnInsert("contentWordCount", 0)
+                .setOnInsert("translations", new LinkedHashMap<String, ArticleTranslation>())
+                // Spring Data treats a null @Version as "not yet persisted"
+                // and would turn a later save() into an insert. An upsert
+                // does not populate it, so it is seeded here.
+                .setOnInsert("version", 0L)
+                .addToSet(F_SOURCE_NAMES, sourceName);
+
+        UpdateResult result = mongoTemplate.upsert(
+                Query.query(Criteria.where(F_DEDUP_KEY).is(document.getDedupKey())),
+                update, ArticleDocument.class);
+
+        if (result.getUpsertedId() != null) {
+            return IngestOutcome.CREATED;
+        }
+        if (result.getModifiedCount() > 0) {
+            // The set grew, so this source is new to an article we already
+            // had. That is the moment the story spread, and the only repeat
+            // delivery worth a timestamp.
+            mongoTemplate.updateFirst(
+                    Query.query(Criteria.where(F_DEDUP_KEY).is(document.getDedupKey())),
+                    new Update().set(F_LAST_SOURCE_ADDED_AT, now),
+                    ArticleDocument.class);
+            return IngestOutcome.DUPLICATE_CROSS_SOURCE;
+        }
+        return IngestOutcome.DUPLICATE_SAME_SOURCE;
+    }
+
+    // ─── Lookup and search ───
+
+    public Optional<ArticleDocument> findById(String id) {
+        return repository.findById(id);
+    }
+
+    public ArticleDocument requireById(String id) {
+        return repository.findById(id).orElseThrow(() -> new NotFoundException("article", id));
+    }
+
+    public Optional<ArticleDocument> findByUrl(String normalizedUrl) {
+        return repository.findByDedupKey(ArticleFactory.dedupKey(normalizedUrl));
+    }
+
+    public Optional<ArticleContentDocument> findContent(String articleId) {
+        return contentRepository.findByArticleId(articleId);
+    }
+
+    public List<ArticleDocument> search(ArticleQuery filter, int page, int size) {
+        Query query = buildQuery(filter)
+                .with(Sort.by(filter.isOldestFirst() ? Sort.Direction.ASC : Sort.Direction.DESC,
+                        F_FIRST_SEEN_AT))
+                .skip((long) page * size)
+                .limit(size);
+        return mongoTemplate.find(query, ArticleDocument.class);
+    }
+
+    /**
+     * Counts matches.
+     *
+     * <p>Deliberately separate from {@link #search}: over a large archive an
+     * unfiltered count is a full index scan, and paying it on every page
+     * turn is how a listing endpoint becomes the slowest thing in the
+     * service. The controller decides whether the number is worth it.
+     */
+    public long count(ArticleQuery filter) {
+        return mongoTemplate.count(buildQuery(filter), ArticleDocument.class);
+    }
+
+    private Query buildQuery(ArticleQuery filter) {
+        List<Criteria> parts = new ArrayList<>();
+        if (StringUtils.isNotBlank(filter.getSourceName())) {
+            parts.add(Criteria.where(F_SOURCE_NAMES).is(filter.getSourceName()));
+        }
+        if (StringUtils.isNotBlank(filter.getLanguage())) {
+            parts.add(Criteria.where(F_LANGUAGE).is(filter.getLanguage()));
+        }
+        if (StringUtils.isNotBlank(filter.getCategory())) {
+            parts.add(Criteria.where(F_CATEGORIES).is(filter.getCategory()));
+        }
+        if (filter.getContentStatus() != null) {
+            parts.add(Criteria.where(F_CONTENT_STATUS).is(filter.getContentStatus()));
+        }
+        if (filter.getSince() != null || filter.getUntil() != null) {
+            Criteria window = Criteria.where(F_FIRST_SEEN_AT);
+            if (filter.getSince() != null) {
+                window = window.gte(filter.getSince());
+            }
+            if (filter.getUntil() != null) {
+                window = window.lt(filter.getUntil());
+            }
+            parts.add(window);
+        }
+
+        Query query = parts.isEmpty()
+                ? new Query()
+                : new Query(new Criteria().andOperator(parts));
+        if (StringUtils.isNotBlank(filter.getText())) {
+            query.addCriteria(TextCriteria.forDefaultLanguage()
+                    .matchingAny(filter.getText().trim()));
+        }
+        return query;
+    }
+
+    // ─── Content queue ───
+
+    /**
+     * Atomically claims articles whose body is due to be fetched.
+     *
+     * <p>{@code contentNextAttemptAt} is both the retry schedule and the
+     * lease: claiming pushes it out, so a worker that dies mid-fetch
+     * releases the article when the lease expires. The attempt counter is
+     * incremented at claim time rather than at completion, so an article
+     * that reliably crashes the worker still exhausts its budget instead of
+     * being retried forever.
+     */
+    public List<ArticleDocument> claimContentDue(Instant now, int limit) {
+        Instant leaseUntil = now.plus(contentConfig.getClaimLease());
+        List<ArticleDocument> claimed = new ArrayList<>();
+        for (int i = 0; i < limit; i++) {
+            Query query = Query.query(Criteria.where(F_CONTENT_STATUS).is(ContentStatus.PENDING)
+                            .and(F_CONTENT_NEXT_ATTEMPT_AT).lte(now))
+                    .with(Sort.by(Sort.Direction.ASC, F_CONTENT_NEXT_ATTEMPT_AT));
+            ArticleDocument article = mongoTemplate.findAndModify(query,
+                    new Update().set(F_CONTENT_NEXT_ATTEMPT_AT, leaseUntil)
+                            .inc(F_CONTENT_ATTEMPTS, 1),
+                    FindAndModifyOptions.options().returnNew(true),
+                    ArticleDocument.class);
+            if (article == null) {
+                break;
+            }
+            claimed.add(article);
+        }
+        return claimed;
+    }
+
+    /** Stores a fetched body and marks the article {@code FETCHED}. */
+    public void recordContentSuccess(String articleId, ArticleContentDocument content,
+            Instant now) {
+
+        content.setArticleId(articleId);
+        content.setFetchedAt(now);
+        ArticleContentDocument saved = contentRepository.findByArticleId(articleId)
+                .map(existing -> {
+                    content.setId(existing.getId());
+                    return contentRepository.save(content);
+                })
+                .orElseGet(() -> contentRepository.save(content));
+
+        mongoTemplate.updateFirst(
+                Query.query(Criteria.where("_id").is(articleId)),
+                new Update()
+                        .set(F_CONTENT_STATUS, ContentStatus.FETCHED)
+                        .set("contentId", saved.getId())
+                        .set("contentFetchedAt", now)
+                        .set("contentWordCount", saved.getWordCount())
+                        .unset("contentError")
+                        .unset(F_CONTENT_NEXT_ATTEMPT_AT),
+                ArticleDocument.class);
+    }
+
+    /**
+     * Records a failed body fetch.
+     *
+     * <p>A terminal status ends the attempt immediately. A retryable one
+     * either schedules the next attempt on a doubling delay or, once the
+     * budget is spent, becomes {@code FAILED}.
+     */
+    public void recordContentFailure(String articleId, ContentStatus status,
+            @Nullable String error, int attempts, Instant now) {
+
+        Update update = new Update()
+                .set("contentError", StringUtils.abbreviate(
+                        StringUtils.defaultString(error, status.name()), 500));
+
+        boolean exhausted = attempts >= contentConfig.getMaxAttempts();
+        if (status != ContentStatus.PENDING || exhausted) {
+            update.set(F_CONTENT_STATUS,
+                    status == ContentStatus.PENDING ? ContentStatus.FAILED : status);
+            // Out of the queue: leaving an attempt time on a terminal
+            // article would keep it in the partial index forever.
+            update.unset(F_CONTENT_NEXT_ATTEMPT_AT);
+        } else {
+            long delaySeconds = contentConfig.getRetryDelay().getSeconds()
+                    * (1L << Math.min(attempts, 6));
+            update.set(F_CONTENT_NEXT_ATTEMPT_AT, now.plusSeconds(delaySeconds));
+        }
+
+        mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(articleId)), update,
+                ArticleDocument.class);
+    }
+
+    /** Puts an article back in the content queue, resetting its budget. */
+    public void requeueContent(String articleId, Instant now) {
+        mongoTemplate.updateFirst(
+                Query.query(Criteria.where("_id").is(articleId)),
+                new Update()
+                        .set(F_CONTENT_STATUS, ContentStatus.PENDING)
+                        .set(F_CONTENT_NEXT_ATTEMPT_AT, now)
+                        .set(F_CONTENT_ATTEMPTS, 0)
+                        .unset("contentError"),
+                ArticleDocument.class);
+    }
+
+    /** Deletes an article and its body. */
+    public void delete(String articleId) {
+        ArticleDocument article = requireById(articleId);
+        contentRepository.deleteByArticleId(articleId);
+        repository.delete(article);
+    }
+
+    // ─── Statistics ───
+
+    public long countAll() {
+        return repository.count();
+    }
+
+    public long countSince(Instant since) {
+        return mongoTemplate.count(
+                Query.query(Criteria.where(F_FIRST_SEEN_AT).gte(since)), ArticleDocument.class);
+    }
+
+    /** Article count per {@link ContentStatus}. */
+    public Map<String, Long> countByContentStatus() {
+        return groupCount(F_CONTENT_STATUS, Integer.MAX_VALUE);
+    }
+
+    /** Article count per language, most frequent first. */
+    public Map<String, Long> countByLanguage() {
+        return groupCount(F_LANGUAGE, TOP_LANGUAGES);
+    }
+
+    private Map<String, Long> groupCount(String field, int limit) {
+        Aggregation aggregation = Aggregation.newAggregation(
+                Aggregation.group(field).count().as("count"),
+                Aggregation.sort(Sort.by(Sort.Direction.DESC, "count")),
+                Aggregation.limit(limit));
+        AggregationResults<Document> results =
+                mongoTemplate.aggregate(aggregation, ArticleDocument.class, Document.class);
+
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (Document row : results.getMappedResults()) {
+            Object key = row.get("_id");
+            Number count = row.get("count", Number.class);
+            counts.put(key == null ? "unknown" : key.toString(),
+                    count == null ? 0L : count.longValue());
+        }
+        return counts;
+    }
+
+    /** {@code firstSeenAt} of the newest article, or empty when the archive is. */
+    public Optional<Instant> newestArticleAt() {
+        return edgeTimestamp(Sort.Direction.DESC);
+    }
+
+    /** {@code firstSeenAt} of the oldest article. */
+    public Optional<Instant> oldestArticleAt() {
+        return edgeTimestamp(Sort.Direction.ASC);
+    }
+
+    private Optional<Instant> edgeTimestamp(Sort.Direction direction) {
+        Query query = new Query().with(Sort.by(direction, F_FIRST_SEEN_AT)).limit(1);
+        query.fields().include(F_FIRST_SEEN_AT);
+        return Optional.ofNullable(mongoTemplate.findOne(query, ArticleDocument.class))
+                .map(ArticleDocument::getFirstSeenAt);
+    }
+}
