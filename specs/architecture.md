@@ -90,6 +90,7 @@ head across both repositories.
 | Collection | Holds | Why separate |
 |---|---|---|
 | `sources` | one feed each: URL, poll schedule, failure history, statistics | — |
+| `source_catalogs` | directories of source lists — where lists come from, so the registry fills itself | see [catalogs.md](catalogs.md) |
 | `source_lists` | directories that populate `sources` | — |
 | `articles` | article metadata, deduplicated across sources | — |
 | `article_contents` | extracted bodies, images, page metadata | bodies are ~50× larger than the metadata, and most queries want the metadata |

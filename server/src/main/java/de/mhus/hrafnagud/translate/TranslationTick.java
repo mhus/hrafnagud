@@ -3,11 +3,11 @@ package de.mhus.hrafnagud.translate;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleService;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
-import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -19,8 +19,17 @@ import org.springframework.stereotype.Component;
  * service, so concurrency here would only mean hitting that service
  * harder — and behind it sits a model with its own rate limits, which is
  * not a place to push.
+ *
+ * <p><b>Not registered at all unless {@code munin.translation.enabled} is
+ * true.</b> Off by default, like the body fetch: both spend somebody else's
+ * resources — publisher bandwidth there, model time and money here — and
+ * neither should start because a service was installed. What stays behind
+ * when it is off is {@link TranslateConfiguration}, which reports the
+ * configuration at startup either way, so "disabled" is a line in the log
+ * rather than a silence.
  */
 @Component
+@ConditionalOnProperty(name = "munin.translation.enabled", havingValue = "true")
 @Slf4j
 public class TranslationTick {
 
@@ -34,28 +43,6 @@ public class TranslationTick {
         this.articleService = articleService;
         this.translationService = translationService;
         this.config = properties.getTranslation();
-    }
-
-    /**
-     * Says at startup what the configuration actually amounts to.
-     *
-     * <p>Targets configured with no provider wired is the failure that
-     * would otherwise be silent: articles queue up, nothing drains them,
-     * and the archive looks like it is translating.
-     */
-    @PostConstruct
-    void reportConfiguration() {
-        if (config.getPivotLanguage().isBlank()) {
-            log.info("Translation is off — no munin.translation.pivotLanguage configured");
-        } else if (!translationService.isAvailable()) {
-            log.warn("Pivot language '{}' is configured but no provider is wired — articles "
-                            + "will queue and nothing will translate them. "
-                            + "Set vance.ode.base-url to use a Vancetope brain.",
-                    config.getPivotLanguage());
-        } else {
-            log.info("Translating into '{}' via {}", config.getPivotLanguage(),
-                    translationService.providerName());
-        }
     }
 
     @Scheduled(fixedDelayString = "${munin.translation.tickInterval:PT20S}",

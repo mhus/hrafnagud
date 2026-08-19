@@ -4,12 +4,14 @@ import de.mhus.hrafnagud.api.article.ArticleContentDto;
 import de.mhus.hrafnagud.api.article.ArticleDto;
 import de.mhus.hrafnagud.api.article.ArticleImageDto;
 import de.mhus.hrafnagud.api.article.ArticleTranslationDto;
+import de.mhus.hrafnagud.api.catalog.CatalogDto;
 import de.mhus.hrafnagud.api.enrichment.EnrichmentDto;
 import de.mhus.hrafnagud.api.source.SourceDto;
 import de.mhus.hrafnagud.api.source.SourceListDto;
 import de.mhus.hrafnagud.munin.article.ArticleContentDocument;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleImage;
+import de.mhus.hrafnagud.munin.catalog.SourceCatalogDocument;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentDocument;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
 import de.mhus.hrafnagud.munin.sourcelist.SourceListDocument;
@@ -47,6 +49,7 @@ public final class MuninMapper {
                 .originListName(source.getOriginListName())
                 .lockedFields(new ArrayList<>(source.getLockedFields()))
                 .lastSeenInListAt(source.getLastSeenInListAt())
+                .fetchProfile(source.getFetchProfile())
                 .fetchIntervalSeconds(source.getFetchIntervalSeconds())
                 .nextFetchAt(source.getNextFetchAt())
                 .lastFetchAt(source.getLastFetchAt())
@@ -71,6 +74,7 @@ public final class MuninMapper {
                 .defaultCountry(list.getDefaultCountry())
                 .defaultCategories(new ArrayList<>(list.getDefaultCategories()))
                 .defaultFetchIntervalSeconds(list.getDefaultFetchIntervalSeconds())
+                .fetchProfile(list.getFetchProfile())
                 .missingSourcePolicy(list.getMissingSourcePolicy())
                 .refreshIntervalSeconds(list.getRefreshIntervalSeconds())
                 .nextRefreshAt(list.getNextRefreshAt())
@@ -78,9 +82,44 @@ public final class MuninMapper {
                 .lastOutcome(list.getLastOutcome())
                 .lastError(list.getLastError())
                 .consecutiveFailures(list.getConsecutiveFailures())
+                .originCatalogName(list.getOriginCatalogName())
+                .lastSeenInCatalogAt(list.getLastSeenInCatalogAt())
                 .lastReport(list.getLastReport())
                 .createdAt(list.getCreatedAt())
                 .updatedAt(list.getUpdatedAt())
+                .build();
+    }
+
+    /**
+     * @param listCount lists this catalogue owns, counted by the caller — the
+     *                  document does not carry it, because a denormalised
+     *                  count that only a refresh updates would be wrong for
+     *                  most of a day.
+     */
+    public static CatalogDto toDto(SourceCatalogDocument catalog, long listCount) {
+        return CatalogDto.builder()
+                .name(catalog.getName())
+                .title(catalog.getTitle())
+                .type(catalog.getType())
+                .url(catalog.getUrl())
+                .params(new LinkedHashMap<>(catalog.getParams()))
+                .enabled(catalog.isEnabled())
+                .include(new ArrayList<>(catalog.getInclude()))
+                .exclude(new ArrayList<>(catalog.getExclude()))
+                .listRefreshIntervalSeconds(catalog.getListRefreshIntervalSeconds())
+                .fetchProfile(catalog.getFetchProfile())
+                .sourceFetchIntervalSeconds(catalog.getSourceFetchIntervalSeconds())
+                .missingListPolicy(catalog.getMissingListPolicy())
+                .refreshIntervalSeconds(catalog.getRefreshIntervalSeconds())
+                .nextRefreshAt(catalog.getNextRefreshAt())
+                .lastRefreshAt(catalog.getLastRefreshAt())
+                .lastOutcome(catalog.getLastOutcome())
+                .lastError(catalog.getLastError())
+                .consecutiveFailures(catalog.getConsecutiveFailures())
+                .listCount(listCount)
+                .lastReport(catalog.getLastReport())
+                .createdAt(catalog.getCreatedAt())
+                .updatedAt(catalog.getUpdatedAt())
                 .build();
     }
 

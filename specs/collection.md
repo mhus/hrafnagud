@@ -184,8 +184,47 @@ weekly gets polled two thousand times per published item.
 - failing → back off geometrically
 
 Adjustment is **asymmetric on purpose**: react fast to a feed we are behind
-on, slowly to a quiet weekend. Bounds are `munin.feed.minInterval` /
-`maxInterval`, with `maxFailureInterval` capping the failure backoff.
+on, slowly to a quiet weekend. Bounds come from the source's interval class
+(§6.1a), which defaults to `munin.feed.minInterval` / `maxInterval`, with
+`maxFailureInterval` capping the failure backoff.
+
+### 6.1a Interval classes (fetch profiles)
+
+Adaptation only moves within the bounds it is given, and one set of bounds
+cannot fit every kind of publisher. At the news ceiling of twelve hours, a blog
+that posts monthly is polled about **sixty times per article**; at a weekly
+ceiling it is four.
+
+So the bounds are named, and the name travels **catalogue → list → source**:
+
+```yaml
+munin:
+  feed:
+    profiles:
+      news: { defaultInterval: PT30M, minInterval: PT5M, maxInterval: PT12H }
+      blog: { defaultInterval: P1D,   minInterval: PT6H, maxInterval: P7D }
+```
+
+A profile inherits every field it does not set from `munin.feed.*`, so adding
+the block changes nothing until something names a profile. Names are **free
+strings, not an enum** — a new class is a config entry, and nothing in the code
+knows the word `blog`.
+
+Three decisions worth keeping:
+
+- **A name, not three numbers on every layer.** "These are blogs" is said once,
+  where the collection is registered.
+- **An unknown name falls back to the default and warns once**, rather than
+  failing. The name arrives from a document somebody typed, sometimes before
+  the profile is configured; refusing to poll over a spelling mistake would
+  turn a config slip into a gap in the archive.
+- **Failure backoff never polls more often than a healthy source of the same
+  class.** The global `maxFailureInterval` of a day would otherwise retry a
+  broken weekly blog seven times as often as a working one.
+
+The bug this was built for: `defaultFetchIntervalSeconds: 86400` on a list used
+to be clamped to the global twelve-hour ceiling — silently, so the setting
+looked like it had taken effect. "Poll this once a day" was not expressible.
 
 ### 6.2 A failing source is never auto-disabled
 

@@ -68,6 +68,11 @@ public class SourceService {
         this.schedulePolicy = new FetchSchedulePolicy(properties.getFeed());
     }
 
+    /** Interval classes this instance knows, for diagnostics and the API. */
+    public java.util.Map<String, FetchProfile> fetchProfiles() {
+        return schedulePolicy.profiles();
+    }
+
     // ─── Lookup ───
 
     public Optional<SourceDocument> findByName(String name) {
@@ -287,12 +292,31 @@ public class SourceService {
      * @return what happened, for the refresh report
      */
     public MergeResult mergeFromList(String listName, SourceCandidate candidate,
-            SourceMergePolicy.Defaults defaults, long defaultIntervalSeconds, Instant now) {
+            SourceMergePolicy.Defaults defaults, @Nullable Long defaultIntervalSeconds,
+            Instant now) {
+        return mergeFromList(listName, candidate, defaults, defaultIntervalSeconds, null, now);
+    }
+
+    /**
+     * The same, for a list that puts its sources in a named interval class.
+     *
+     * @param defaultIntervalSeconds interval the list asks for, or null to let
+     *                               the profile decide. Null and "the global
+     *                               default" are not the same thing: a blog
+     *                               profile's own default is a day, and
+     *                               substituting thirty minutes here only to
+     *                               clamp it up to the profile's minimum would
+     *                               land on six hours — a number nobody
+     *                               configured anywhere.
+     */
+    public MergeResult mergeFromList(String listName, SourceCandidate candidate,
+            SourceMergePolicy.Defaults defaults, @Nullable Long defaultIntervalSeconds,
+            @Nullable String fetchProfile, Instant now) {
 
         Optional<SourceDocument> existing = repository.findByUrl(candidate.getUrl());
         if (existing.isEmpty()) {
             return new MergeResult(createFromList(listName, candidate, defaults,
-                    defaultIntervalSeconds, now), MergeOutcome.CREATED);
+                    defaultIntervalSeconds, fetchProfile, now), MergeOutcome.CREATED);
         }
 
         SourceDocument source = existing.get();
@@ -317,7 +341,10 @@ public class SourceService {
     }
 
     private SourceDocument createFromList(String listName, SourceCandidate candidate,
-            SourceMergePolicy.Defaults defaults, long defaultIntervalSeconds, Instant now) {
+            SourceMergePolicy.Defaults defaults, @Nullable Long defaultIntervalSeconds,
+            @Nullable String fetchProfile, Instant now) {
+
+        FetchProfile profile = schedulePolicy.profile(fetchProfile);
 
         String name = uniqueName(Slugs.sourceName(candidate.getUrl()));
         SourceDocument document = SourceDocument.builder()
@@ -338,7 +365,13 @@ public class SourceService {
                 .originListName(listName)
                 .lockedFields(new LinkedHashSet<>())
                 .lastSeenInListAt(now)
-                .fetchIntervalSeconds(schedulePolicy.clampToBounds(defaultIntervalSeconds))
+                .fetchProfile(fetchProfile)
+                // The profile's own default and window, not the global ones: a
+                // list that says "daily" must not be clamped back to the news
+                // ceiling, and a list that says nothing must start where its
+                // class starts.
+                .fetchIntervalSeconds(
+                        schedulePolicy.initialIntervalSeconds(profile, defaultIntervalSeconds))
                 // Stagger imports: a thousand feeds arriving in one refresh
                 // must not all become due in the same tick. The host limiter
                 // would serialise them anyway, but only after the claim
@@ -484,6 +517,7 @@ public class SourceService {
 
         int failures = outcome.successful() ? 0 : currentFailures(name) + 1;
         long nextInterval = schedulePolicy.nextIntervalSeconds(
+                schedulePolicy.profile(fetchProfileOf(name)),
                 currentIntervalSeconds, outcome, newArticles, failures);
 
         Update update = new Update()
@@ -513,6 +547,21 @@ public class SourceService {
         mongoTemplate.updateFirst(Query.query(Criteria.where(F_NAME).is(name)), update,
                 SourceDocument.class);
         return nextInterval;
+    }
+
+    /**
+     * The source's interval class, read on the way to rescheduling it.
+     *
+     * <p>One projected field rather than threading the name through the ingest
+     * path: the caller already holds the document, but the update path here is
+     * deliberately load-free, and adding a parameter to keep it that way would
+     * push the profile into two more signatures for one string.
+     */
+    private @Nullable String fetchProfileOf(String name) {
+        Query query = Query.query(Criteria.where(F_NAME).is(name));
+        query.fields().include("fetchProfile");
+        SourceDocument source = mongoTemplate.findOne(query, SourceDocument.class);
+        return source == null ? null : source.getFetchProfile();
     }
 
     private int currentFailures(String name) {

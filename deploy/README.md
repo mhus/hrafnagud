@@ -89,7 +89,9 @@ each one inline. The ones worth deciding before a first run:
 | `HRAFNAGUD_USER_AGENT` | project URL | Give publishers a contact. An anonymous crawler is one that gets blocked. |
 | `HRAFNAGUD_LANGUAGES` | all | Narrowing to the languages actually in the registry is faster, more accurate and much cheaper on memory. |
 | `HRAFNAGUD_CONTENT_ENABLED` | `false` | Fetch full article text from publisher pages. A separate activity from reading their feeds — hence a separate decision. |
-| `HRAFNAGUD_PIVOT_LANGUAGE` | empty | Turns on translation. Only set it once the brain binding below is complete, or the backlog grows with nothing draining it. |
+| `HRAFNAGUD_INSTALL_BUNDLED_CATALOG` | `true` | A fresh database registers ~840 feeds from the bundled catalogue and starts collecting on its own. That is the intent; it is also ~1,700 outbound requests an hour, so decide it before the first deploy rather than after. |
+| `HRAFNAGUD_TRANSLATION_ENABLED` | `false` | Runs the translation worker. Costs model time on the brain, so it is a decision rather than a default. |
+| `HRAFNAGUD_PIVOT_LANGUAGE` | empty | What gets queued, decided at ingest. Only set it once the brain binding below is complete and the worker is enabled, or the backlog grows with nothing draining it. |
 | `HRAFNAGUD_PROXY_HOST` / `_PORT` | direct | Route every fetch through a proxy. A host without a valid port fails at startup rather than quietly going direct. |
 
 Secrets go into the `hrafnagud-secrets` Secret, which
@@ -114,7 +116,8 @@ Secrets), create a Secret of that name with those keys and pass
 Two independent directions, both off by default:
 
 - **Translation** — hrafnagud calls the brain. Needs `VANCE_BRAIN_URL`,
-  `VANCE_TENANT` and `VANCE_TRANSLATE_TOKEN` *and* `HRAFNAGUD_PIVOT_LANGUAGE`.
+  `VANCE_TENANT` and `VANCE_TRANSLATE_TOKEN` *and* both translation switches
+  (`HRAFNAGUD_TRANSLATION_ENABLED=true` plus `HRAFNAGUD_PIVOT_LANGUAGE`).
   In-cluster, if the brain runs in the `vance` namespace of the same cluster:
   `VANCE_BRAIN_URL=http://brain.vance.svc.cluster.local:9990`.
 - **Centauri** — the brain calls hrafnagud, to read the archive as a feed

@@ -36,6 +36,10 @@ data:
   # subsystem dormant; setting it starts filling a backlog, so only set it
   # once the brain binding below is complete and something is draining the
   # queue.
+  # Two switches, because they control different things: the worker, and
+  # what gets queued at ingest. Clearing the pivot language to pause
+  # translation would mark everything ingested meanwhile as SKIPPED for good.
+  HRAFNAGUD_TRANSLATION_ENABLED: "false"
   HRAFNAGUD_PIVOT_LANGUAGE: ""
 
   # Vancetope binding. Everything stays inert while VANCE_BRAIN_URL is
@@ -44,6 +48,14 @@ data:
   VANCE_BRAIN_URL: ""
   VANCE_TENANT: ""
   VANCE_PROJECT: "_tenant"
+
+  # ── Catalogues ───────────────────────────────────────────────────────
+  # The layer that discovers source lists. On a fresh database the bundled
+  # awesome-rss-feeds catalogue registers ~840 feeds and the collector starts
+  # working on its own — which is the intent, and worth knowing before the
+  # first deploy because it is also ~1,700 outbound requests an hour.
+  HRAFNAGUD_CATALOG_ENABLED: "true"
+  HRAFNAGUD_INSTALL_BUNDLED_CATALOG: "true"
 
   # ── Operator API and console ─────────────────────────────────────────
   # The console at / is HTML and JavaScript only; it holds no data and asks

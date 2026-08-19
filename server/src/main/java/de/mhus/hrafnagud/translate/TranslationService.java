@@ -7,6 +7,7 @@ import de.mhus.hrafnagud.munin.config.MuninProperties;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentDocument;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.hrafnagud.munin.util.TextCleaner;
+import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -42,6 +43,32 @@ public class TranslationService {
         // bean may be absent entirely, or present-but-null when Ode is on
         // the classpath unconfigured. Both mean the same thing here.
         this.provider = provider.getIfAvailable();
+    }
+
+    /**
+     * Says at startup what the configuration actually amounts to.
+     *
+     * <p>Here rather than on {@link TranslationTick}, because two of the
+     * states worth reporting are ones in which that bean does not exist. All
+     * three failure modes are otherwise silent — the queue fills, nothing
+     * drains it, and the archive looks like it is translating.
+     */
+    @PostConstruct
+    void reportConfiguration() {
+        if (config.getPivotLanguage().isBlank()) {
+            log.info("Translation is off — no munin.translation.pivotLanguage configured");
+        } else if (!config.isEnabled()) {
+            log.warn("Pivot language '{}' is configured but munin.translation.enabled is false"
+                            + " — articles will queue and nothing will translate them.",
+                    config.getPivotLanguage());
+        } else if (!isAvailable()) {
+            log.warn("Pivot language '{}' is configured but no provider is wired — articles "
+                            + "will queue and nothing will translate them. "
+                            + "Set vance.ode.base-url to use a Vancetope brain.",
+                    config.getPivotLanguage());
+        } else {
+            log.info("Translating into '{}' via {}", config.getPivotLanguage(), providerName());
+        }
     }
 
     /** {@code true} when something is wired that could do the work. */

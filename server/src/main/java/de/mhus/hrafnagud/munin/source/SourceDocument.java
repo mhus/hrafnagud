@@ -106,6 +106,15 @@ public class SourceDocument {
 
     // ─── Poll state ───
 
+    /**
+     * Interval class this source belongs to, or null for the default.
+     *
+     * <p>Inherited from the list that imported it, which inherits it from the
+     * catalogue. A name and not three numbers, so "these are blogs" is said
+     * once where the collection is registered.
+     */
+    private @Nullable String fetchProfile;
+
     private long fetchIntervalSeconds;
 
     /**

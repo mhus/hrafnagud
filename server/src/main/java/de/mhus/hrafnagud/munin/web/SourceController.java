@@ -11,7 +11,9 @@ import de.mhus.hrafnagud.munin.source.SourceDocument;
 import de.mhus.hrafnagud.munin.source.SourceService;
 import jakarta.validation.Valid;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatus;
@@ -57,6 +59,23 @@ public class SourceController {
         long total = sourceService.count(enabled, type, listName, query, failing);
         return PageDto.of(sources.stream().map(MuninMapper::toDto).toList(),
                 pageIndex, pageSize, total);
+    }
+
+    /**
+     * The interval classes this instance knows.
+     *
+     * <p>Worth an endpoint for the same reason the catalogue readers have one:
+     * the profile name is the one field that cannot be guessed, and a form
+     * offering a free-text box for it produces a typo per attempt.
+     */
+    @GetMapping("/fetch-profiles")
+    public Map<String, Map<String, Object>> fetchProfiles() {
+        Map<String, Map<String, Object>> out = new LinkedHashMap<>();
+        sourceService.fetchProfiles().forEach((name, profile) -> out.put(name, Map.of(
+                "defaultInterval", profile.defaultInterval().toString(),
+                "minInterval", profile.minInterval().toString(),
+                "maxInterval", profile.maxInterval().toString())));
+        return out;
     }
 
     @GetMapping("/{name}")

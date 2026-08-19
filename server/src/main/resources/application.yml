@@ -36,6 +36,23 @@ management:
       show-details: when-authorized
 
 munin:
+  # Catalogues — the layer that discovers source lists, so the archive fills
+  # itself. Catalogue → source lists → sources, each refreshed on its own
+  # schedule; nothing here needs a button.
+  catalog:
+    enabled: ${HRAFNAGUD_CATALOG_ENABLED:true}
+    tickInterval: PT15M
+    defaultInterval: PT24H
+    claimLease: PT30M
+    # A fresh database gets awesome-rss-feeds (CC0): 66 OPML files, ~840
+    # feeds. That is roughly 1,700 outbound requests an hour at the default
+    # poll interval — narrow it with bundledInclude, or switch it off and
+    # register your own catalogue.
+    installBundled: ${HRAFNAGUD_INSTALL_BUNDLED_CATALOG:true}
+    # Globs over the entry path, e.g. ["countries/**"] for the 25 country
+    # lists only. Empty means everything it offers.
+    bundledInclude: []
+
   # The operator API and the console at /console/ (redirected to from /).
   api:
     # Bearer token for /api/v1/**. Empty means no check, which is how this
@@ -82,6 +99,22 @@ munin:
     maxItemsPerFeed: 500
     maxSummaryChars: 4000
     maxFutureSkew: PT6H
+    # Named interval classes. The values above are the unnamed default and
+    # stay the fallback for anything a profile leaves unset, so this block
+    # changes nothing until a catalogue, list or source names a profile.
+    #
+    # The point is the ceiling: the adaptive policy only moves within the
+    # bounds it is given, so a blog that posts monthly is polled at the
+    # maximum forever — 60 requests per article at 12 h, 4 at a week.
+    profiles:
+      news:
+        defaultInterval: PT30M
+        minInterval: PT5M
+        maxInterval: PT12H
+      blog:
+        defaultInterval: P1D
+        minInterval: PT6H
+        maxInterval: P7D
 
   content:
     # Off by default. Fetching publisher pages is a different activity from
@@ -102,10 +135,26 @@ munin:
     enabled: true
     tickInterval: PT5M
     defaultInterval: PT24H
-    maxEntries: 10000
+    # A guard against a pathological document, not a policy — published
+    # lists of five figures exist. Cost is bounded by the poll interval and
+    # the per-host limiter, not by this number.
+    maxEntries: 50000
+    # A round drains what is due rather than trickling: batchSize is the
+    # lease granularity, maxPerRound the ceiling that makes a round end. A
+    # catalogue delivers its lists all due at once, and a fixed handful per
+    # tick would spread the first import over an hour.
+    batchSize: 5
+    maxPerRound: 200
     claimLease: PT15M
 
   translation:
+    # Master switch for the worker. Off by default: a translation spends
+    # somebody else's model time and somebody's money, so it is a decision
+    # rather than something that happens by deploying. Off stops the worker,
+    # not the queue — what gets queued is decided by pivotLanguage below, so
+    # setting that with this off means a backlog nothing drains. The startup
+    # log says which of the four states you are in.
+    enabled: ${HRAFNAGUD_TRANSLATION_ENABLED:false}
     # The one language everything is normalised into. Empty means no
     # article is ever queued and the subsystem stays dormant. Setting it
     # starts filling a backlog — make sure something is wired to work it

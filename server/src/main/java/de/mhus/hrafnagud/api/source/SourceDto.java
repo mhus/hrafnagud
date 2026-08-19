@@ -74,6 +74,9 @@ public class SourceDto {
 
     // ─── Poll state ───
 
+    /** Interval class this source belongs to, or null for the default. */
+    private @Nullable String fetchProfile;
+
     /** Current poll interval in seconds, adapted from observed feed activity. */
     private long fetchIntervalSeconds;
 

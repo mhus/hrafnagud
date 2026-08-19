@@ -68,7 +68,33 @@ fails at startup rather than quietly going direct — in an environment that
 requires the proxy that would break every fetch, and the reason would be
 nowhere near the mistake.
 
-Add a curated directory of feeds and collect from it:
+It starts collecting by itself. A fresh database gets one **catalogue** —
+`awesome-rss-feeds` (CC0): 66 OPML lists, about 840 feeds — and the three
+layers pull each other along without anyone pressing anything:
+
+```
+catalogue ──daily──▶ source lists ──daily──▶ sources ──adaptive──▶ articles
+```
+
+On an empty database the catalogue is read within the first minute; the lists
+it delivers are then drained by the list tick, which runs every five minutes
+and works through the whole backlog in one round. It also means roughly 1,700
+outbound requests an hour once the registry is full. To start smaller, or not
+at all:
+
+```yaml
+munin:
+  catalog:
+    bundledInclude: ["countries/**"]   # 25 country lists instead of all 66
+    installBundled: false              # or bring your own catalogue
+```
+
+Catalogues are readers per *publication shape*, not per publisher:
+`opml-directory` for anything following the OPML 2.0 directory spec,
+`github-opml` for a repository of loose OPML files. Adding a collection is a
+`POST`, not a release — see [catalogs.md](specs/catalogs.md).
+
+Add a single curated directory of feeds by hand instead:
 
 ```bash
 # awesome-rss-feeds (CC0) ships one OPML per country and per topic
@@ -130,6 +156,7 @@ dependency on `cdn.jsdelivr.net` being reachable from the browser.
 
 | Collection | Holds |
 |---|---|
+| `source_catalogs` | directories of source lists, re-read daily — this is what makes the registry grow by itself |
 | `sources` | one feed each: URL, poll schedule, failure history, statistics |
 | `source_lists` | directories that populate `sources` |
 | `articles` | article metadata, deduplicated across sources |
@@ -148,14 +175,21 @@ retry budget; `POST .../skip-content` takes one out of the queue for good.
 
 ## Translation
 
-Off by default. Setting a **pivot language** starts filling a backlog:
+Off by default, and it takes two switches — `enabled` runs the worker,
+`pivotLanguage` decides what gets queued:
 
 ```yaml
 munin:
   translation:
-    pivotLanguage: de
+    enabled: true               # the worker; off by default
+    pivotLanguage: de           # what gets queued, decided at ingest
     translateSummary: true      # titles alone cost a tenth of the text
 ```
+
+Separate on purpose: pausing translation by clearing the pivot language would
+mark every article ingested meanwhile as `SKIPPED`, silently and for good.
+With `enabled: false` the queue keeps filling and resumes when you switch the
+worker back on — the startup log says which of the four states you are in.
 
 One pivot language, not a list of targets. Everything downstream — search,
 rating, clustering — reads one language, and an article already in it is

@@ -63,7 +63,25 @@ public class SourceListDocument {
 
     private @Nullable Long defaultFetchIntervalSeconds;
 
+    /** Interval class handed to every source this list imports. */
+    private @Nullable String fetchProfile;
+
     private MissingSourcePolicy missingSourcePolicy = MissingSourcePolicy.DISABLE;
+
+    // ─── Provenance ───
+
+    /**
+     * Catalogue that imported this list, or null for one added by hand.
+     *
+     * <p>A nullable name rather than an {@code origin} enum like the one on a
+     * source: there the enum earns its place because {@code lockedFields}
+     * hangs off it, and here there is nothing a second field would say that
+     * the presence of a catalogue name does not.
+     */
+    private @Nullable String originCatalogName;
+
+    /** Last time the owning catalogue still offered this list. */
+    private @Nullable Instant lastSeenInCatalogAt;
 
     // ─── Refresh state ───
 

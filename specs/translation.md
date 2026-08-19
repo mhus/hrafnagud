@@ -4,17 +4,37 @@ Normalising the archive into one language, by asking a Vancetope brain.
 
 ## 1. Scope
 
-Off by default. Setting `munin.translation.pivotLanguage` starts filling a
-backlog; something has to be wired to work it, or the queue grows with nothing
-draining it. The startup log says which of the two situations you are in, and
-`GET /api/v1/stats` reports `translationBacklog` for the same reason.
+Off by default, and it takes **two** switches to turn on. They are separate
+because they control different things:
+
+| Setting | Controls | Default |
+|---|---|---|
+| `munin.translation.pivotLanguage` | what gets **queued**, decided at ingest | empty — nothing is ever queued |
+| `munin.translation.enabled` | whether the **worker** exists at all | `false` — `TranslationTick` is not even a bean |
 
 ```yaml
 munin:
   translation:
+    enabled: true
     pivotLanguage: de
     translateSummary: true    # titles alone cost a tenth of the text
 ```
+
+Two switches rather than one because the failure they guard against is
+asymmetric. A pivot language with no worker fills a backlog nothing drains; a
+worker with no pivot language idles harmlessly. Collapsing them into one flag
+would mean an operator who wants to pause translation has to clear the pivot
+language, and clearing it makes every article ingested meanwhile `SKIPPED` —
+silently and permanently, because nothing revisits that decision.
+
+The worker being off by default follows the same rule as the body fetch: both
+spend somebody else's resources — publisher bandwidth there, model time and
+money here — and neither should start because a service was deployed.
+
+`TranslationService` reports at startup which of the four states the instance
+is in (no pivot / pivot but disabled / pivot but no provider / working), and
+`GET /api/v1/stats` reports `translationBacklog` for the same reason: three of
+those four are otherwise silent.
 
 The record of each run lands in [`enrichments`](enrichments.md), not on the
 article. The article does carry a searchable copy of the newest one — a

@@ -6,17 +6,22 @@ Three questions, one page: **is it collecting**, **how much**, and **is what it
 collected any good**. Everything in the console exists to answer one of those;
 anything that answers none of them was left out.
 
-It is not an administration UI. Nothing writes — no delete, no re-queue, no
-source editing, no import. Those verbs exist in the API and are one `curl`
-away, and putting them behind a button that a mis-click reaches is a different
-decision from showing what is going on. Should they ever be wanted here, they
-arrive with a confirmation step and a reason, not as a convenience.
+It is not an administration UI. No delete, no re-queue, no source editing, no
+creating anything. Those verbs exist in the API and are one `curl` away, and
+putting them behind a button that a mis-click reaches is a different decision
+from showing what is going on. Should they ever be wanted here, they arrive
+with a confirmation step and a reason, not as a convenience.
+
+**One exception**, written down rather than quietly taken: a catalogue can be
+re-read from the Kataloge view (§4). It is idempotent, it is what the schedule
+does by itself every day, and it creates nothing that was not going to be
+created anyway. That is the bar an action has to clear to appear here.
 
 ## 2. Shape
 
 Static HTML and plain JavaScript at `classpath:/console/`, served at
 `/console/` with `/` redirecting there. No build step, no bundler, no
-framework: the console reads three endpoints and renders three tables, and a
+framework: the console reads four endpoints and renders four views, and a
 framework would be more machinery to install than the code it replaced. It has
 to stay readable to whoever is debugging an ingest problem at the time.
 
@@ -81,6 +86,13 @@ failures, article count, next poll. The health block's failing count links
 straight into this view with `failing=true` set, because a number an operator
 cannot resolve into rows is a number that only creates work.
 
+**Catalogues** — where the source lists come from, what each catalogue last
+did, and the one button in the console: re-read this catalogue now. It is a
+deliberate exception to §1, kept as narrow as the rule allows — re-read, and
+nothing else. Everything the catalogue layer does happens on a schedule
+anyway; the button is for the case where waiting for the next pass is the
+wrong answer. See [catalogs.md](catalogs.md).
+
 **Articles** — what was collected, filtered by source, language, body state,
 text and time window. The detail dialog is where data quality is actually
 judged: the extracted body verbatim, its word count, the language and how it
@@ -120,12 +132,17 @@ whoever wrote it.
 
 ## 7. Where it stops
 
-- **Read-only** (§1).
+- **Read-only apart from re-reading a catalogue** (§1).
 - **No charts.** A time series of ingest volume would answer "how much" better
   than a 24-hour figure does, and it needs a metrics store; the actuator
   already exposes Prometheus.
-- **No source-list view.** `source_lists` are managed by API and by the
-  refresh loop; nothing about them was needed to answer the three questions.
+- **No source-list view.** Catalogues are visible and sources are visible; the
+  lists between them are managed by the catalogue layer and by the API, and
+  nothing about them was needed to answer the three questions.
+- **No catalogue editing.** The filter that decides how much of a directory
+  this installation pulls in is a `PUT` away in the API, and it belongs where
+  it survives — on the catalogue, not in a view (see
+  [catalogs.md](catalogs.md) §4).
 - **No pagination beyond next/previous.** Jump-to-page needs a total, and the
   article endpoint deliberately does not have one.
 - **One token, no accounts.** Everyone who has it can do everything.

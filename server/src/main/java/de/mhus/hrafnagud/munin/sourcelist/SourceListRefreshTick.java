@@ -56,18 +56,43 @@ public class SourceListRefreshTick {
      * @return number of lists refreshed
      */
     int runRound(Instant now) {
-        // One list per round: a refresh can create a thousand sources, and
-        // doing several back to back would make one tick arbitrarily long
-        // for no benefit — the next tick is minutes away either way.
-        List<SourceListDocument> claimed = listService.claimDue(now, 1);
-        for (SourceListDocument list : claimed) {
-            try {
-                listService.refresh(list, now);
-            } catch (RuntimeException e) {
-                log.warn("Refresh of source list {} threw: {}", list.getName(), e.toString());
+        // Drain the backlog, do not trickle it. A catalogue delivers dozens of
+        // lists in one go, all due at once; taking a fixed handful per
+        // five-minute tick would spread a fresh instance's first import over
+        // an hour, during which it looks broken rather than busy.
+        //
+        // Bounded twice all the same: batchSize per lease, and maxPerRound
+        // over the whole round — one list refresh can create a thousand
+        // sources, and a round that never ends is a round that never releases
+        // its leases.
+        int refreshed = 0;
+        while (refreshed < config.getMaxPerRound()) {
+            // Deliberately the round's own clock, not a fresh one per batch: a
+            // list that becomes due while the round is running belongs to the
+            // next round, and re-reading the clock here would let a long round
+            // keep finding new work and never finish.
+            List<SourceListDocument> claimed = listService.claimDue(now,
+                    Math.min(config.getBatchSize(), config.getMaxPerRound() - refreshed));
+            if (claimed.isEmpty()) {
+                break;
             }
+            for (SourceListDocument list : claimed) {
+                try {
+                    listService.refresh(list, now);
+                } catch (RuntimeException e) {
+                    log.warn("Refresh of source list {} threw: {}",
+                            list.getName(), e.toString());
+                }
+            }
+            refreshed += claimed.size();
         }
-        return claimed.size();
+        if (refreshed >= config.getMaxPerRound()) {
+            // Said out loud, because the alternative is an operator watching a
+            // number climb and not knowing whether it has stopped.
+            log.info("Source-list round hit the {}-list cap; more are due and the next "
+                    + "round continues", config.getMaxPerRound());
+        }
+        return refreshed;
     }
 
     /** Configured refresh cadence — surfaced for diagnostics. */

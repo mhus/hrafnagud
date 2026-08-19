@@ -65,13 +65,35 @@ class TranslateWiringTest {
     @Test
     void without_a_brain_url_nothing_is_wired_and_that_is_not_an_error() {
         // A collector with no brain must still boot. Munin keeps queueing;
-        // the tick says at startup that nothing will drain it.
+        // the startup report says that nothing will drain it.
         runner.run(context -> {
             assertThat(context).hasNotFailed();
             assertThat(context).doesNotHaveBean(UrsaEventClient.class);
             assertThat(context.getBean(TranslationService.class).isAvailable()).isFalse();
             assertThat(context.getBean(TranslationService.class).providerName()).isNull();
         });
+    }
+
+    /**
+     * The worker is a bean only when it is switched on. Off is the default,
+     * because a translation spends model time somebody pays for.
+     */
+    @Test
+    void the_worker_does_not_exist_unless_it_is_enabled() {
+        ApplicationContextRunner withTick = runner.withUserConfiguration(TickConfig.class);
+
+        withTick.run(context ->
+                assertThat(context).doesNotHaveBean(TranslationTick.class));
+        withTick.withPropertyValues("munin.translation.enabled=false").run(context ->
+                assertThat(context).doesNotHaveBean(TranslationTick.class));
+        withTick.withPropertyValues("munin.translation.enabled=true").run(context ->
+                assertThat(context).hasSingleBean(TranslationTick.class));
+    }
+
+    /** The tick is component-scanned in production; here it is declared. */
+    @Configuration
+    @org.springframework.context.annotation.Import(TranslationTick.class)
+    static class TickConfig {
     }
 
     @Test

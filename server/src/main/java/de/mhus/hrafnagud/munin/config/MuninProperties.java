@@ -2,8 +2,11 @@ package de.mhus.hrafnagud.munin.config;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.Data;
+import org.jspecify.annotations.Nullable;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -23,6 +26,7 @@ public class MuninProperties {
     private final Feed feed = new Feed();
     private final Content content = new Content();
     private final SourceList sourceList = new SourceList();
+    private final Catalog catalog = new Catalog();
     private final Language language = new Language();
     private final Translation translation = new Translation();
     private final Api api = new Api();
@@ -144,6 +148,35 @@ public class MuninProperties {
 
         /** Tolerance for publication dates in the future before they are dropped. */
         private Duration maxFutureSkew = Duration.ofHours(6);
+
+        /**
+         * Named interval policies, one per class of source.
+         *
+         * <p>The fields above are the unnamed default and stay the fallback
+         * for anything a profile leaves unset — so adding profiles changes
+         * nothing until a source, list or catalogue names one.
+         *
+         * <p>This exists because the adaptive policy can only move within the
+         * bounds it is given. A blog that posts monthly is still polled at the
+         * ceiling, and a global ceiling that suits news (12 h) is two orders of
+         * magnitude too eager for a blog. See {@code FetchProfile}.
+         */
+        private Map<String, Profile> profiles = new LinkedHashMap<>();
+    }
+
+    /**
+     * One named interval policy. Every field is optional and falls back to the
+     * {@link Feed} defaults — a profile that only widens the ceiling says only
+     * that.
+     */
+    @Data
+    public static class Profile {
+
+        private @Nullable Duration defaultInterval;
+
+        private @Nullable Duration minInterval;
+
+        private @Nullable Duration maxInterval;
     }
 
     /** Full-article fetching. */
@@ -200,10 +233,77 @@ public class MuninProperties {
 
         private Duration defaultInterval = Duration.ofHours(24);
 
-        /** Entries accepted from one list document. */
-        private int maxEntries = 10_000;
+        /**
+         * Entries accepted from one list document.
+         *
+         * <p>A guard against a pathological document, not a policy: published
+         * collections of five figures exist (one text list of indie-web feeds
+         * has 36,000 lines), and truncating one silently at ten thousand
+         * would look like a broken import rather than a limit.
+         *
+         * <p>What actually bounds the cost of a large list is not this number
+         * but the poll interval and the per-host limiter — a hundred thousand
+         * feeds polled daily are cheaper than a thousand polled every five
+         * minutes.
+         */
+        private int maxEntries = 50_000;
+
+        /**
+         * Lists leased at a time within a round. Lease granularity, not a
+         * ceiling — the round keeps claiming until nothing is due or
+         * {@link #maxPerRound} is reached.
+         */
+        private int batchSize = 5;
+
+        /**
+         * Ceiling on one round, so that a round ends.
+         *
+         * <p>A catalogue delivers its lists all due at once, and a fixed
+         * handful per five-minute tick would spread a fresh instance's first
+         * import over an hour. Draining instead means the first round after an
+         * import does the work — paced by the per-host limiter, which for a
+         * directory served from one CDN is the real clock.
+         *
+         * <p>200 is roughly three catalogues' worth: enough that a normal
+         * import finishes in one round, low enough that a round stays minutes
+         * rather than hours and its leases are released again.
+         */
+        private int maxPerRound = 200;
 
         private Duration claimLease = Duration.ofMinutes(15);
+    }
+
+    /**
+     * Catalogue refresh — the layer that discovers source lists.
+     *
+     * <p>Slow by design: a directory of feed lists changes on the timescale
+     * of somebody editing a repository, and re-reading it more often than
+     * daily only spends somebody else's rate limit.
+     */
+    @Data
+    public static class Catalog {
+
+        private boolean enabled = true;
+
+        private Duration tickInterval = Duration.ofMinutes(15);
+
+        private Duration defaultInterval = Duration.ofHours(24);
+
+        private Duration claimLease = Duration.ofMinutes(30);
+
+        /**
+         * Whether a fresh database gets the bundled {@code awesome-rss-feeds}
+         * catalogue. Once installed it is an ordinary catalogue; switching
+         * this off later changes nothing.
+         */
+        private boolean installBundled = true;
+
+        /**
+         * Include globs the bundled catalogue starts with. Empty means every
+         * list it offers — about 840 feeds. Narrow it to
+         * {@code countries/**} for a smaller start.
+         */
+        private List<String> bundledInclude = new ArrayList<>();
     }
 
     /**
@@ -217,6 +317,22 @@ public class MuninProperties {
      */
     @Data
     public static class Translation {
+
+        /**
+         * Whether anything works the translation backlog.
+         *
+         * <p>Off by default, like the body fetch and unlike the ticks that
+         * only talk to feeds: a translation costs somebody else's model time
+         * and somebody's money, and that is a decision an operator makes
+         * rather than inherits from a deployment.
+         *
+         * <p>Switching it off stops the <em>worker</em>, not the queue:
+         * whether an article is queued at all is decided at ingest by
+         * {@link #pivotLanguage}. Both set and this off means a backlog that
+         * grows with nothing draining it — a legible state, and the startup
+         * log says so.
+         */
+        private boolean enabled = false;
 
         /**
          * The one language everything is normalised into, as a BCP-47

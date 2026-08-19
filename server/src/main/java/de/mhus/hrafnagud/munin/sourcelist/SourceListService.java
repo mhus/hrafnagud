@@ -1,5 +1,6 @@
 package de.mhus.hrafnagud.munin.sourcelist;
 
+import de.mhus.hrafnagud.api.catalog.MissingListPolicy;
 import de.mhus.hrafnagud.api.source.FetchOutcome;
 import de.mhus.hrafnagud.api.source.MissingSourcePolicy;
 import de.mhus.hrafnagud.api.source.SourceListCreateRequest;
@@ -53,6 +54,8 @@ public class SourceListService {
     private static final String F_NAME = "name";
     private static final String F_ENABLED = "enabled";
     private static final String F_NEXT_REFRESH_AT = "nextRefreshAt";
+    private static final String F_ORIGIN_CATALOG = "originCatalogName";
+    private static final String F_LAST_SEEN_IN_CATALOG = "lastSeenInCatalogAt";
 
     private final SourceListRepository repository;
     private final MongoTemplate mongoTemplate;
@@ -207,6 +210,186 @@ public class SourceListService {
                 name, sourceService.findByList(name).size());
     }
 
+    // ─── Catalogue integration ───
+
+    /**
+     * Creates or updates the list a catalogue offers.
+     *
+     * <p>Same rule as one layer down: a list a human registered, or that a
+     * <em>different</em> catalogue owns, is stamped as still-present and
+     * otherwise left alone. Adoption in either direction would let a
+     * catalogue take over configuration somebody else is maintaining, and the
+     * first claim is the honest tie-breaker.
+     *
+     * @return what happened, for the refresh report
+     */
+    public MergeResult mergeFromCatalog(String catalogName, SourceListCandidate candidate,
+            long defaultRefreshIntervalSeconds, Instant now) {
+
+        String url = UrlNormalizer.normalize(candidate.url())
+                .orElseThrow(() -> new BadRequestException(
+                        "not a usable http(s) url: " + candidate.url()));
+
+        Optional<SourceListDocument> existing = repository.findByUrl(url);
+        if (existing.isEmpty()) {
+            return new MergeResult(
+                    createFromCatalog(catalogName, candidate, url,
+                            defaultRefreshIntervalSeconds, now),
+                    MergeOutcome.CREATED);
+        }
+
+        SourceListDocument list = existing.get();
+        if (!catalogName.equals(list.getOriginCatalogName())) {
+            touchSeenInCatalog(list, now);
+            return new MergeResult(list, MergeOutcome.SKIPPED);
+        }
+
+        boolean changed = false;
+        if (StringUtils.isNotBlank(candidate.title())
+                && !candidate.title().equals(list.getTitle())) {
+            list.setTitle(candidate.title());
+            changed = true;
+        }
+        if (candidate.type() != list.getType()) {
+            list.setType(candidate.type());
+            changed = true;
+        }
+        list.setLastSeenInCatalogAt(now);
+        if (changed) {
+            list.setUpdatedAt(now);
+        }
+        return new MergeResult(repository.save(list),
+                changed ? MergeOutcome.UPDATED : MergeOutcome.UNCHANGED);
+    }
+
+    private SourceListDocument createFromCatalog(String catalogName,
+            SourceListCandidate candidate, String url, long defaultRefreshIntervalSeconds,
+            Instant now) {
+
+        String name = uniqueName(nameFor(catalogName, candidate, url));
+        SourceListDocument document = SourceListDocument.builder()
+                .name(name)
+                .title(StringUtils.defaultIfBlank(candidate.title(), Slugs.hostOf(url)))
+                .type(candidate.type())
+                .url(url)
+                .enabled(true)
+                .defaultCountry(candidate.country())
+                .defaultCategories(clean(candidate.categories()))
+                .missingSourcePolicy(MissingSourcePolicy.DISABLE)
+                .fetchProfile(candidate.fetchProfile())
+                .defaultFetchIntervalSeconds(candidate.fetchIntervalSeconds())
+                .originCatalogName(catalogName)
+                .lastSeenInCatalogAt(now)
+                .refreshIntervalSeconds(candidate.refreshIntervalSeconds() == null
+                        ? defaultRefreshIntervalSeconds
+                        : Math.max(60, candidate.refreshIntervalSeconds()))
+                // Due immediately: a catalogue that just delivered sixty lists
+                // should turn into sources within the next few ticks, not over
+                // the following day. The list tick's batch size is what paces
+                // that, not an artificial delay here.
+                .nextRefreshAt(now)
+                .createdAt(now)
+                .updatedAt(now)
+                .build();
+        try {
+            return repository.save(document);
+        } catch (DuplicateKeyException e) {
+            return repository.findByUrl(url).orElseThrow(() -> new ConflictException(
+                    "source list vanished during concurrent import: " + name));
+        }
+    }
+
+    /**
+     * Applies the catalogue's policy to lists it imported but did not offer
+     * in this refresh.
+     *
+     * @param refreshStartedAt lists whose {@code lastSeenInCatalogAt} is older
+     *                         than this were not in the directory
+     * @return number of lists disabled or deleted
+     */
+    public int reconcileMissingFromCatalog(String catalogName, Instant refreshStartedAt,
+            MissingListPolicy policy, Instant now) {
+
+        if (policy == MissingListPolicy.KEEP) {
+            return 0;
+        }
+        Criteria criteria = Criteria.where(F_ORIGIN_CATALOG).is(catalogName)
+                .orOperator(
+                        Criteria.where(F_LAST_SEEN_IN_CATALOG).lt(refreshStartedAt),
+                        Criteria.where(F_LAST_SEEN_IN_CATALOG).exists(false));
+
+        if (policy == MissingListPolicy.DELETE) {
+            List<SourceListDocument> doomed =
+                    mongoTemplate.find(new Query(criteria), SourceListDocument.class);
+            for (SourceListDocument list : doomed) {
+                // Through delete(), so that the "sources become unmanaged"
+                // consequence is logged in the one place that states it.
+                delete(list.getName());
+            }
+            return doomed.size();
+        }
+
+        long modified = mongoTemplate.updateMulti(
+                        new Query(new Criteria().andOperator(criteria,
+                                Criteria.where(F_ENABLED).is(true))),
+                        new Update().set(F_ENABLED, false).set("updatedAt", now),
+                        SourceListDocument.class)
+                .getModifiedCount();
+        return (int) modified;
+    }
+
+    public long countByCatalog(String catalogName) {
+        return mongoTemplate.count(
+                Query.query(Criteria.where(F_ORIGIN_CATALOG).is(catalogName)),
+                SourceListDocument.class);
+    }
+
+    private void touchSeenInCatalog(SourceListDocument list, Instant now) {
+        mongoTemplate.updateFirst(Query.query(Criteria.where(F_NAME).is(list.getName())),
+                new Update().set(F_LAST_SEEN_IN_CATALOG, now), SourceListDocument.class);
+    }
+
+    /**
+     * A name a person can read.
+     *
+     * <p>{@code Slugs.sourceName} is right for a feed, whose host carries the
+     * meaning ({@code tagesschau-de-042f5a}), and useless for a list that a
+     * catalogue delivered: sixty entries served from one CDN would all become
+     * {@code raw-githubusercontent-com-<hash>}, and the registry would be
+     * unreadable exactly where it is longest. The catalogue's own label for
+     * the entry is the meaning here, so {@code awesome-rss-feeds-australia}.
+     * The URL-derived form stays as the fallback for a catalogue that offers
+     * no title at all.
+     */
+    private static String nameFor(String catalogName, SourceListCandidate candidate,
+            String url) {
+        String label = Slugs.slugify(candidate.title());
+        if (label.isEmpty()) {
+            return Slugs.sourceName(url);
+        }
+        String prefix = Slugs.slugify(catalogName);
+        return prefix.isEmpty() ? label : prefix + "-" + label;
+    }
+
+    private String uniqueName(String candidate) {
+        if (repository.findByName(candidate).isEmpty()) {
+            return candidate;
+        }
+        for (int suffix = 2; suffix < 100; suffix++) {
+            String attempt = candidate + "-" + suffix;
+            if (repository.findByName(attempt).isEmpty()) {
+                return attempt;
+            }
+        }
+        throw new ConflictException("cannot derive a free list name from " + candidate);
+    }
+
+    /** Outcome of one catalogue entry, mirroring the source layer's. */
+    public enum MergeOutcome { CREATED, UPDATED, UNCHANGED, SKIPPED }
+
+    /** The list plus what happened to it. */
+    public record MergeResult(SourceListDocument list, MergeOutcome outcome) { }
+
     // ─── Refresh ───
 
     /** Claims up to {@code limit} lists that are due, leasing each. */
@@ -291,9 +474,10 @@ public class SourceListService {
                 .country(list.getDefaultCountry())
                 .categories(list.getDefaultCategories())
                 .build();
-        long interval = list.getDefaultFetchIntervalSeconds() == null
-                ? feedConfig.getDefaultInterval().getSeconds()
-                : list.getDefaultFetchIntervalSeconds();
+        // Passed on as null when unset, so the source layer can apply the
+        // interval class's own default. Substituting the global one here would
+        // silently override what a profile says a class of source is worth.
+        Long interval = list.getDefaultFetchIntervalSeconds();
 
         int created = 0;
         int updated = 0;
@@ -302,7 +486,8 @@ public class SourceListService {
         for (SourceCandidate candidate : parsed.getEntries()) {
             try {
                 SourceService.MergeResult result = sourceService.mergeFromList(
-                        list.getName(), candidate, defaults, interval, now);
+                        list.getName(), candidate, defaults, interval,
+                        list.getFetchProfile(), now);
                 switch (result.outcome()) {
                     case CREATED -> created++;
                     case UPDATED -> updated++;

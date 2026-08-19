@@ -3,10 +3,16 @@
   hrafnagud console — a read-only window on the archive.
 
   Three questions it exists to answer: is it collecting, how much, and is
-  what it collected any good. Nothing here writes: no delete, no re-queue,
-  no source editing. Those exist in the API and are one curl away; putting
-  them behind a button that a mis-click reaches is a different decision,
-  and this page was asked to show, not to steer.
+  what it collected any good. It shows; it does not steer. No delete, no
+  re-queue, no source editing — those exist in the API and are one curl
+  away, and putting them behind a button a mis-click reaches is a different
+  decision.
+
+  One exception, and it is written down rather than quietly taken: a
+  catalogue can be re-read from the Kataloge view. Everything the catalogue
+  layer does happens on a schedule anyway; the button is for the case where
+  waiting for the next pass is the wrong answer. It re-reads and nothing
+  else — no create, no edit, no delete.
 
   Served from classpath:/console/ (see ApiSecurityConfig), never guarded —
   it holds no data and no credential. The token is typed in below and kept
@@ -38,6 +44,7 @@
             <li class="nav-item"><a class="nav-link active" href="#" data-view="overview">Übersicht</a></li>
             <li class="nav-item"><a class="nav-link" href="#" data-view="sources">Quellen</a></li>
             <li class="nav-item"><a class="nav-link" href="#" data-view="articles">Artikel</a></li>
+            <li class="nav-item"><a class="nav-link" href="#" data-view="catalogs">Kataloge</a></li>
         </ul>
 
         <span id="conn" class="badge text-bg-secondary">nicht verbunden</span>
@@ -176,6 +183,16 @@
             </table>
         </div>
         <div id="pager-articles"></div>
+    </section>
+
+    <!-- ─── Kataloge ──────────────────────────────────────────────── -->
+    <section id="view-catalogs" class="d-none">
+        <p class="text-body-secondary small">
+            Kataloge finden Quellenlisten, Listen finden Feeds. Alle drei Ebenen
+            aktualisieren sich selbst — der Knopf ist für den Fall, dass Warten
+            die falsche Antwort ist.
+        </p>
+        <div id="catalog-cards" class="row g-3"></div>
     </section>
 
 </main>

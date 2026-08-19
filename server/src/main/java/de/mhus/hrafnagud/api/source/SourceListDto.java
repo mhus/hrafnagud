@@ -48,6 +48,9 @@ public class SourceListDto {
     /** Initial poll interval for imported sources. */
     private @Nullable Long defaultFetchIntervalSeconds;
 
+    /** Interval class handed to every source this list imports. */
+    private @Nullable String fetchProfile;
+
     /** What happens to imported sources that vanish from the list. */
     private MissingSourcePolicy missingSourcePolicy = MissingSourcePolicy.DISABLE;
 
@@ -64,6 +67,12 @@ public class SourceListDto {
     private @Nullable String lastError;
 
     private int consecutiveFailures;
+
+    /** Catalogue that imported this list, or null for one added by hand. */
+    private @Nullable String originCatalogName;
+
+    /** Last time that catalogue still offered it. */
+    private @Nullable Instant lastSeenInCatalogAt;
 
     /** Result of the most recent refresh. */
     private @Nullable SourceListRefreshReport lastReport;

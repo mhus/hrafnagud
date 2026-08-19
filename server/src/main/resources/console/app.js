@@ -1,10 +1,10 @@
 /*
  * hrafnagud console.
  *
- * Plain fetch and plain DOM, no framework. The console reads three
- * endpoints and renders three tables; a framework would be more code to
- * install than the code it replaces, and this file has to stay readable to
- * whoever is debugging an ingest problem at the time.
+ * Plain fetch and plain DOM, no framework. The console reads four endpoints
+ * and renders four views; a framework would be more code to install than the
+ * code it replaces, and this file has to stay readable to whoever is
+ * debugging an ingest problem at the time.
  *
  * ONE RULE THAT IS NOT STYLE: every string that came out of the API is
  * publisher-controlled. Article titles, teasers, source names, error
@@ -44,7 +44,7 @@ const tokenStore = {
 
 const API = '../api/v1';
 
-async function api(path, params) {
+async function api(path, params, method) {
     const url = new URL(API + path, window.location.href);
     for (const [key, value] of Object.entries(params || {})) {
         if (value !== null && value !== undefined && value !== '') {
@@ -60,7 +60,7 @@ async function api(path, params) {
 
     let response;
     try {
-        response = await fetch(url, { headers });
+        response = await fetch(url, { method: method || 'GET', headers });
     } catch (e) {
         // A network-level failure is not the same problem as a 4xx and must
         // not be reported as one: the service being down and the token being
@@ -105,7 +105,18 @@ function showError(e) {
 }
 
 function clearError() {
-    document.getElementById('alert').classList.add('d-none');
+    const el = document.getElementById('alert');
+    el.classList.add('d-none');
+    el.classList.remove('alert-success');
+    el.classList.add('alert-danger');
+}
+
+/** Same slot as the error, in green: one place where the page talks back. */
+function showNote(text) {
+    const el = document.getElementById('alert');
+    el.textContent = text;
+    el.classList.remove('d-none', 'alert-danger');
+    el.classList.add('alert-success');
 }
 
 // ── rendering helpers ───────────────────────────────────────────────────
@@ -556,6 +567,89 @@ async function showArticleDetail(id) {
     detailModal.show();
 }
 
+
+// ── catalogs ────────────────────────────────────────────────────────────
+//
+// The one place the console acts instead of only showing. It is a deliberate
+// exception to the read-only rule and kept as narrow as the rule allows:
+// re-read a catalogue now, nothing else. No create, no edit, no delete —
+// those stay in the API, where a mis-click cannot reach them.
+
+async function loadCatalogs() {
+    clearError();
+    const catalogs = await api('/catalogs');
+    const now = Date.now();
+    const container = document.getElementById('catalog-cards');
+
+    if (!catalogs.length) {
+        container.innerHTML = '<div class="col"><div class="alert alert-secondary mb-0">'
+            + 'Kein Katalog registriert. Ohne Katalog sammelt hrafnagud nur, was '
+            + 'von Hand eingetragen wurde.</div></div>';
+        return;
+    }
+
+    container.innerHTML = catalogs.map(catalog => {
+        const report = catalog.lastReport || {};
+        return '<div class="col-lg-6"><div class="card h-100">'
+            + '<div class="card-header d-flex align-items-center gap-2">'
+            + '<span>' + esc(catalog.title || catalog.name) + '</span>'
+            + (catalog.enabled
+                ? '<span class="badge text-bg-success">automatisch</span>'
+                : '<span class="badge text-bg-secondary">nur manuell</span>')
+            + '<button class="btn btn-sm btn-outline-primary ms-auto" data-refresh="'
+                + esc(catalog.name) + '">Jetzt lesen</button>'
+            + '</div>'
+            + '<div class="card-body">'
+            + (catalog.lastError
+                ? '<div class="alert alert-danger py-2">' + esc(catalog.lastError) + '</div>'
+                : '')
+            + defList([
+                ['Typ', esc(catalog.type)],
+                ['Quelle', link(catalog.url)],
+                ['Auswahl', esc((catalog.include || []).join(', ') || 'alles')
+                    + ((catalog.exclude || []).length
+                        ? ' <span class="text-body-secondary">ohne '
+                          + esc(catalog.exclude.join(', ')) + '</span>'
+                        : '')],
+                ['Listen', esc(num(catalog.listCount))],
+                ['Letzter Lauf', badge(catalog.lastOutcome) + ' ' + ago(catalog.lastRefreshAt, now)],
+                ['Nächster Lauf', ago(catalog.nextRefreshAt, now)],
+                ['Letztes Ergebnis', report.outcome
+                    ? esc(num(report.entriesFound)) + ' gefunden, '
+                      + esc(num(report.entriesSelected)) + ' gewählt, '
+                      + esc(num(report.created)) + ' neu, '
+                      + esc(num(report.removed)) + ' entfernt'
+                    : '—'],
+            ])
+            + '</div></div></div>';
+    }).join('');
+
+    container.querySelectorAll('[data-refresh]').forEach(button =>
+        button.addEventListener('click', () => refreshCatalog(button)));
+}
+
+async function refreshCatalog(button) {
+    const name = button.dataset.refresh;
+    // A catalogue read is one or more calls to somebody else's server and can
+    // take seconds; without this the only feedback is a button that does
+    // nothing and a second click that reads it twice.
+    button.disabled = true;
+    const label = button.textContent;
+    button.textContent = 'liest …';
+    try {
+        const report = await api('/catalogs/' + encodeURIComponent(name) + '/refresh',
+            null, 'POST');
+        await loadCatalogs();
+        showNote(name + ': ' + report.outcome + ' — ' + report.entriesFound
+            + ' gefunden, ' + report.created + ' neu, ' + report.removed + ' entfernt');
+    } catch (e) {
+        showError(e);
+    } finally {
+        button.disabled = false;
+        button.textContent = label;
+    }
+}
+
 // ── pager ───────────────────────────────────────────────────────────────
 
 /**
@@ -599,7 +693,7 @@ function defList(rows) {
 // ── views ───────────────────────────────────────────────────────────────
 
 function showView(name) {
-    for (const view of ['overview', 'sources', 'articles']) {
+    for (const view of ['overview', 'sources', 'articles', 'catalogs']) {
         document.getElementById('view-' + view).classList.toggle('d-none', view !== name);
     }
     document.querySelectorAll('#tabs .nav-link').forEach(tab =>
@@ -700,13 +794,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function currentView() {
     const view = location.hash.slice(1);
-    return ['overview', 'sources', 'articles'].includes(view) ? view : 'overview';
+    return ['overview', 'sources', 'articles', 'catalogs'].includes(view)
+            ? view : 'overview';
 }
 
 function reloadCurrentView() {
     const view = currentView();
     const load = view === 'sources' ? () => loadSources(sourcesPage)
         : view === 'articles' ? () => loadArticles(articlesPage)
+        : view === 'catalogs' ? loadCatalogs
         : loadStats;
     load().catch(showError);
 }
