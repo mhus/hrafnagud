@@ -82,14 +82,14 @@ class TranslationServiceTest {
         int calls;
 
         @Override public String name() { return "test"; }
-        @Override public @Nullable String model() { return "test-model-1"; }
         @Override public TranslatedText translate(String title, @Nullable String summary,
                 String targetLanguage) {
             calls++;
             titles.add(title);
             summaries.add(String.valueOf(summary));
             return new TranslatedText("[" + targetLanguage + "] " + title,
-                    summary == null ? null : "[" + targetLanguage + "] " + summary);
+                    summary == null ? null : "[" + targetLanguage + "] " + summary,
+                    "test-model-1");
         }
     }
 
@@ -115,6 +115,32 @@ class TranslationServiceTest {
                 .containsEntry("title", "[de] Council approves transit plan")
                 .containsEntry("summary", "[de] The vote ended a three-year debate.");
         verify(articleService).recordTranslated(ID);
+    }
+
+    @Test
+    void an_unknown_model_is_recorded_as_unknown_rather_than_guessed() {
+        // The provider may not learn which model answered — an older kit,
+        // or a call that left no trace. The record then has to say so: a
+        // plausible substitute would read like evidence of something that
+        // was never observed, and comparing two runs is the whole reason
+        // the model is stored at all.
+        TranslationService service = serviceWith(new TranslationProvider() {
+            @Override public String name() { return "test"; }
+            @Override public TranslatedText translate(String title,
+                    @Nullable String summary, String targetLanguage) {
+                return new TranslatedText("Titel", "Teaser", null);
+            }
+        });
+
+        assertThat(service.translate(article(), NOW)).isTrue();
+
+        ArgumentCaptor<EnrichmentDocument> stored =
+                ArgumentCaptor.forClass(EnrichmentDocument.class);
+        verify(enrichmentService).record(stored.capture());
+        assertThat(stored.getValue().getModel()).isNull();
+        assertThat(stored.getValue().getProducer())
+                .as("the producer is still known even when the model is not")
+                .isEqualTo("test");
     }
 
     @Test

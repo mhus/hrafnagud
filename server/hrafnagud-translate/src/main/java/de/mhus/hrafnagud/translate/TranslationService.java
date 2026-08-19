@@ -93,7 +93,7 @@ public class TranslationService {
                     .articleId(articleId)
                     .type(EnrichmentType.TRANSLATION)
                     .producer(provider.name())
-                    .model(provider.model())
+                    .model(translated.getModel())
                     .language(pivot)
                     .createdAt(now)
                     .content(content)

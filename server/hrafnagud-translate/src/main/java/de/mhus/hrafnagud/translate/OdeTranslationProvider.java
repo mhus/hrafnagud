@@ -14,10 +14,11 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>The brain side is a script event that calls a model through a recipe
  * — see the {@code translation} kit. That matters for what this class is
- * <em>not</em>: it holds no prompt, no model name and no notion of how a
+ * <em>not</em>: it holds no prompt, no model choice and no notion of how a
  * translation is produced. Those live in documents an operator can edit
  * without a redeploy here, which is the whole reason to integrate through
- * an event rather than to call a model directly.
+ * an event rather than to call a model directly. It does <em>report</em>
+ * the model, because it reads it off the answer rather than deciding it.
  *
  * <p>Built by {@link TranslateConfiguration} only when Ode is configured.
  */
@@ -66,7 +67,11 @@ public class OdeTranslationProvider implements TranslationProvider {
                         "event '" + eventName + "' returned no title", null);
             }
             return new TranslatedText(translatedTitle,
-                    StringUtils.trimToNull(text(output, "summary")));
+                    StringUtils.trimToNull(text(output, "summary")),
+                    // Optional on the wire: an older kit does not send it,
+                    // and the brain reports null when the call left no
+                    // trace. Absent stays absent.
+                    StringUtils.trimToNull(text(output, "model")));
 
         } catch (VanceOdeException e) {
             // Ode already decided whether the far end might behave

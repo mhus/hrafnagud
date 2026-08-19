@@ -135,6 +135,35 @@ class OdeTranslationProviderTest {
     }
 
     @Test
+    void the_answering_model_is_read_off_the_event_output() {
+        when(events.fire(any(), any())).thenReturn(resultWith(Map.of(
+                "title", "Titel",
+                "summary", "Teaser",
+                "model", "cortecs:deepseek-v4-pro")));
+
+        assertThat(provider.translate("Title", "Teaser", "de").getModel())
+                .isEqualTo("cortecs:deepseek-v4-pro");
+    }
+
+    @Test
+    void an_event_that_reports_no_model_yields_null_not_a_placeholder() {
+        // An older kit does not send the field, and the brain reports null
+        // when the call left no trace. Neither is an error — the answer is
+        // usable, its origin merely unknown, and it must stay unknown.
+        when(events.fire(any(), any())).thenReturn(resultWith(Map.of("title", "Titel")));
+
+        assertThat(provider.translate("Title", null, "de").getModel()).isNull();
+    }
+
+    @Test
+    void a_blank_model_is_treated_as_absent() {
+        when(events.fire(any(), any()))
+                .thenReturn(resultWith(Map.of("title", "Titel", "model", "  ")));
+
+        assertThat(provider.translate("Title", null, "de").getModel()).isNull();
+    }
+
+    @Test
     void the_provider_names_itself_for_the_enrichment_record() {
         assertThat(provider.name()).isEqualTo("vance-ode");
     }

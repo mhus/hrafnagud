@@ -22,11 +22,6 @@ public interface TranslationProvider {
     /** Identifier stored with each result, e.g. {@code vance-ode}. */
     String name();
 
-    /** Model behind it when known, for the enrichment record. */
-    default @Nullable String model() {
-        return null;
-    }
-
     /**
      * Translates an article's title and teaser in one request.
      *
