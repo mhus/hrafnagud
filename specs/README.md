@@ -15,7 +15,7 @@ decisions that were not obvious, and where it stops.
 | [architecture.md](architecture.md) | Modules, boundaries, collections, the rules that keep Munin free of Vancetope |
 | [collection.md](collection.md) | Sources, source lists, feed ingest, deduplication, adaptive polling, language |
 | [content-extraction.md](content-extraction.md) | Fetching article pages and separating content from furniture |
-| [enrichments.md](enrichments.md) | Where the output of a processing step goes, and why not onto the article |
+| [enrichments.md](enrichments.md) | Where the record of a processing step goes, and why it is not a field on the article |
 | [translation.md](translation.md) | The pivot language, the provider SPI, and the Vancetope event behind it |
 | [feed-source.md](feed-source.md) | Serving the archive to Vancetope as a Centauri feed source |
 | [research-source.md](research-source.md) | Answering Vancetope research queries as a Zarniwoop search source |

@@ -39,6 +39,23 @@ always been there.
 Rating, keywords and sentiment have the same shape, which is why the collection
 is not called `translations`.
 
+### 2.1 One exception, and what makes it one
+
+Two fields on the article do hold a translation: `pivotTitle` and
+`pivotSummary`. That is not a retreat from the rule above, but it is worth
+being precise about why.
+
+The **record** is the enrichment: it is what happened, it is append-only, and
+it is what a later run is compared against. Those two fields are a **derived
+read model** — a copy that exists for one mechanical reason, that MongoDB
+allows one text index per collection and it has to live on the document being
+searched. They are written by exactly one caller, at the moment the enrichment
+is recorded, and a re-run overwrites them.
+
+The test of the distinction: deleting those two fields loses nothing but an
+index entry, and rebuilding them from `enrichments` is a loop. Deleting an
+enrichment loses a fact. See [research-source.md](research-source.md) §3.
+
 ## 3. Model
 
 `EnrichmentDocument`, collection `enrichments`:

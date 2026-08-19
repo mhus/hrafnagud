@@ -16,7 +16,10 @@ munin:
     translateSummary: true    # titles alone cost a tenth of the text
 ```
 
-The result lands in [`enrichments`](enrichments.md), never on the article.
+The record of each run lands in [`enrichments`](enrichments.md), not on the
+article. The article does carry a searchable copy of the newest one — a
+derived read model, written by the same step; see
+[enrichments.md](enrichments.md) §2.1.
 
 ## 2. Module boundary
 

@@ -164,7 +164,10 @@ nothing draining it — a legible state, and the startup log says so
 explicitly rather than leaving it to be discovered. `GET /api/v1/stats`
 reports `translationBacklog` for the same reason.
 
-The translation itself lands in `enrichments`, not on the article.
+Each run is recorded in `enrichments`, not on the article — so re-running with
+a better model adds a row instead of overwriting the comparison. The article
+carries a searchable copy of the newest one, which is a derived read model
+rather than a second record (see [enrichments](specs/enrichments.md) §2.1).
 `GET /api/v1/articles?withTranslation=true` folds the newest one into each
 article; `GET /api/v1/articles/{id}/enrichments` lists all of them, and
 `POST /api/v1/articles/{id}/translate` requeues one article.
@@ -270,8 +273,8 @@ API and `publishedAt` only where a contract demands it, because publishers
 backdate and mis-timezone often enough that one broken feed would dominate any
 sort built on their dates. **Queues are state fields with partial indexes**, so
 an index tracks the backlog rather than the archive. **Processing results go in
-`enrichments`**, never onto the article, so re-running a step does not destroy
-the comparison that made re-running worth doing.
+`enrichments`** rather than into a field on the article, so re-running a step
+does not destroy the comparison that made re-running worth doing.
 
 ## Known gaps
 
