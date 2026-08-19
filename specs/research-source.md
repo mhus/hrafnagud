@@ -92,7 +92,51 @@ limitation of the feed; for a research provider it would have been the core
 function failing, because the caller is a model formulating in the user's
 language.
 
-### 3.1 The query's own language
+### 3.1 Bodies, as a second tier
+
+The extracted article text is searched too — but it lives in
+`article_contents`, its own collection, and one text index per collection
+means one index there as well. Two indexes produce two scores, over different
+fields, on scales that are not comparable. Ranking them against each other
+would be arithmetic on incomparable numbers.
+
+So they are **concatenated, not merged**: every metadata hit, then every body
+hit, each tier ordered by its own score.
+
+```
+"Trump"                                        "Ukraine"
+1. [head] Why has Trump shifted on North Korea 1. [head] Sacked Ukrainian defence minister …
+2. [head] Trump pauses new tariffs on Canada   2. [head] Why has Russia threatened the UK …
+3. [head] South Korea shortens war games …     3. [body] BBC visits smouldering Kyiv market
+4. [body] Liberia agrees to accept deportees   4. [body] Ukrainian man arrested in Croatia
+5. [body] Sacked Ukrainian defence minister …  5. [body] South Korea shortens war games …
+```
+
+The ordering is a statement anyone can check: in news a headline match is a
+stronger signal than a mention somewhere in the body. The cost, stated rather
+than hidden: an overwhelming body match ranks below a weak headline match.
+
+Two practical details. The second query **only runs when the first did not
+fill the page**, so the common case stays one query. And because every filter
+is a property of the *article* while the text is in the content collection,
+the body search over-fetches by a bounded factor (4×) and then re-applies the
+filters — an unbounded over-fetch to satisfy a filter is a full scan with
+extra steps.
+
+Proof that it reaches text no headline carries: `flabbergasted` occurs in
+exactly one body and in no title or teaser in the live archive, and the query
+returns exactly that article.
+
+### 3.2 The same trap, one collection later
+
+`article_contents` had no text index until bodies became searchable — and it
+has a `language` field too, holding the page's declared language. Adding the
+index would have brought MongoDB's language override with it and made a
+Japanese page unstorable, exactly as in
+[collection.md](collection.md) §4.1. It carries its own `textLanguage` for
+the same reason, set in the one service method that stores a body.
+
+### 3.3 The query's own language
 
 `OdeSearchQuery.locale` is passed through as the stemmer for the *query*
 (`TextIndexLanguage`, the same mapping the documents use). A locale MongoDB
@@ -167,11 +211,13 @@ no api key                                   → 401
 
 ## 8. Limits
 
-- **Bodies are not searched.** The text index covers title and teaser, in both
-  languages. A phrase that appears only in the body of an article does not
-  find it. Indexing `article_contents` is a second text index in a second
-  collection — allowed, but it needs a ranking answer for how two scores from
-  two indexes compare.
+- **A body hit can never outrank a headline hit**, however much better it is
+  — see §3.1. The alternative needs a defensible way to compare two scores
+  from two indexes, and there is not one.
+- **Bodies only help where they have been fetched.** Full-text fetching is
+  opt-in (`munin.content.enabled`), so on an archive that never ran it the
+  second tier finds nothing and costs one empty query per search that did not
+  fill its page.
 - **One modality.** `NEWS`. The archive has nothing to say about `ACADEMIC` or
   `BOOK` and declines to pretend.
 - **No de-duplication of near-identical stories in a result set.** The same

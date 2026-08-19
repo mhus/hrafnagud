@@ -238,7 +238,8 @@ curl -X POST -H 'Authorization: Bearer <key>' -H 'Content-Type: application/json
 
 Ranked by relevance rather than by date, over title and teaser **in both the
 article's own language and the pivot translation** — so a German query finds an
-English article that was translated into German. `EXPERT` tier accepts
+English article that was translated into German — and over the **fetched
+article text** as a second tier below those. `EXPERT` tier accepts
 `source`, `language`, `category`, `since`, `until`. Bodies are offered on
 demand rather than shipped with the result list.
 

@@ -13,7 +13,9 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.TextIndexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Language;
 
 /**
  * The extracted body of an article, in its own collection.
@@ -39,6 +41,17 @@ public class ArticleContentDocument {
     /** {@code ArticleDocument.id} this body belongs to. Unique. */
     private String articleId = "";
 
+    /**
+     * The extracted prose, and the only field of this collection that is
+     * searchable.
+     *
+     * <p>Indexed here rather than mirrored onto the article: a body is around
+     * fifty times the size of the metadata, and keeping it out of `articles`
+     * is the entire reason this collection exists. See
+     * {@code specs/research-source.md} §8 for how a body hit is ranked
+     * against a headline hit.
+     */
+    @TextIndexed
     private String text = "";
 
     private int wordCount;
@@ -71,6 +84,19 @@ public class ArticleContentDocument {
 
     /** Language the page declared, normalised to a primary subtag. */
     private @Nullable String language;
+
+    /**
+     * Stemmer for the text index — see
+     * {@link TextIndexLanguage}, and the article's field of the same name.
+     *
+     * <p>This collection had no text index until bodies became searchable,
+     * and adding one brought the trap with it: MongoDB's language override
+     * defaults to the field called {@code language}, this document has one,
+     * and a page declaring {@code ja} would have made the write fail. The
+     * same defect the articles collection already had, one collection later.
+     */
+    @Language
+    private String textLanguage = TextIndexLanguage.NONE;
 
     /**
      * Canonical URL the page claims for itself. Recorded, not acted on:

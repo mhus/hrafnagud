@@ -91,7 +91,7 @@ source/language variants.
 - **Page metadata does not correct the timestamp.** A page's own
   `datePublished` is often better than the feed's, but adopting it would change
   the ordering of an article *after* a reader has seen it — see
-  [content-extraction.md](content-extraction.md) §8.
+  [content-extraction.md](content-extraction.md) §9.
 
 ### 4.2 The cursor carries the id
 
@@ -121,7 +121,7 @@ every page turn.
 | Capability | Value | Reasoning |
 |---|---|---|
 | `selectorMode` | `ENUMERABLE` | the source registry is finite and named |
-| `pushdownTextSearch` | **true** | see §5.1 |
+| `pushdownTextSearch` | **true** | title + teaser, original and translation; see §5.1 |
 | `pushdownLanguage` | **false** | see §5.2 |
 | `pushdownSince` | true | on `publishedAt` — the same key the stream is ordered by, so bound and order agree |
 | `supportsNewerDirection` | true | trivial with a timestamp cursor |
@@ -134,24 +134,23 @@ every page turn.
 Every pushdown left false is a filter Vancetope applies itself after fetching.
 Nothing is lost by declining one; what is lost is efficiency.
 
-### 5.1 Text search is claimed, with a known asymmetry
+### 5.1 Text search is claimed
 
-The article collection carries a text index over its own title and teaser. A
-**translated** entry is therefore searchable by its *original* words and not by
-the ones the reader is looking at. Live, against a German-pivot archive:
+The article collection's text index covers title and teaser **in both the
+article's own language and the pivot translation**, so a query in either finds
+the article. The feed gets that for free: its filter runs through the same
+`buildQuery` and therefore the same index as the research provider — see
+[research-source.md](research-source.md) §3.
 
-```
-'Zölle'   → 0 hits
-'tariffs' → 1 hit   (displayed as: „Trump setzt neue Zölle auf Kanada …")
-```
+It was not always so. This section previously documented an asymmetry — a
+translated entry findable by `tariffs` but not by `Zölle`, while being
+*displayed* with its German title. Tolerable for a feed, where search is a
+convenience; not tolerable for a research provider, where it is the whole
+function. Building that provider is what forced the fix.
 
-Claimed anyway, and this is the decision that goes the other way from §5.2.
-Declining the language pushdown costs nothing. Declining this one would make
-the reader page the whole archive to resolve one search. Wrong for the
-translated minority beats unusable for everyone.
-
-The fix is to index the enrichments — a named next step, not a subtlety left
-unsaid. See [enrichments.md](enrichments.md) §6.
+What the feed still does not search is the **article body** — the second tier
+in §3.1 of that document is a `searchByRelevance` feature, and the feed's
+filter is a chronological query with a text predicate on it.
 
 ### 5.2 Language pushdown is declined
 

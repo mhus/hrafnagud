@@ -10,9 +10,13 @@ import de.mhus.hrafnagud.munin.source.SourceDocument;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.bson.Document;
@@ -60,6 +64,14 @@ public class ArticleService {
     private static final String F_LANGUAGE = "language";
     /** Text-index stemmer override — see TextIndexLanguage. */
     private static final String F_TEXT_LANGUAGE = "textLanguage";
+    /**
+     * How far past the requested count the body search reaches, so that
+     * article-level filtering does not leave the page empty. Bounded on
+     * purpose: an unbounded over-fetch to satisfy a filter is a full scan
+     * with extra steps.
+     */
+    private static final int BODY_OVERFETCH = 4;
+
     private static final String F_PIVOT_TITLE = "pivotTitle";
     private static final String F_PIVOT_SUMMARY = "pivotSummary";
     private static final String F_CATEGORIES = "categories";
@@ -278,12 +290,20 @@ public class ArticleService {
      * @param queryLanguage the language to stem the <em>query</em> with, from
      *     the caller's locale hint. Unknown or unsupported falls back to no
      *     stemming, which matches literally rather than wrongly.
+     * <p>With {@code searchBodies} the extracted article text is searched too,
+     * as a second tier below the metadata hits — see {@link #findByBodyText}
+     * for why the two are concatenated rather than merged. The second query
+     * only runs when the first did not fill the page, so the common case
+     * stays one query.
+     *
+     * @param searchBodies also match the fetched article text. Costs a second
+     *     query and only helps where bodies have been fetched at all.
      * @throws IllegalArgumentException if the query carries no text — without
      *     it there is no score to sort on, and the caller wants one of the
      *     other two methods
      */
     public List<ArticleDocument> searchByRelevance(ArticleQuery filter,
-            @Nullable String queryLanguage, int limit) {
+            @Nullable String queryLanguage, int limit, boolean searchBodies) {
 
         if (StringUtils.isBlank(filter.getText())) {
             throw new IllegalArgumentException(
@@ -295,11 +315,76 @@ public class ArticleService {
                 : TextCriteria.forLanguage(stemmer))
                 .matchingAny(filter.getText().trim());
 
+        List<ArticleDocument> metadataHits = findByText(text, filter, limit);
+        if (metadataHits.size() >= limit || !searchBodies) {
+            return metadataHits;
+        }
+
+        // Second tier. Deliberately concatenated rather than merged: the two
+        // scores come from two indexes over different fields and are not on a
+        // comparable scale, so ranking them against each other would be
+        // arithmetic on incomparable numbers. Ordering by tier instead is a
+        // statement anyone can check — in news a headline match is a stronger
+        // signal than a mention somewhere in the body — and within a tier the
+        // scores are its own and do compare.
+        //
+        // The cost of the choice: an overwhelming body match ranks below a
+        // weak headline match. Stated rather than hidden.
+        Set<String> already = metadataHits.stream()
+                .map(ArticleDocument::getId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<ArticleDocument> bodyHits =
+                findByBodyText(text, filter, already, limit - metadataHits.size());
+
+        List<ArticleDocument> combined = new ArrayList<>(metadataHits);
+        combined.addAll(bodyHits);
+        return combined;
+    }
+
+    /** Title and teaser, in both the article's language and the pivot. */
+    private List<ArticleDocument> findByText(TextCriteria text, ArticleQuery filter, int limit) {
         TextQuery query = new TextQuery(text).sortByScore();
         for (Criteria part : filterCriteria(filter)) {
             query.addCriteria(part);
         }
         return mongoTemplate.find(query.limit(limit), ArticleDocument.class);
+    }
+
+    /**
+     * Articles whose <em>body</em> matches, minus the ones already found.
+     *
+     * <p>Two round trips, because the text lives in {@code article_contents}
+     * while every filter is a property of the article. The content search is
+     * over-fetched by {@link #BODY_OVERFETCH}× so that filtering does not
+     * empty the page — bounded, because an unbounded over-fetch to satisfy a
+     * filter is a full scan with extra steps.
+     */
+    private List<ArticleDocument> findByBodyText(TextCriteria text, ArticleQuery filter,
+            Set<String> exclude, int limit) {
+
+        TextQuery contentQuery = new TextQuery(text).sortByScore();
+        List<String> articleIds = mongoTemplate
+                .find(contentQuery.limit(limit * BODY_OVERFETCH), ArticleContentDocument.class)
+                .stream()
+                .map(ArticleContentDocument::getArticleId)
+                .filter(id -> !exclude.contains(id))
+                .limit(limit)
+                .toList();
+        if (articleIds.isEmpty()) {
+            return List.of();
+        }
+
+        List<Criteria> parts = new ArrayList<>(filterCriteria(filter));
+        parts.add(Criteria.where("_id").in(articleIds));
+        List<ArticleDocument> found = mongoTemplate.find(
+                new Query(new Criteria().andOperator(parts)), ArticleDocument.class);
+
+        // Restore the order the body scores put them in — the second query
+        // knows nothing about relevance and would hand them back in whatever
+        // order the index walk produced.
+        Map<String, ArticleDocument> byId = found.stream()
+                .collect(Collectors.toMap(ArticleDocument::getId, a -> a, (a, b) -> a));
+        return articleIds.stream().map(byId::get).filter(Objects::nonNull).toList();
     }
 
     /**
@@ -407,6 +492,10 @@ public class ArticleService {
 
         content.setArticleId(articleId);
         content.setFetchedAt(now);
+        // Set here rather than in the extractor: one choke point, and a
+        // value MongoDB rejects would fail this write rather than being
+        // caught somewhere it can be reasoned about.
+        content.setTextLanguage(TextIndexLanguage.of(content.getLanguage()));
         ArticleContentDocument saved = contentRepository.findByArticleId(articleId)
                 .map(existing -> {
                     content.setId(existing.getId());

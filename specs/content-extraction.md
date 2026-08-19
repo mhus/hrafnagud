@@ -136,7 +136,18 @@ the archive quietly ends up holding **no CJK bodies at all**.
 Caught by the fixture corpus on its first run, which is precisely what the
 corpus is for.
 
-## 6. Storage and REST
+## 6. The body is searchable
+
+`article_contents.text` carries a text index, which is what lets a research
+query match a phrase that appears only inside an article. How a body hit ranks
+against a headline hit — and why the two are not merged — is in
+[research-source.md](research-source.md) §3.1.
+
+Adding that index brought MongoDB's language-override trap into this
+collection too; `textLanguage` is here for the same reason it is on the
+article. See [collection.md](collection.md) §4.1.
+
+## 7. Storage and REST
 
 `article_contents` is a separate collection because bodies are ~50× larger than
 the metadata and most queries want the metadata. It holds the extracted text,
@@ -151,7 +162,7 @@ POST /api/v1/articles/{id}/skip-content
 The feed contract exposes bodies through a different door — see
 [feed-source.md](feed-source.md) §6.
 
-## 7. What the fixture corpus is for
+## 8. What the fixture corpus is for
 
 Real article pages, reduced to their structural skeleton, checked into
 `qa`-style test resources and driven by unit tests.
@@ -166,7 +177,7 @@ archive rather than failing anything:
 The corpus is the reason those were found in an afternoon rather than in a
 year. Growing it is the maintenance task that keeps extraction honest.
 
-## 8. Limits
+## 9. Limits
 
 - **Page metadata does not flow back to the article.** A page's
   `datePublished`, author and language are frequently better than the feed's,

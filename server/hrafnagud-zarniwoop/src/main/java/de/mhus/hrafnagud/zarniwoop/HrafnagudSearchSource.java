@@ -100,7 +100,11 @@ public class HrafnagudSearchSource implements SearchSource {
         List<ArticleDocument> found;
         try {
             found = articles.searchByRelevance(
-                    filter.build(), query.locale(), query.maxResults());
+                    filter.build(), query.locale(), query.maxResults(),
+                    // Bodies matter here in a way they do not for a timeline:
+                    // a research query is often about something mentioned in
+                    // the article rather than announced in its headline.
+                    true);
         } catch (RuntimeException e) {
             // Throwing marks this source broken and stops Vancetope asking
             // for minutes. Right for an index that is down, wrong for a

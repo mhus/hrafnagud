@@ -164,6 +164,6 @@ repeatedly been wrong:
 - **A fixture corpus of real article pages**, reduced to their structural
   skeleton, drives the extraction tests. Two defects that no amount of
   reasoning had surfaced were found by it on its first run — see
-  [content-extraction.md](content-extraction.md) §7.
+  [content-extraction.md](content-extraction.md) §8.
 - **A real `HttpServer`**, not a mock, for the Ode client tests. What is being
   tested there is a wire contract.

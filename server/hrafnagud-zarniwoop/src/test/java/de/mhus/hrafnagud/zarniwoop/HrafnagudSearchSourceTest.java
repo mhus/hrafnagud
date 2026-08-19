@@ -3,6 +3,7 @@ package de.mhus.hrafnagud.zarniwoop;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -83,7 +84,7 @@ class HrafnagudSearchSourceTest {
 
     @Test
     void nothing_found_is_an_empty_response_not_an_exception() {
-        when(articles.searchByRelevance(any(), any(), anyInt()))
+        when(articles.searchByRelevance(any(), any(), anyInt(), anyBoolean()))
                 .thenReturn(new ArrayList<>());
 
         OdeSearchResponse response = source.search(query("nothing matches this"));
@@ -96,7 +97,7 @@ class HrafnagudSearchSourceTest {
 
     @Test
     void a_search_that_could_not_run_does_throw() {
-        when(articles.searchByRelevance(any(), any(), anyInt()))
+        when(articles.searchByRelevance(any(), any(), anyInt(), anyBoolean()))
                 .thenThrow(new IllegalStateException("index unavailable"));
 
         // The other half of the same rule: a source that swallows a real
@@ -107,7 +108,7 @@ class HrafnagudSearchSourceTest {
 
     @Test
     void an_unparsable_expert_param_is_ignored_rather_than_refusing_the_query() {
-        when(articles.searchByRelevance(any(), any(), anyInt()))
+        when(articles.searchByRelevance(any(), any(), anyInt(), anyBoolean()))
                 .thenReturn(new ArrayList<>());
 
         source.search(new OdeSearchQuery("tariffs", OdeSearchModality.NEWS,
@@ -123,7 +124,7 @@ class HrafnagudSearchSourceTest {
 
     @Test
     void expert_params_reach_the_query() {
-        when(articles.searchByRelevance(any(), any(), anyInt()))
+        when(articles.searchByRelevance(any(), any(), anyInt(), anyBoolean()))
                 .thenReturn(new ArrayList<>());
 
         source.search(new OdeSearchQuery("tariffs", OdeSearchModality.NEWS,
@@ -144,8 +145,21 @@ class HrafnagudSearchSourceTest {
     }
 
     @Test
+    void bodies_are_searched_because_a_research_query_is_often_about_a_mention() {
+        when(articles.searchByRelevance(any(), any(), anyInt(), anyBoolean()))
+                .thenReturn(new ArrayList<>());
+
+        source.search(query("tariffs"));
+
+        // The feed does not need this; a research caller asking about
+        // something mentioned inside an article does.
+        org.mockito.Mockito.verify(articles)
+                .searchByRelevance(any(), any(), anyInt(), eq(true));
+    }
+
+    @Test
     void the_locale_hint_is_passed_on_as_the_stemmer_for_the_query() {
-        when(articles.searchByRelevance(any(), any(), anyInt()))
+        when(articles.searchByRelevance(any(), any(), anyInt(), anyBoolean()))
                 .thenReturn(new ArrayList<>());
 
         source.search(new OdeSearchQuery("Zölle", OdeSearchModality.NEWS,
@@ -160,7 +174,7 @@ class HrafnagudSearchSourceTest {
     void a_translated_article_is_presented_in_the_pivot_language() {
         ArticleDocument article = article("a1", "Council approves plan", "en");
         article.setSummary("The vote ended a debate.");
-        when(articles.searchByRelevance(any(), any(), anyInt()))
+        when(articles.searchByRelevance(any(), any(), anyInt(), anyBoolean()))
                 .thenReturn(new ArrayList<>(List.of(article)));
         when(enrichments.latestForEach(any(), eq(EnrichmentType.TRANSLATION)))
                 .thenReturn(Map.of("a1", translation("Rat beschliesst Plan",
@@ -180,7 +194,7 @@ class HrafnagudSearchSourceTest {
 
     @Test
     void the_publication_date_travels_with_the_hit() {
-        when(articles.searchByRelevance(any(), any(), anyInt()))
+        when(articles.searchByRelevance(any(), any(), anyInt(), anyBoolean()))
                 .thenReturn(new ArrayList<>(List.of(article("a1", "Title", "en"))));
 
         // Relevance is the ranking, so a model has no other way to tell
@@ -193,7 +207,7 @@ class HrafnagudSearchSourceTest {
     void an_article_with_a_body_offers_it_on_demand_rather_than_inline() {
         ArticleDocument article = article("a1", "Title", "en");
         article.setContentWordCount(900);
-        when(articles.searchByRelevance(any(), any(), anyInt()))
+        when(articles.searchByRelevance(any(), any(), anyInt(), anyBoolean()))
                 .thenReturn(new ArrayList<>(List.of(article)));
 
         OdeSearchHit hit = source.search(query("x")).hits().get(0);
@@ -208,7 +222,7 @@ class HrafnagudSearchSourceTest {
 
     @Test
     void an_article_without_a_body_offers_nothing() {
-        when(articles.searchByRelevance(any(), any(), anyInt()))
+        when(articles.searchByRelevance(any(), any(), anyInt(), anyBoolean()))
                 .thenReturn(new ArrayList<>(List.of(article("a1", "Title", "en"))));
 
         // A promise that resolves to a 404 is worse than no promise.
@@ -240,13 +254,13 @@ class HrafnagudSearchSourceTest {
 
     private void verifyFilter(ArgumentCaptor<ArticleQuery> captor) {
         org.mockito.Mockito.verify(articles)
-                .searchByRelevance(captor.capture(), any(), anyInt());
+                .searchByRelevance(captor.capture(), any(), anyInt(), anyBoolean());
     }
 
     /** Named so it cannot shadow Mockito's static {@code verify}. */
     private void verifyLocale(String expectedLocale) {
         org.mockito.Mockito.verify(articles)
-                .searchByRelevance(any(), eq(expectedLocale), anyInt());
+                .searchByRelevance(any(), eq(expectedLocale), anyInt(), anyBoolean());
     }
 
     private static OdeSearchQuery query(String text) {
