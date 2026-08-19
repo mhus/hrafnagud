@@ -17,6 +17,7 @@ decisions that were not obvious, and where it stops.
 | [collection.md](collection.md) | Sources, source lists, feed ingest, deduplication, adaptive polling, language |
 | [content-extraction.md](content-extraction.md) | Fetching article pages and separating content from furniture |
 | [enrichments.md](enrichments.md) | Where the record of a processing step goes, and why it is not a field on the article |
+| [geo.md](geo.md) | Three kinds of location, the containment hierarchy, and why a source's country is not an article's subject (design) |
 | [translation.md](translation.md) | The pivot language, the provider SPI, and the Vancetope event behind it |
 | [console.md](console.md) | The operator console, the API token in front of it, and what it deliberately cannot do |
 | [feed-source.md](feed-source.md) | Serving the archive to Vancetope as a Centauri feed source |
