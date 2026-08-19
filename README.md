@@ -22,6 +22,8 @@ server/
   hrafnagud-centauri/ Serves the archive to Vancetope as a Centauri feed source. Outside
                        Munin for the same reason — the mirror image of translate: that one
                        calls a brain, this one answers one.
+  hrafnagud-zarniwoop/ Answers Vancetope research queries out of the archive. Same data as
+                       centauri, opposite question: a ranked answer, not a timeline.
   hrafnagud-server/   Boot module: entrypoint plus runtime configuration, nothing else.
 ```
 
@@ -213,6 +215,33 @@ Two properties of this that are worth knowing before they surprise you:
   English words and not by the German ones on screen. Making translations
   searchable means indexing the enrichment.
 
+## Research queries from Vancetope
+
+Also off by default, and switched independently of the feed:
+
+```yaml
+munin:
+  zarniwoop:
+    enabled: true
+vance:
+  ode:
+    zarniwoop:
+      apiKey: ${HRAFNAGUD_ZARNIWOOP_API_KEY:}
+```
+
+```bash
+curl -H 'Authorization: Bearer <key>' localhost:9800/ode/search/capabilities
+curl -X POST -H 'Authorization: Bearer <key>' -H 'Content-Type: application/json' \
+  -d '{"query":"tariffs","modality":"NEWS","maxResults":5}' \
+  localhost:9800/ode/search/search
+```
+
+Ranked by relevance rather than by date, over title and teaser **in both the
+article's own language and the pivot translation** — so a German query finds an
+English article that was translated into German. `EXPERT` tier accepts
+`source`, `language`, `category`, `since`, `until`. Bodies are offered on
+demand rather than shipped with the result list.
+
 ## Design decisions
 
 The choices that were not obvious, with the reasoning, live in
@@ -227,6 +256,7 @@ that a single list stopped being readable:
 | [enrichments](specs/enrichments.md) | Why a processing result is a document and not a field |
 | [translation](specs/translation.md) | The pivot language, the provider SPI, the Vancetope event, the nested timeouts |
 | [feed-source](specs/feed-source.md) | Serving the archive: streams, cursor, declared capabilities and the two declined ones |
+| [research-source](specs/research-source.md) | Relevance search, searching translation and original, the two contract rules |
 
 A few that shape everything else, in short:
 

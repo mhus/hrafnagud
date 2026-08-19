@@ -21,6 +21,7 @@
         <module>hrafnagud-munin</module>
         <module>hrafnagud-translate</module>
         <module>hrafnagud-centauri</module>
+        <module>hrafnagud-zarniwoop</module>
         <module>hrafnagud-server</module>
     </modules>
 

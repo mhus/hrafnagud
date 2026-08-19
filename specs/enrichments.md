@@ -111,11 +111,12 @@ longer exists is not history, it is a leak.
 
 ## 6. Limits
 
-- **Enrichments are not indexed for text search.** The article's text index
-  covers its own title and teaser, so a translated article is searchable by its
-  original words and not by the translated ones. This is visible in the feed
-  contract — see [feed-source.md](feed-source.md) §5.1 — and making
-  translations searchable means indexing this collection.
+- **Enrichments are not indexed for text search**, and are not going to be.
+  MongoDB allows one text index per collection, and it has to live on the
+  document being searched. Translations are therefore *mirrored* onto the
+  article (`pivotTitle`, `pivotSummary`) by the one writer that records them —
+  a derived read model, with the enrichment staying the append-only record.
+  See [research-source.md](research-source.md) §3.
 - **No retention policy.** Enrichments grow with the archive and with every
   re-run, and nothing prunes them.
 - **One type so far.** `TRANSLATION` is the only `EnrichmentType`. The

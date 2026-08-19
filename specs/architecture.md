@@ -5,7 +5,8 @@
 Hrafnagud collects news from many sources worldwide, deduplicates articles
 across those sources, classifies their language, optionally fetches the full
 article text, and stores the result in MongoDB. It then serves that archive to
-[Vancetope](https://github.com/mhus/vance) as a feed source.
+[Vancetope](https://github.com/mhus/vance) two ways: as a chronological feed,
+and as a research provider answering queries.
 
 What it is not: a reader, a ranking engine, or a place where articles are
 edited. It collects and hands out. Everything that interprets — rating,
@@ -21,6 +22,7 @@ server/
                        enrichment storage, persistence, the operator REST surface.
   hrafnagud-translate/ Works Munin's translation backlog by calling a Vancetope brain.
   hrafnagud-centauri/  Serves the archive to Vancetope as a Centauri feed source.
+  hrafnagud-zarniwoop/ Answers Vancetope research queries out of the archive.
   hrafnagud-server/    Boot module: entrypoint plus runtime configuration, nothing else.
 ```
 
@@ -30,16 +32,17 @@ server/
 queryable without a brain anywhere near it, and that is the property the
 module boundary protects.
 
-Two modules face Vancetope, and they are mirror images:
+Three modules face Vancetope. One calls out, two answer:
 
 | Module | Direction | Depends on |
 |---|---|---|
 | `hrafnagud-translate` | calls a brain | `vance-ode-ursa` |
 | `hrafnagud-centauri` | answers a brain | `vance-ode-centauri` |
+| `hrafnagud-zarniwoop` | answers a brain | `vance-ode-zarniwoop` |
 
-Both depend on `hrafnagud-munin`; neither is depended upon by it. Removing
-both leaves a working collector, which is the test of whether the boundary is
-real or notional.
+All three depend on `hrafnagud-munin`; none is depended upon by it. Removing
+all three leaves a working collector, which is the test of whether the
+boundary is real or notional.
 
 `hrafnagud-server` is deliberately thin. A second feature module — Hugin, the
 querying half — would sit beside Munin rather than inside it, and that is only
@@ -47,10 +50,12 @@ possible while no module owns the application.
 
 ### 2.2 Where the REST surface comes from
 
-The operator API (`/api/v1/**`) is written in Munin. The feed contract
-(`/ode/feed/**`) is **not** written here at all: `vance-ode-centauri` serves
-it, given a `FeedSource` bean. `hrafnagud-centauri` supplies that bean and
-nothing else — see [feed-source.md](feed-source.md).
+The operator API (`/api/v1/**`) is written in Munin. Neither Vancetope-facing
+contract is written here at all: `vance-ode-centauri` serves `/ode/feed/**`
+given a `FeedSource` bean, and `vance-ode-zarniwoop` serves `/ode/search/**`
+given a `SearchSource` bean. The two modules supply those beans and nothing
+else — see [feed-source.md](feed-source.md) and
+[research-source.md](research-source.md).
 
 ## 3. Stack
 
@@ -123,6 +128,7 @@ asking:
 |---|---|---|
 | Operator API (`/api/v1/articles`) | `firstSeenAt` | "what has this archive collected lately". Stable under late arrivals; immune to a publisher with broken dates. |
 | Feed contract (`/ode/feed/items`) | `publishedAt` | a reader merges several sources into one timeline, and the article's own timestamp is the only comparable key. |
+| Research contract (`/ode/search`) | text score | a search result sorted by date is not a search result. See [research-source.md](research-source.md) §2. |
 
 Publishers backdate, forward-date and mis-timezone often enough that one
 broken feed would dominate any sort built on `publishedAt` alone — which is
@@ -137,10 +143,13 @@ Indexes exist for both (`seen_idx` and friends, `published_idx` and friends).
 All runtime configuration is bound under two prefixes:
 
 - `munin.*` — collection, extraction, translation, language, HTTP politeness,
-  and whether the feed source is served (`munin.centauri.enabled`).
+  and whether each Vancetope-facing surface is served
+  (`munin.centauri.enabled`, `munin.zarniwoop.enabled` — independent, because
+  serving a timeline is not a reason to answer queries).
 - `vance.ode.*` — the Vancetope binding. `vance.ode.base-url` and the event
-  block are the outbound side; `vance.ode.centauri.*` is the served side.
-  Everything outbound is inert until `base-url` is set.
+  block are the outbound side; `vance.ode.centauri.*` and
+  `vance.ode.zarniwoop.*` are the served ones. Everything outbound is inert
+  until `base-url` is set.
 
 `munin.centauri.enabled` is deliberately not called `munin.feed.enabled`:
 `munin.feed` already configures feed *ingest*, which is the opposite

@@ -92,6 +92,38 @@ class ArticleFactoryTest {
     }
 
     @Test
+    void build_derivesTheTextIndexStemmerFromTheLanguage() {
+        ArticleDocument article = ArticleFactory.build(candidate(), source(),
+                new LanguageResolver.Resolution("de", LanguageSource.FEED),
+                ContentStatus.PENDING, NOW);
+
+        assertThat(article.getTextLanguage()).isEqualTo("german");
+    }
+
+    @Test
+    void build_aLanguageMongodbCannotStemStillProducesAStorableArticle() {
+        // The whole point: `ja` in the text-index override field is rejected
+        // on write, and one such article aborted the entire poll of its feed.
+        ArticleDocument article = ArticleFactory.build(candidate(), source(),
+                new LanguageResolver.Resolution("ja", LanguageSource.FEED),
+                ContentStatus.PENDING, NOW);
+
+        assertThat(article.getLanguage())
+                .as("the article's own language stays the honest record")
+                .isEqualTo("ja");
+        assertThat(article.getTextLanguage()).isEqualTo(TextIndexLanguage.NONE);
+    }
+
+    @Test
+    void build_anUnknownLanguageYieldsAStorableOverrideToo() {
+        ArticleDocument article = ArticleFactory.build(candidate(), source(),
+                new LanguageResolver.Resolution(null, LanguageSource.UNKNOWN),
+                ContentStatus.PENDING, NOW);
+
+        assertThat(article.getTextLanguage()).isEqualTo(TextIndexLanguage.NONE);
+    }
+
+    @Test
     void build_pendingArticle_entersTheContentQueue() {
         ArticleDocument article = ArticleFactory.build(candidate(), source(),
                 new LanguageResolver.Resolution(null, LanguageSource.UNKNOWN),

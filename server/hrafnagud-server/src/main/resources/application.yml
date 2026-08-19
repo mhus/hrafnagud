@@ -135,6 +135,13 @@ munin:
     # publishing it.
     enabled: ${HRAFNAGUD_CENTAURI_ENABLED:false}
 
+  # The other Vancetope-facing read surface: a research provider. Same
+  # archive, opposite question — Centauri hands out a timeline, this one
+  # answers a query. Independently switchable because serving one is not a
+  # reason to serve the other.
+  zarniwoop:
+    enabled: ${HRAFNAGUD_ZARNIWOOP_ENABLED:false}
+
 # Vancetope binding (vance-ode). Everything here is inert until base-url
 # is set — no client, no translation provider, no outbound traffic. The
 # brain side is the `translation` kit: it defines the event, the script
@@ -163,6 +170,13 @@ vance:
       # Ceiling on what one request may cost, independent of what the
       # source declares it can serve.
       maxLimit: 200
+    zarniwoop:
+      path: ${HRAFNAGUD_ZARNIWOOP_PATH:/ode/search}
+      apiKey: ${HRAFNAGUD_ZARNIWOOP_API_KEY:}
+      # A research call sits inside a tool call somebody is waiting on, so
+      # this is smaller than the feed's: a big page costs the model's
+      # context, not just our disk.
+      maxResults: 25
 
 logging:
   level:

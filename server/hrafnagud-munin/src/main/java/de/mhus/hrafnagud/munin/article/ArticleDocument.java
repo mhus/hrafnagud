@@ -17,6 +17,7 @@ import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.index.TextIndexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Language;
 
 /**
  * One collected news item, without its body.
@@ -105,6 +106,28 @@ public class ArticleDocument {
     @TextIndexed(weight = 3)
     private @Nullable String summary;
 
+    /**
+     * The translated title, mirrored here from the newest
+     * {@code TRANSLATION} enrichment so that it can be searched.
+     *
+     * <p>A derived read model, not a second record. The enrichment stays the
+     * append-only truth — this is a copy that exists because MongoDB allows
+     * one text index per collection and it has to live on the document being
+     * searched. Written in exactly one place, when a translation is recorded.
+     *
+     * <p>Why at all: with a pivot language the reader is shown the
+     * translation, so searching only the original means a German query finds
+     * nothing in a German-facing archive ({@code tariffs} hits,
+     * {@code Zoelle} does not). Both are indexed, at the same weights as
+     * their originals, so a translated title ranks like a title.
+     */
+    @TextIndexed(weight = 10)
+    private @Nullable String pivotTitle;
+
+    /** The translated teaser. See {@link #pivotTitle}. */
+    @TextIndexed(weight = 3)
+    private @Nullable String pivotSummary;
+
     private @Nullable String author;
 
     private @Nullable String imageUrl;
@@ -115,6 +138,26 @@ public class ArticleDocument {
     // ─── Classification ───
 
     private @Nullable String language;
+
+    /**
+     * The stemmer MongoDB may use for this document's text index — <b>not</b>
+     * a second language field.
+     *
+     * <p>A text index picks its stemmer per document from an override field,
+     * and that field defaults to the one called {@code language}. Ours holds
+     * a BCP-47 subtag, of which MongoDB accepts fifteen and <em>rejects the
+     * write</em> for every other. That made a Japanese, Chinese, Korean,
+     * Polish, Czech, Arabic, Ukrainian or Greek article unstorable, and — with
+     * no per-article catch in the ingest loop — killed the whole poll of any
+     * feed carrying one.
+     *
+     * <p>{@code @Language} points the override here instead, so
+     * {@link #language} stays the honest record of what the article is in
+     * while this one stays inside what MongoDB will accept. See
+     * {@link TextIndexLanguage}.
+     */
+    @Language
+    private String textLanguage = TextIndexLanguage.NONE;
 
     private LanguageSource languageSource = LanguageSource.UNKNOWN;
 

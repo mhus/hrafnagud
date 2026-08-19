@@ -1,0 +1,45 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>de.mhus.hrafnagud</groupId>
+        <artifactId>hrafnagud</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>hrafnagud-zarniwoop</artifactId>
+    <name>hrafnagud-zarniwoop</name>
+    <description>Answers Vancetope research queries out of the archive. Its own module for the same reason the other Vancetope-facing ones are: Munin collects and stores without knowing a brain exists.</description>
+    <packaging>jar</packaging>
+
+    <properties>
+        <vance.ode.version>0.1.0-SNAPSHOT</vance.ode.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>de.mhus.hrafnagud</groupId>
+            <artifactId>hrafnagud-munin</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!--
+            Serves the REST contract itself, given a SearchSource bean. Unlike
+            vance-ode-ursa this module answers rather than calls, so it needs
+            no brain URL and nothing under vance.ode.* applies to it.
+        -->
+        <dependency>
+            <groupId>de.mhus.vance.ode</groupId>
+            <artifactId>vance-ode-zarniwoop</artifactId>
+            <version>${vance.ode.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

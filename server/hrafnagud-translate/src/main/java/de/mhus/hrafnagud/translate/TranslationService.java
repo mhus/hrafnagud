@@ -98,7 +98,13 @@ public class TranslationService {
                     .createdAt(now)
                     .content(content)
                     .build());
-            articleService.recordTranslated(articleId);
+            // The enrichment is the record; these two also go onto the
+            // article, because MongoDB allows one text index per collection
+            // and searchable text has to live on the document being
+            // searched. Without them a German query finds nothing in a
+            // German-facing archive.
+            articleService.recordTranslated(articleId,
+                    translated.getTitle(), translated.getSummary());
 
             log.debug("Translated article {} into '{}' via {}", articleId, pivot, provider.name());
             return true;

@@ -47,6 +47,9 @@ public class ArticleQuery {
      */
     @Nullable Instant publishedSince;
 
+    /** Upper bound on {@code publishedAt}, exclusive. Pairs with {@link #publishedSince}. */
+    @Nullable Instant publishedUntil;
+
     /** Upper bound on {@code firstSeenAt}, exclusive. */
     @Nullable Instant until;
 

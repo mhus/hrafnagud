@@ -88,6 +88,10 @@ public final class ArticleFactory {
                 .imageUrl(candidate.getImageUrl())
                 .guid(candidate.getGuid())
                 .language(language.language())
+                // Derived, never authored: the article's language is the
+                // record, this is only what MongoDB's text index is allowed
+                // to see. See TextIndexLanguage.
+                .textLanguage(TextIndexLanguage.of(language.language()))
                 .languageSource(language.source())
                 .categories(mergeCategories(source.getCategories(), candidate.getCategories()))
                 .sourceNames(new ArrayList<>(List.of(source.getName())))

@@ -26,6 +26,7 @@ import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.TextCriteria;
+import org.springframework.data.mongodb.core.query.TextQuery;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import com.mongodb.client.result.UpdateResult;
@@ -57,6 +58,10 @@ public class ArticleService {
     private static final String F_ID = "_id";
     private static final String F_LAST_SOURCE_ADDED_AT = "lastSourceAddedAt";
     private static final String F_LANGUAGE = "language";
+    /** Text-index stemmer override — see TextIndexLanguage. */
+    private static final String F_TEXT_LANGUAGE = "textLanguage";
+    private static final String F_PIVOT_TITLE = "pivotTitle";
+    private static final String F_PIVOT_SUMMARY = "pivotSummary";
     private static final String F_CATEGORIES = "categories";
     private static final String F_CONTENT_STATUS = "contentStatus";
     private static final String F_CONTENT_NEXT_ATTEMPT_AT = "contentNextAttemptAt";
@@ -135,6 +140,7 @@ public class ArticleService {
                 .setOnInsert("imageUrl", document.getImageUrl())
                 .setOnInsert("guid", document.getGuid())
                 .setOnInsert(F_LANGUAGE, document.getLanguage())
+                .setOnInsert(F_TEXT_LANGUAGE, document.getTextLanguage())
                 .setOnInsert("languageSource", document.getLanguageSource())
                 .setOnInsert(F_CATEGORIES, document.getCategories())
                 .setOnInsert("firstSourceName", document.getFirstSourceName())
@@ -255,6 +261,48 @@ public class ArticleService {
     }
 
     /**
+     * One page ordered by <em>relevance</em>, for a caller asking a question
+     * rather than browsing a timeline.
+     *
+     * <p>The third ordering in this service, and each answers a different
+     * question: {@link #search} is "what has this archive collected lately",
+     * {@link #pageByPublished} is "what was published, in order", and this is
+     * "what best matches these words". A search result sorted by date is not
+     * a search result — the best match is rarely the newest document, and a
+     * caller that gets one page has no way to look past it.
+     *
+     * <p>The index covers title and teaser in both the article's own language
+     * and the pivot translation, so a query in either finds the article — see
+     * {@link ArticleDocument#getPivotTitle()}.
+     *
+     * @param queryLanguage the language to stem the <em>query</em> with, from
+     *     the caller's locale hint. Unknown or unsupported falls back to no
+     *     stemming, which matches literally rather than wrongly.
+     * @throws IllegalArgumentException if the query carries no text — without
+     *     it there is no score to sort on, and the caller wants one of the
+     *     other two methods
+     */
+    public List<ArticleDocument> searchByRelevance(ArticleQuery filter,
+            @Nullable String queryLanguage, int limit) {
+
+        if (StringUtils.isBlank(filter.getText())) {
+            throw new IllegalArgumentException(
+                    "searchByRelevance needs query text; use search(...) to browse");
+        }
+        String stemmer = TextIndexLanguage.of(queryLanguage);
+        TextCriteria text = (TextIndexLanguage.NONE.equals(stemmer)
+                ? TextCriteria.forDefaultLanguage()
+                : TextCriteria.forLanguage(stemmer))
+                .matchingAny(filter.getText().trim());
+
+        TextQuery query = new TextQuery(text).sortByScore();
+        for (Criteria part : filterCriteria(filter)) {
+            query.addCriteria(part);
+        }
+        return mongoTemplate.find(query.limit(limit), ArticleDocument.class);
+    }
+
+    /**
      * Counts matches.
      *
      * <p>Deliberately separate from {@link #search}: over a large archive an
@@ -267,6 +315,23 @@ public class ArticleService {
     }
 
     private Query buildQuery(ArticleQuery filter) {
+        List<Criteria> parts = filterCriteria(filter);
+        Query query = parts.isEmpty()
+                ? new Query()
+                : new Query(new Criteria().andOperator(parts));
+        if (StringUtils.isNotBlank(filter.getText())) {
+            query.addCriteria(TextCriteria.forDefaultLanguage()
+                    .matchingAny(filter.getText().trim()));
+        }
+        return query;
+    }
+
+    /**
+     * The filter half of a query, without ordering and without the text
+     * match. Shared, because a relevance search applies the same filters as
+     * a browse and only differs in how it sorts.
+     */
+    private List<Criteria> filterCriteria(ArticleQuery filter) {
         List<Criteria> parts = new ArrayList<>();
         if (StringUtils.isNotBlank(filter.getSourceName())) {
             parts.add(Criteria.where(F_SOURCE_NAMES).is(filter.getSourceName()));
@@ -280,8 +345,15 @@ public class ArticleService {
         if (filter.getContentStatus() != null) {
             parts.add(Criteria.where(F_CONTENT_STATUS).is(filter.getContentStatus()));
         }
-        if (filter.getPublishedSince() != null) {
-            parts.add(Criteria.where(F_PUBLISHED_AT).gte(filter.getPublishedSince()));
+        if (filter.getPublishedSince() != null || filter.getPublishedUntil() != null) {
+            Criteria window = Criteria.where(F_PUBLISHED_AT);
+            if (filter.getPublishedSince() != null) {
+                window = window.gte(filter.getPublishedSince());
+            }
+            if (filter.getPublishedUntil() != null) {
+                window = window.lt(filter.getPublishedUntil());
+            }
+            parts.add(window);
         }
         if (filter.getSince() != null || filter.getUntil() != null) {
             Criteria window = Criteria.where(F_FIRST_SEEN_AT);
@@ -294,14 +366,7 @@ public class ArticleService {
             parts.add(window);
         }
 
-        Query query = parts.isEmpty()
-                ? new Query()
-                : new Query(new Criteria().andOperator(parts));
-        if (StringUtils.isNotBlank(filter.getText())) {
-            query.addCriteria(TextCriteria.forDefaultLanguage()
-                    .matchingAny(filter.getText().trim()));
-        }
-        return query;
+        return parts;
     }
 
     // ─── Content queue ───
@@ -458,14 +523,45 @@ public class ArticleService {
      * Marks an article translated. The translation itself is an
      * enrichment and was already written by the caller.
      */
-    public void recordTranslated(String articleId) {
+    /**
+     * Marks an article translated and mirrors the result into the searchable
+     * pivot fields.
+     *
+     * <p>The translation itself lives in {@code enrichments}; these two
+     * fields are a derived read model, written here and nowhere else. They
+     * exist because MongoDB allows one text index per collection, so
+     * searchable text has to sit on the document being searched — see
+     * {@link ArticleDocument#getPivotTitle()}.
+     *
+     * <p>A re-run overwrites them, which is correct: the newest translation
+     * is the one a reader is shown, so it is the one that should be findable.
+     * The older run is not lost — it is still its own enrichment document.
+     */
+    public void recordTranslated(String articleId,
+            @Nullable String pivotTitle, @Nullable String pivotSummary) {
+        Update update = new Update()
+                .set(F_TRANSLATION_STATUS, TranslationStatus.DONE)
+                .unset(F_TRANSLATION_NEXT_ATTEMPT_AT)
+                .unset("translationError");
+        applyPivot(update, F_PIVOT_TITLE, pivotTitle);
+        applyPivot(update, F_PIVOT_SUMMARY, pivotSummary);
         mongoTemplate.updateFirst(
-                Query.query(Criteria.where("_id").is(articleId)),
-                new Update()
-                        .set(F_TRANSLATION_STATUS, TranslationStatus.DONE)
-                        .unset(F_TRANSLATION_NEXT_ATTEMPT_AT)
-                        .unset("translationError"),
+                Query.query(Criteria.where("_id").is(articleId)), update,
                 ArticleDocument.class);
+    }
+
+    /**
+     * Blank means absent, not empty string: an empty entry in the text index
+     * is noise, and a translation that produced no teaser should leave the
+     * field unset rather than stamp a blank over a previous run's text.
+     */
+    private static void applyPivot(Update update, String field, @Nullable String value) {
+        String trimmed = StringUtils.trimToNull(value);
+        if (trimmed == null) {
+            update.unset(field);
+        } else {
+            update.set(field, trimmed);
+        }
     }
 
     /**

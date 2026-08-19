@@ -122,6 +122,37 @@ Lingua runs in low-accuracy mode. All languages at high accuracy costs several
 GB of heap; low accuracy costs a few hundred MB and differs only on very short
 input, which `minChars` already excludes.
 
+### 4.1 The text index has a trap in it
+
+A MongoDB text index selects its stemmer per document from a **language
+override field**, which defaults to the field named `language`. An article has
+one, holding a BCP-47 subtag — and MongoDB accepts exactly fifteen values
+there. Anything else is not degraded, it is **rejected on write**:
+
+```
+language override unsupported: ja
+```
+
+Because the ingest loop has no per-article catch, one such entry aborted the
+whole poll of its feed — every tick, indefinitely. A worldwide collector that
+could not store Japanese, Chinese, Korean, Polish, Czech, Arabic, Ukrainian or
+Greek, and did not say so.
+
+It went unnoticed for the same reason the CJK word count did (see
+[content-extraction.md](content-extraction.md) §5): a German and English
+archive is exactly the case that works.
+
+The fix is a second, derived field. `language` stays the honest record and
+stays in the API; `textLanguage` carries what MongoDB is allowed to see —
+a stemmer name, or `none` for a language it cannot stem. `none` rather than a
+default: applying English stop words to Japanese is worse than doing nothing,
+and it still indexes the tokens. See `TextIndexLanguage`.
+
+> **Upgrading an existing database.** The index definition changes, so the
+> first boot against an older archive fails with `IndexOptionsConflict` naming
+> both definitions. Drop `ArticleDocument_TextIndex`; Spring Data recreates it.
+> There is no migration framework here yet, and the failure is at least loud.
+
 ## 5. Categories are stored verbatim
 
 Never normalised. Publishers disagree completely about what a category is;

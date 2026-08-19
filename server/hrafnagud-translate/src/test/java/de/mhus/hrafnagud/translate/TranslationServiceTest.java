@@ -114,7 +114,36 @@ class TranslationServiceTest {
         assertThat(enrichment.getContent())
                 .containsEntry("title", "[de] Council approves transit plan")
                 .containsEntry("summary", "[de] The vote ended a three-year debate.");
-        verify(articleService).recordTranslated(ID);
+        verify(articleService).recordTranslated(
+                ID, "[de] Council approves transit plan", "[de] The vote ended a three-year debate.");
+    }
+
+    @Test
+    void the_translation_is_mirrored_onto_the_article_so_it_can_be_searched() {
+        // MongoDB allows one text index per collection, so searchable text
+        // has to sit on the document being searched. The enrichment stays
+        // the record; this is a derived copy with exactly one writer.
+        TranslationService service = serviceWith(new Recording());
+
+        assertThat(service.translate(article(), NOW)).isTrue();
+
+        verify(articleService).recordTranslated(
+                ID, "[de] Council approves transit plan",
+                "[de] The vote ended a three-year debate.");
+    }
+
+    @Test
+    void a_translation_without_a_teaser_mirrors_a_null_rather_than_a_blank() {
+        ArticleDocument article = article();
+        article.setSummary(null);
+        TranslationService service = serviceWith(new Recording());
+
+        assertThat(service.translate(article, NOW)).isTrue();
+
+        // An empty string in the text index is noise, and it would stamp a
+        // blank over whatever a previous run had put there.
+        verify(articleService).recordTranslated(
+                ID, "[de] Council approves transit plan", null);
     }
 
     @Test
