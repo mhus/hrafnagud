@@ -21,10 +21,15 @@ import org.junit.jupiter.api.Test;
  * simpler project, and a rule nobody checks is a rule that decays. So it is
  * checked here instead.
  *
- * <p>Reading source files rather than bytecode is deliberate: an import that
- * only appears in a Javadoc {@code @link} or a comment is still someone
- * starting to think in the wrong direction, and the compiler would have caught
- * the real import either way. Cheap, deterministic, no new dependency.
+ * <p>Reading source files rather than bytecode is deliberate: it catches a
+ * fully-qualified reference that never became an import, and it needs no new
+ * dependency to do it.
+ *
+ * <p><b>Comments are exempt</b>, and that exemption was earned the hard way:
+ * the first version flagged {@code ApiTokenInterceptor}, whose Javadoc names
+ * {@code de.mhus.vance} precisely to explain why Munin duplicates thirty lines
+ * rather than reuse the Ode guard. A rule that cannot be written down next to
+ * the code it governs is one people work around instead of reading.
  */
 class ModuleBoundaryTest {
 
@@ -57,12 +62,34 @@ class ModuleBoundaryTest {
             try (Stream<Path> files = Files.walk(root)) {
                 for (Path file : files.filter(p -> p.toString().endsWith(".java")).toList()) {
                     List<String> lines = Files.readAllLines(file);
+                    boolean inBlockComment = false;
                     for (int i = 0; i < lines.size(); i++) {
                         String line = lines.get(i);
+                        String trimmed = line.trim();
+
+                        // Deliberately naive: this tracks whole-line block
+                        // comments and nothing cleverer. Code sharing a line
+                        // with the end of a block comment would be missed,
+                        // and that is a shape nobody writes here.
+                        if (inBlockComment) {
+                            if (trimmed.contains("*/")) {
+                                inBlockComment = false;
+                            }
+                            continue;
+                        }
+                        if (trimmed.startsWith("/*")) {
+                            inBlockComment = !trimmed.contains("*/");
+                            continue;
+                        }
+                        if (trimmed.startsWith("//") || trimmed.startsWith("*")) {
+                            continue;
+                        }
+
+                        String code = line.split("//", 2)[0];
                         for (String forbidden : FORBIDDEN) {
-                            if (line.contains(forbidden)) {
+                            if (code.contains(forbidden)) {
                                 violations.add("%s:%d  %s"
-                                        .formatted(file, i + 1, line.trim()));
+                                        .formatted(file, i + 1, trimmed));
                             }
                         }
                     }

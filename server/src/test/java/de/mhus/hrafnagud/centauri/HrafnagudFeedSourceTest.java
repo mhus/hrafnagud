@@ -96,7 +96,7 @@ class HrafnagudFeedSourceTest {
 
     @Test
     void selectors_offer_the_whole_archive_and_one_stream_per_enabled_source() {
-        when(sources.list(eq(true), any(), any(), any(), anyInt(), anyInt()))
+        when(sources.list(eq(true), any(), any(), any(), any(), anyInt(), anyInt()))
                 .thenReturn(List.of(source("bbc-world", "BBC World", "en")));
 
         List<OdeSelector> selectors = feed.selectors();
@@ -112,7 +112,7 @@ class HrafnagudFeedSourceTest {
         feed.selectors();
         // A disabled feed still has articles in the archive, but offering it
         // as a stream promises updates that will not come.
-        verify(sources).list(eq(true), any(), any(), any(), anyInt(), anyInt());
+        verify(sources).list(eq(true), any(), any(), any(), any(), anyInt(), anyInt());
     }
 
     // ──────────────────── paging ────────────────────

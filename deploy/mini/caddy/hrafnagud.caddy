@@ -7,9 +7,12 @@
 #
 # Only the two Ode paths are published — the feed contract and the search
 # contract. The rest of the API — the whole of /api/v1, which can add sources,
-# trigger refreshes and read everything collected — has no authentication of its
-# own and stays inside the cluster, reachable via `kubectl port-forward`.
-# Publishing it here would put an unauthenticated write API on the open internet.
+# trigger refreshes, read everything collected and delete it — stays inside the
+# cluster, reachable via `kubectl port-forward` or the SSH tunnel. It is guarded
+# by HRAFNAGUD_API_TOKEN, but that is one shared token with no accounts, no rate
+# limiting and no audit trail: enough to keep the port honest, not enough to put
+# a write API on the open internet. The console at / is published just as
+# little, for the same reason.
 #
 # Both are safe to expose only once their key is set —
 # HRAFNAGUD_CENTAURI_API_KEY and HRAFNAGUD_ZARNIWOOP_API_KEY: with an empty key

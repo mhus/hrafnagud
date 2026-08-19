@@ -36,6 +36,18 @@ management:
       show-details: when-authorized
 
 munin:
+  # The operator API and the console at /console/ (redirected to from /).
+  api:
+    # Bearer token for /api/v1/**. Empty means no check, which is how this
+    # service has always run — right on a loopback binding, wrong on anything
+    # reachable, because this API deletes as well as reads. The startup log
+    # says which of the two you have.
+    token: ${HRAFNAGUD_API_TOKEN:}
+    # The console holds no data and no credential; it asks for the token and
+    # keeps it in the browser. Off is for installations that want no HTML
+    # surface at all.
+    consoleEnabled: ${HRAFNAGUD_CONSOLE_ENABLED:true}
+
   http:
     # Identify the crawler and give publishers somebody to contact. Replace
     # the URL with a real contact before running this at any scale — an

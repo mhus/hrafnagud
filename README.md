@@ -8,8 +8,9 @@ Named after the raven-god. **Munin** (memory) is the part that collects and
 stores; a future **Hugin** (thought) will be the part that queries and
 analyses. Today only Munin exists.
 
-> **Status:** backend only, REST, no authentication. Bind it to localhost or
-> put it behind a reverse proxy — see [Known gaps](#known-gaps).
+> **Status:** backend plus a small read-only console. One shared API token,
+> no accounts — bind it to localhost or put it behind a reverse proxy, see
+> [Known gaps](#known-gaps).
 
 ## Layout
 
@@ -97,6 +98,33 @@ deploy/k8s/apply.sh                             # current kubectl context
 
 Details, configuration surface and the reasoning behind the layout:
 [deploy/README.md](deploy/README.md).
+
+## Console
+
+`http://localhost:9800/` opens a small operator console — three views over the
+API and nothing more: an overview that says whether collection is alive,
+the source registry with its failures, and the articles with what was
+extracted from them.
+
+```yaml
+munin:
+  api:
+    token: ${HRAFNAGUD_API_TOKEN:}        # empty = /api/v1/** is unguarded
+    consoleEnabled: true
+```
+
+The token is typed into the console and kept in the browser — in the tab by
+default, on the device only if you tick the box. The page itself is never
+guarded: it holds no data and no credential, and asking for a token in order
+to reach the page that asks for a token is a loop, not a security measure.
+
+**Read-only, deliberately.** No delete, no re-queue, no source editing. Those
+exist in the API and are one `curl` away; putting them behind a button that a
+mis-click reaches is a different decision from showing what is going on.
+
+Bootstrap comes from a CDN, so the console needs internet access even where
+hrafnagud does not. That is the one trade in it: ~60 KB of JAR against a
+dependency on `cdn.jsdelivr.net` being reachable from the browser.
 
 ## Data model
 
@@ -282,8 +310,11 @@ does not destroy the comparison that made re-running worth doing.
 
 Named rather than left to be discovered:
 
-- **No authentication or authorisation.** Every endpoint is open. Do not
-  expose this to a network you do not control.
+- **One token, no accounts.** `munin.api.token` guards `/api/v1/**` and
+  everyone who has it can do everything, including delete. That is honest for
+  a service whose user base is the person running it, and not enough for
+  anything with several operators. Empty — the default — means no check at
+  all: right on a loopback binding, wrong on a reachable port.
 - **No retention policy.** At ten thousand articles a day the archive grows
   quickly and nothing prunes it yet. A TTL or archival tier is needed before
   this runs for months.

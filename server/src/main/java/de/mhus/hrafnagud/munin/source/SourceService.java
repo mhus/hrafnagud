@@ -95,9 +95,10 @@ public class SourceService {
      * the article collection needs.
      */
     public List<SourceDocument> list(@Nullable Boolean enabled, @Nullable SourceType type,
-            @Nullable String listName, @Nullable String query, int page, int size) {
+            @Nullable String listName, @Nullable String query, @Nullable Boolean failing,
+            int page, int size) {
 
-        Query mongoQuery = new Query(listCriteria(enabled, type, listName, query))
+        Query mongoQuery = new Query(listCriteria(enabled, type, listName, query, failing))
                 .with(Sort.by(Sort.Direction.ASC, F_NAME))
                 .skip((long) page * size)
                 .limit(size);
@@ -105,17 +106,26 @@ public class SourceService {
     }
 
     public long count(@Nullable Boolean enabled, @Nullable SourceType type,
-            @Nullable String listName, @Nullable String query) {
-        return mongoTemplate.count(new Query(listCriteria(enabled, type, listName, query)),
+            @Nullable String listName, @Nullable String query, @Nullable Boolean failing) {
+        return mongoTemplate.count(
+                new Query(listCriteria(enabled, type, listName, query, failing)),
                 SourceDocument.class);
     }
 
     private Criteria listCriteria(@Nullable Boolean enabled, @Nullable SourceType type,
-            @Nullable String listName, @Nullable String query) {
+            @Nullable String listName, @Nullable String query, @Nullable Boolean failing) {
 
         List<Criteria> parts = new ArrayList<>();
         if (enabled != null) {
             parts.add(Criteria.where(F_ENABLED).is(enabled));
+        }
+        if (failing != null) {
+            // Exactly the predicate countFailing() uses. Two definitions of
+            // "failing" would let the stats page report a number that its own
+            // "show me those" link cannot reproduce.
+            parts.add(failing
+                    ? Criteria.where(F_CONSECUTIVE_FAILURES).gt(0)
+                    : Criteria.where(F_CONSECUTIVE_FAILURES).lte(0));
         }
         if (type != null) {
             parts.add(Criteria.where("type").is(type));

@@ -25,6 +25,7 @@ public class MuninProperties {
     private final SourceList sourceList = new SourceList();
     private final Language language = new Language();
     private final Translation translation = new Translation();
+    private final Api api = new Api();
 
     /** Shared HTTP behaviour for feed, list and article requests. */
     @Data
@@ -289,5 +290,36 @@ public class MuninProperties {
          * accurate when the registry is regional.
          */
         private List<String> languages = new ArrayList<>();
+    }
+
+    /** The operator API and the console served over it. */
+    @Data
+    public static class Api {
+
+        /**
+         * Bearer token required by {@code /api/v1/**}.
+         *
+         * <p><b>Empty means no check</b>, which keeps every existing
+         * installation working and matches what the Vancetope-facing
+         * endpoints already do with their own keys. It is the wrong default
+         * for anything reachable from outside: the operator API can delete
+         * articles and sources.
+         *
+         * <p>One token, not accounts. Everyone who has it can do everything,
+         * which is honest for a service whose entire user base is the person
+         * running it — and small enough to rotate by editing one variable.
+         */
+        private String token = "";
+
+        /**
+         * Whether the bundled console is served at {@code /}.
+         *
+         * <p>Separate from the token because they answer different
+         * questions. The console holds no data and no credential — it asks
+         * for the token and keeps it in the browser — so serving it is
+         * harmless where the API is guarded, and pointless where the API is
+         * not reachable at all.
+         */
+        private boolean consoleEnabled = true;
     }
 }

@@ -5,10 +5,11 @@ metadata:
   labels:
     app: hrafnagud
 spec:
-  # ClusterIP: the REST API has no authentication, so the base must not
-  # expose it beyond the cluster. Reach it with `kubectl port-forward`, or
-  # put a reverse proxy in front of it — the mini overlay does the latter and
-  # only publishes the API-key-protected Centauri path.
+  # ClusterIP: the REST API is guarded by one shared token and nothing else
+  # — no accounts, no rate limit, no audit — so the base does not expose it
+  # beyond the cluster whatever HRAFNAGUD_API_TOKEN says. Reach it with
+  # `kubectl port-forward`, or put a reverse proxy in front of it; the mini
+  # overlay does the latter and only publishes the Ode paths.
   type: ClusterIP
   selector:
     app: hrafnagud

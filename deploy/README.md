@@ -100,6 +100,7 @@ exactly one definition:
 | Key | Required | Notes |
 |---|---|---|
 | `HRAFNAGUD_MONGO_URI` | yes | Full connection string. The prod profile deliberately has no default. |
+| `HRAFNAGUD_API_TOKEN` | in a cluster | Bearer token for `/api/v1/**` and the console. Empty = no check, and this API deletes as well as reads. |
 | `VANCE_TRANSLATE_TOKEN` | no | Ursa event token for the brain-side `translation` kit. |
 | `HRAFNAGUD_CENTAURI_API_KEY` | no | Bearer key for the feed endpoint. Empty = no check at all. |
 | `HRAFNAGUD_ZARNIWOOP_API_KEY` | no | Bearer key for the search endpoint. Empty = no check at all. |

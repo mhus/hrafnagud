@@ -54,6 +54,9 @@ services:
       VANCE_TENANT: ${VANCE_TENANT:-}
       VANCE_PROJECT: ${VANCE_PROJECT:-_tenant}
       VANCE_TRANSLATE_TOKEN: ${VANCE_TRANSLATE_TOKEN:-}
+      # Operator API and the console it serves.
+      HRAFNAGUD_API_TOKEN: ${HRAFNAGUD_API_TOKEN:-}
+      HRAFNAGUD_CONSOLE_ENABLED: ${HRAFNAGUD_CONSOLE_ENABLED:-true}
       # Serving the archive back to Vancetope as a Centauri source.
       HRAFNAGUD_CENTAURI_ENABLED: ${HRAFNAGUD_CENTAURI_ENABLED:-false}
       HRAFNAGUD_CENTAURI_API_KEY: ${HRAFNAGUD_CENTAURI_API_KEY:-}
@@ -69,8 +72,9 @@ services:
     tmpfs:
       - /tmp
     ports:
-      # The API has no authentication. Bound to loopback on purpose — see
-      # the repository README's "Known gaps".
+      # Loopback on purpose: HRAFNAGUD_API_TOKEN defaults to empty in this
+      # stack, and an empty token means no check at all. Set it before
+      # changing this line.
       - "127.0.0.1:${HRAFNAGUD_PORT:-9800}:9800"
 
 volumes:

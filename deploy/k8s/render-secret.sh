@@ -48,6 +48,10 @@ data:
   # Full connection string including credentials, e.g.
   # mongodb://user:pass@host:27017/hrafnagud?authSource=admin
   HRAFNAGUD_MONGO_URI: "$(b64 "${HRAFNAGUD_MONGO_URI}")"
+  # Bearer token for the operator API at /api/v1/**, and therefore for the
+  # console. Empty means no check at all — and this API deletes as well as
+  # reads, so in a cluster it should never be empty.
+  HRAFNAGUD_API_TOKEN: "$(b64 "${HRAFNAGUD_API_TOKEN:-}")"
   # Ursa event token for the brain-side translation kit. Empty is fine; the
   # translation subsystem is inert unless VANCE_BRAIN_URL is set too.
   VANCE_TRANSLATE_TOKEN: "$(b64 "${VANCE_TRANSLATE_TOKEN:-}")"

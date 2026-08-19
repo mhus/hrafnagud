@@ -45,6 +45,12 @@ data:
   VANCE_TENANT: ""
   VANCE_PROJECT: "_tenant"
 
+  # ── Operator API and console ─────────────────────────────────────────
+  # The console at / is HTML and JavaScript only; it holds no data and asks
+  # for the token itself. The token that actually guards /api/v1/** is
+  # HRAFNAGUD_API_TOKEN in the Secret.
+  HRAFNAGUD_CONSOLE_ENABLED: "true"
+
   # ── Centauri ─────────────────────────────────────────────────────────
   # Serve the archive back to Vancetope as a feed source. Off by default:
   # collecting news should not imply publishing it, and the endpoint is

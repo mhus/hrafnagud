@@ -141,7 +141,10 @@ public class HrafnagudFeedSource implements FeedSource {
     public List<OdeSelector> selectors() {
         List<OdeSelector> result = new ArrayList<>();
         result.add(new OdeSelector(SELECTOR_ALL, "All sources", OdeSelectorKind.CATEGORY, null));
-        for (SourceDocument source : sources.list(true, null, null, null, 0, MAX_SELECTORS)) {
+        // Failing sources included: a feed that is down still has an archive
+        // worth reading, and a selector that vanishes on a bad poll would
+        // silently break a reader's saved stream.
+        for (SourceDocument source : sources.list(true, null, null, null, null, 0, MAX_SELECTORS)) {
             result.add(new OdeSelector(
                     SELECTOR_SOURCE_PREFIX + source.getName(),
                     StringUtils.defaultIfBlank(source.getTitle(), source.getName()),

@@ -67,8 +67,9 @@ cmd_forward() {
     local node_port="${HRAFNAGUD_NODE_PORT:-30980}"
     log "http://localhost:${local_port} → ${SSH_HOST}:${node_port} (Ctrl-C to stop)"
     # An SSH tunnel rather than `kubectl port-forward`: kubectl would have to
-    # run on the host anyway, and this way the unauthenticated API is reachable
-    # from exactly one machine for exactly as long as this stays open.
+    # run on the host anyway, and this way the API — one shared token, no
+    # accounts — is reachable from exactly one machine for exactly as long as
+    # this stays open. The console at / comes with it.
     ssh -i "${SSH_KEY}" -N \
         -L "${local_port}:127.0.0.1:${node_port}" \
         "$(remote_target)"

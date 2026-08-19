@@ -44,16 +44,17 @@ public class SourceController {
             @RequestParam(value = "type", required = false) @Nullable SourceType type,
             @RequestParam(value = "list", required = false) @Nullable String listName,
             @RequestParam(value = "q", required = false) @Nullable String query,
+            @RequestParam(value = "failing", required = false) @Nullable Boolean failing,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "50") int size) {
 
         int pageSize = Math.clamp(size, 1, MAX_PAGE_SIZE);
         int pageIndex = Math.max(page, 0);
         List<SourceDocument> sources =
-                sourceService.list(enabled, type, listName, query, pageIndex, pageSize);
+                sourceService.list(enabled, type, listName, query, failing, pageIndex, pageSize);
         // The registry is small enough that an exact count is cheap — unlike
         // the article collection, where it is not.
-        long total = sourceService.count(enabled, type, listName, query);
+        long total = sourceService.count(enabled, type, listName, query, failing);
         return PageDto.of(sources.stream().map(MuninMapper::toDto).toList(),
                 pageIndex, pageSize, total);
     }

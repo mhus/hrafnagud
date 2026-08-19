@@ -1,0 +1,233 @@
+<!doctype html>
+<!--
+  hrafnagud console — a read-only window on the archive.
+
+  Three questions it exists to answer: is it collecting, how much, and is
+  what it collected any good. Nothing here writes: no delete, no re-queue,
+  no source editing. Those exist in the API and are one curl away; putting
+  them behind a button that a mis-click reaches is a different decision,
+  and this page was asked to show, not to steer.
+
+  Served from classpath:/console/ (see ApiSecurityConfig), never guarded —
+  it holds no data and no credential. The token is typed in below and kept
+  in the browser; every API call carries it as a bearer header.
+
+  Bootstrap comes from a CDN, so this page needs internet access even when
+  hrafnagud does not. Bundling it would be ~60 KB in the JAR and no CDN
+  dependency; the trade was made the other way for a console this small.
+-->
+<html lang="de" data-bs-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>hrafnagud</title>
+    <link rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+          crossorigin="anonymous">
+    <link rel="stylesheet" href="app.css">
+    <link rel="icon" href="data:,">
+</head>
+<body class="bg-body">
+
+<nav class="navbar navbar-expand bg-body-tertiary border-bottom">
+    <div class="container-fluid gap-3">
+        <span class="navbar-brand mb-0 h1">hrafnagud</span>
+
+        <ul class="nav nav-pills me-auto" id="tabs">
+            <li class="nav-item"><a class="nav-link active" href="#" data-view="overview">Übersicht</a></li>
+            <li class="nav-item"><a class="nav-link" href="#" data-view="sources">Quellen</a></li>
+            <li class="nav-item"><a class="nav-link" href="#" data-view="articles">Artikel</a></li>
+        </ul>
+
+        <span id="conn" class="badge text-bg-secondary">nicht verbunden</span>
+        <button class="btn btn-sm btn-outline-secondary" id="btn-token">Token</button>
+    </div>
+</nav>
+
+<main class="container-fluid py-3">
+
+    <div id="alert" class="alert alert-danger d-none" role="alert"></div>
+
+    <!-- ─── Übersicht ─────────────────────────────────────────────── -->
+    <section id="view-overview">
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <h5 class="mb-0">Übersicht</h5>
+            <button class="btn btn-sm btn-outline-secondary" id="btn-reload-stats">Neu laden</button>
+            <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" id="auto-refresh">
+                <label class="form-check-label small text-body-secondary" for="auto-refresh">
+                    alle 30 s
+                </label>
+            </div>
+            <span class="small text-body-secondary" id="stats-age"></span>
+        </div>
+
+        <!-- The interpreted line: numbers above, verdict here. -->
+        <div id="health" class="mb-3"></div>
+
+        <div class="row g-3" id="stat-cards"></div>
+
+        <div class="row g-3 mt-1">
+            <div class="col-lg-4"><div class="card h-100">
+                <div class="card-header">Sprachen <span class="text-body-secondary small">(Top 20)</span></div>
+                <div class="card-body p-0"><table class="table table-sm mb-0" id="tbl-languages"></table></div>
+            </div></div>
+            <div class="col-lg-4"><div class="card h-100">
+                <div class="card-header">Volltext-Status</div>
+                <div class="card-body p-0"><table class="table table-sm mb-0" id="tbl-content-status"></table></div>
+            </div></div>
+            <div class="col-lg-4"><div class="card h-100">
+                <div class="card-header">Übersetzungs-Status</div>
+                <div class="card-body p-0"><table class="table table-sm mb-0" id="tbl-translation-status"></table></div>
+            </div></div>
+        </div>
+    </section>
+
+    <!-- ─── Quellen ───────────────────────────────────────────────── -->
+    <section id="view-sources" class="d-none">
+        <form class="row g-2 align-items-end mb-3" id="form-sources">
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Suche</label>
+                <input class="form-control form-control-sm" name="q" placeholder="Name, Titel oder URL">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Zustand</label>
+                <select class="form-select form-select-sm" name="enabled">
+                    <option value="">alle</option>
+                    <option value="true">aktiv</option>
+                    <option value="false">inaktiv</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Abruf</label>
+                <select class="form-select form-select-sm" name="failing">
+                    <option value="">alle</option>
+                    <option value="true">nur fehlerhafte</option>
+                    <option value="false">nur fehlerfreie</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Liste</label>
+                <input class="form-control form-control-sm" name="list" placeholder="Quellenliste">
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button class="btn btn-sm btn-primary" type="submit">Filtern</button>
+                <button class="btn btn-sm btn-outline-secondary" type="reset">Zurücksetzen</button>
+            </div>
+        </form>
+
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+                <thead><tr>
+                    <th>Quelle</th><th>Zustand</th><th>Letzter Abruf</th>
+                    <th class="text-end">Fehler</th><th class="text-end">Artikel</th>
+                    <th>Letzter Artikel</th><th>Nächster Abruf</th>
+                </tr></thead>
+                <tbody id="tbody-sources"></tbody>
+            </table>
+        </div>
+        <div id="pager-sources"></div>
+    </section>
+
+    <!-- ─── Artikel ───────────────────────────────────────────────── -->
+    <section id="view-articles" class="d-none">
+        <form class="row g-2 align-items-end mb-3" id="form-articles">
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Volltextsuche</label>
+                <input class="form-control form-control-sm" name="q" placeholder="Titel und Teaser">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Quelle</label>
+                <input class="form-control form-control-sm" name="source" placeholder="Quellen-Name">
+            </div>
+            <div class="col-md-1">
+                <label class="form-label small mb-1">Sprache</label>
+                <input class="form-control form-control-sm" name="language" placeholder="de">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Volltext</label>
+                <select class="form-select form-select-sm" name="contentStatus">
+                    <option value="">alle</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">Zeitraum</label>
+                <select class="form-select form-select-sm" name="since">
+                    <option value="">alles</option>
+                    <option value="1">letzte Stunde</option>
+                    <option value="24" selected>letzte 24 h</option>
+                    <option value="168">letzte 7 Tage</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+                <button class="btn btn-sm btn-primary" type="submit">Filtern</button>
+                <button class="btn btn-sm btn-outline-secondary" type="reset">Zurücksetzen</button>
+            </div>
+        </form>
+
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+                <thead><tr>
+                    <th>Titel</th><th>Quelle</th><th>Sprache</th>
+                    <th>Volltext</th><th>Übersetzung</th><th>Erfasst</th>
+                </tr></thead>
+                <tbody id="tbody-articles"></tbody>
+            </table>
+        </div>
+        <div id="pager-articles"></div>
+    </section>
+
+</main>
+
+<!-- ─── Token ─────────────────────────────────────────────────────── -->
+<div class="modal fade" id="modal-token" tabindex="-1">
+    <div class="modal-dialog">
+        <form class="modal-content" id="form-token">
+            <div class="modal-header"><h5 class="modal-title">API-Token</h5></div>
+            <div class="modal-body">
+                <input type="password" class="form-control" id="input-token"
+                       placeholder="Bearer-Token" autocomplete="off">
+                <div class="form-check mt-3">
+                    <input class="form-check-input" type="checkbox" id="remember-token">
+                    <label class="form-check-label" for="remember-token">
+                        auf diesem Gerät merken
+                    </label>
+                </div>
+                <p class="form-text mb-0">
+                    Ohne Häkchen gilt der Token nur für diesen Tab. Er wird sonst
+                    im Browser gespeichert und überlebt einen Neustart — auf einem
+                    geteilten Rechner ist das die falsche Wahl.
+                    Läuft die Instanz ohne <code>munin.api.token</code>, bleibt das
+                    Feld leer.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-danger me-auto" id="btn-forget-token">
+                    Vergessen
+                </button>
+                <button type="submit" class="btn btn-primary">Übernehmen</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ─── Detail ────────────────────────────────────────────────────── -->
+<div class="modal fade" id="modal-detail" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="detail-title"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detail-body"></div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+        crossorigin="anonymous"></script>
+<script src="app.js"></script>
+</body>
+</html>
