@@ -4,10 +4,10 @@ Answering Vancetope research queries out of the archive.
 
 ## 1. Scope, and how it differs from the feed
 
-`hrafnagud-zarniwoop` implements `SearchSource` from `vance-ode-zarniwoop`
-and publishes it as a bean; the Ode module serves the REST contract over it.
-Same shape as [feed-source.md](feed-source.md): no controller here, no path,
-no serialisation.
+`de.mhus.hrafnagud.zarniwoop` implements `SearchSource` from
+`vance-ode-zarniwoop` and publishes it as a bean; the Ode module serves the
+REST contract over it. Same shape as [feed-source.md](feed-source.md): no
+controller here, no path, no serialisation.
 
 Same archive, opposite question:
 

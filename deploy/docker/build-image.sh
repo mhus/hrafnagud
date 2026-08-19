@@ -4,7 +4,7 @@
 #
 # Runs the Maven build first (unless SKIP_MAVEN=1) and then `docker build`
 # with the repository root as context, because the Dockerfile copies the JAR
-# from server/hrafnagud-server/target/.
+# from server/target/.
 #
 # Usage:
 #   deploy/docker/build-image.sh                     # :latest, host arch
@@ -35,15 +35,14 @@ done
 
 IMAGE_TAG="${IMAGE_TAG:-latest}${ARCH_SUFFIX}"
 SKIP_MAVEN="${SKIP_MAVEN:-0}"
-JAR="${REPO_ROOT}/server/hrafnagud-server/target/hrafnagud.jar"
+JAR="${REPO_ROOT}/server/target/hrafnagud.jar"
 
 cd "${REPO_ROOT}"
 
 if [[ "${SKIP_MAVEN}" != "1" ]]; then
     log "mvn -f server/pom.xml install (set SKIP_MAVEN=1 to skip)"
-    # install, not package: the reactor modules resolve each other through
-    # the local repository, and a later `deploy/docker/build-image.sh` in a
-    # sibling checkout may want them too.
+    # install, not package: a sibling checkout may want the artifact out of
+    # the local repository.
     mvn -f server/pom.xml install
 fi
 
@@ -58,12 +57,16 @@ if [[ -n "${PLATFORM}" ]]; then
     docker buildx build \
         --platform "${PLATFORM}" \
         --file deploy/docker/Dockerfile \
+        --build-arg APT_MIRROR="${APT_MIRROR:-}" \
+        --build-arg APT_PORTS_MIRROR="${APT_PORTS_MIRROR:-}" \
         --tag "${IMAGE_NAME}:${IMAGE_TAG}" \
         --load \
         .
 else
     docker build \
         --file deploy/docker/Dockerfile \
+        --build-arg APT_MIRROR="${APT_MIRROR:-}" \
+        --build-arg APT_PORTS_MIRROR="${APT_PORTS_MIRROR:-}" \
         --tag "${IMAGE_NAME}:${IMAGE_TAG}" \
         .
 fi

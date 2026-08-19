@@ -13,7 +13,7 @@ A **source** is one feed. A **source list** is a directory of feeds (an OPML
 file, a plain text list of URLs) that creates and updates sources. An
 **article** is one entry, deduplicated across every source that carried it.
 
-Enums, all in `hrafnagud-api`:
+Enums, all in `de.mhus.hrafnagud.api`:
 
 | Enum | Values |
 |---|---|

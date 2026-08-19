@@ -58,10 +58,9 @@ kubectl -n hrafnagud port-forward svc/hrafnagud 9800:9800
 as uid 1500, no writable path except `/tmp`.
 
 The JAR is built on the host and copied in, not built in a builder stage:
-`hrafnagud-translate` and `hrafnagud-centauri` depend on
-`de.mhus.vance.ode:*` artifacts that come from a sibling checkout's `mvn
-install`, not from Maven Central. Install those first if the Maven build
-fails on them.
+hrafnagud depends on `de.mhus.vance.ode:*` artifacts that come from a sibling
+checkout's `mvn install`, not from Maven Central. Install those first if the
+Maven build fails on them.
 
 It is copied in **as Spring Boot layers**, not as one file. The uber JAR is
 ~145 MB and ~138 MB of that is dependencies — Lingua's language models above

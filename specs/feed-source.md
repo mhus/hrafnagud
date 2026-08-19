@@ -4,9 +4,9 @@ Serving the archive to Vancetope as a Centauri feed source.
 
 ## 1. Scope and shape
 
-`hrafnagud-centauri` implements one interface — `FeedSource` from
+`de.mhus.hrafnagud.centauri` implements one interface — `FeedSource` from
 `vance-ode-centauri` — and publishes it as a bean. The REST contract is served
-by the Ode module, which is conditional on that bean existing. This module
+by the Ode module, which is conditional on that bean existing. This package
 contains no controller, no path, no serialisation.
 
 Read-only in the strong sense: it answers questions and changes nothing.

@@ -34,8 +34,8 @@ and the alternative deserves an answer.
 ## Naming
 
 **Munin** (memory) collects and stores. A future **Hugin** (thought) would
-query and analyse; it does not exist yet, and `hrafnagud-server` is
-deliberately thin so it could be added beside Munin rather than inside it.
+query and analyse; it does not exist yet, and would be a package beside Munin
+rather than anything inside it.
 
 Everything facing [Vancetope](https://github.com/mhus/vance) lives outside
-Munin, in its own module — see [architecture.md](architecture.md) §2.
+Munin, in its own package — see [architecture.md](architecture.md) §2.

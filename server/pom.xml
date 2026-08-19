@@ -13,23 +13,25 @@
     <artifactId>hrafnagud</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <name>hrafnagud</name>
-    <description>News aggregation service — collects, deduplicates and stores news from worldwide sources</description>
-    <packaging>pom</packaging>
-
-    <modules>
-        <module>hrafnagud-api</module>
-        <module>hrafnagud-munin</module>
-        <module>hrafnagud-translate</module>
-        <module>hrafnagud-centauri</module>
-        <module>hrafnagud-zarniwoop</module>
-        <module>hrafnagud-server</module>
-    </modules>
+    <!--
+        One artifact, not six. The split into api/munin/translate/centauri/
+        zarniwoop/server made the layering compiler-enforced, which is worth
+        paying for in software that loads third-party code — but hrafnagud has
+        no add-on system and nobody consumes a part of it. What it bought was a
+        boundary; what it cost was six poms, a reactor and cross-module test
+        fixtures for a service one person builds in one go. Packages carry the
+        same names and the same meaning; see specs/architecture.md §2 for the
+        boundary that survives as a rule rather than as a dependency.
+    -->
+    <description>News aggregation service — collects, deduplicates and stores news from worldwide sources, and serves the archive to Vancetope as a feed and a research provider</description>
+    <packaging>jar</packaging>
 
     <properties>
         <java.version>25</java.version>
         <spring.boot.version>4.1.0</spring.boot.version>
         <lombok.version>1.18.46</lombok.version>
         <jspecify.version>1.0.1</jspecify.version>
+        <vance.ode.version>0.1.0-SNAPSHOT</vance.ode.version>
         <!-- Rome: RSS 0.9x/1.0/2.0 + Atom 0.3/1.0 parsing. The feed zoo in the
              wild is broken in every way imaginable; Rome's XmlReader does
              encoding sniffing (XML decl vs. HTTP charset vs. BOM) which a
@@ -92,10 +94,90 @@
             <groupId>org.jspecify</groupId>
             <artifactId>jspecify</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-mongodb</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!--
+            Declared although spring-boot-starter-web brings Jackson: the DTOs
+            in de.mhus.hrafnagud.api annotate against it directly, and a direct
+            import on a transitive dependency is how a build breaks on someone
+            else's refactoring.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.rometools</groupId>
+            <artifactId>rome</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.pemistahl</groupId>
+            <artifactId>lingua</artifactId>
+        </dependency>
+
+        <!--
+            The three Vancetope bindings — one that calls a brain, two that
+            answer one. All three are inert unless configured: ode-ursa until
+            vance.ode.base-url is set, the serving pair until munin.centauri /
+            munin.zarniwoop are enabled. That is now a runtime property rather
+            than a build-time one, which is the trade this merge made.
+        -->
+        <dependency>
+            <groupId>de.mhus.vance.ode</groupId>
+            <artifactId>vance-ode-ursa</artifactId>
+            <version>${vance.ode.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>de.mhus.vance.ode</groupId>
+            <artifactId>vance-ode-centauri</artifactId>
+            <version>${vance.ode.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>de.mhus.vance.ode</groupId>
+            <artifactId>vance-ode-zarniwoop</artifactId>
+            <version>${vance.ode.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
+        <finalName>hrafnagud</finalName>
         <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
             <!--
                 Publishes one build property per resolved dependency, named
                 `groupId:artifactId:type` and holding the jar's path in the

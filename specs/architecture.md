@@ -13,53 +13,71 @@ edited. It collects and hands out. Everything that interprets — rating,
 clustering, summarising — either runs as an [enrichment](enrichments.md) or
 lives in the consumer.
 
-## 2. Modules
+## 2. Packages
+
+One Maven artifact, `de.mhus.hrafnagud:hrafnagud`, built from `server/`.
 
 ```
-server/
-  hrafnagud-api/       DTOs and enums crossing the REST boundary. No Spring, no MongoDB.
-  hrafnagud-munin/     Source registry, feed ingest, deduplication, full-text fetch,
-                       enrichment storage, persistence, the operator REST surface.
-  hrafnagud-translate/ Works Munin's translation backlog by calling a Vancetope brain.
-  hrafnagud-centauri/  Serves the archive to Vancetope as a Centauri feed source.
-  hrafnagud-zarniwoop/ Answers Vancetope research queries out of the archive.
-  hrafnagud-server/    Boot module: entrypoint plus runtime configuration, nothing else.
+de.mhus.hrafnagud.
+  api/        DTOs and enums crossing the REST boundary. No Spring, no MongoDB.
+  munin/      Source registry, feed ingest, deduplication, full-text fetch,
+              enrichment storage, persistence, the operator REST surface.
+  translate/  Works Munin's translation backlog by calling a Vancetope brain.
+  centauri/   Serves the archive to Vancetope as a Centauri feed source.
+  zarniwoop/  Answers Vancetope research queries out of the archive.
+  server/     Entrypoint plus runtime configuration, nothing else.
 ```
+
+### 2.0 Why one artifact and not six
+
+These were six Maven modules, which made the layering below compiler-enforced.
+That is worth paying for in software that loads third-party code — and
+hrafnagud has no add-on system, no published partial artifact and no consumer
+of anything but the whole thing. What the split bought was a boundary; what it
+cost was six poms, a reactor, and test fixtures that could not be shared across
+modules that obviously wanted them. For a service one person builds in one go,
+that is the wrong side of the trade.
+
+The packages keep the names and the meaning. What changed is who enforces §2.1:
+the compiler did, and now the reader does.
 
 ### 2.1 The one hard rule
 
 **Munin has no dependency on Vancetope.** The archive must be collectable and
-queryable without a brain anywhere near it, and that is the property the
-module boundary protects.
+queryable without a brain anywhere near it.
 
-Three modules face Vancetope. One calls out, two answer:
+Three packages face Vancetope. One calls out, two answer:
 
-| Module | Direction | Depends on |
+| Package | Direction | Uses |
 |---|---|---|
-| `hrafnagud-translate` | calls a brain | `vance-ode-ursa` |
-| `hrafnagud-centauri` | answers a brain | `vance-ode-centauri` |
-| `hrafnagud-zarniwoop` | answers a brain | `vance-ode-zarniwoop` |
+| `translate` | calls a brain | `vance-ode-ursa` |
+| `centauri` | answers a brain | `vance-ode-centauri` |
+| `zarniwoop` | answers a brain | `vance-ode-zarniwoop` |
 
-All three depend on `hrafnagud-munin`; none is depended upon by it. Removing
-all three leaves a working collector, which is the test of whether the
-boundary is real or notional.
+All three import from `munin`; none is imported by it. **Deleting all three
+packages must leave a compiling collector** — that is the test of whether the
+boundary is real, and it is now a thing to check rather than a thing that
+fails the build. Concretely: no `import de.mhus.hrafnagud.{translate,centauri,
+zarniwoop}` and no `import de.mhus.vance.ode` anywhere under `munin/`.
 
-`hrafnagud-server` is deliberately thin. A second feature module — Hugin, the
-querying half — would sit beside Munin rather than inside it, and that is only
-possible while no module owns the application.
+Each of the three is also runtime-optional and stays that way: `translate` is
+inert until `vance.ode.base-url` is set, the other two until
+`munin.centauri.enabled` / `munin.zarniwoop.enabled` are true. An installation
+that wants none of them ships them dormant rather than not at all, which is
+the one thing the merge actually gave up.
 
 ### 2.2 Where the REST surface comes from
 
 The operator API (`/api/v1/**`) is written in Munin. Neither Vancetope-facing
 contract is written here at all: `vance-ode-centauri` serves `/ode/feed/**`
 given a `FeedSource` bean, and `vance-ode-zarniwoop` serves `/ode/search/**`
-given a `SearchSource` bean. The two modules supply those beans and nothing
+given a `SearchSource` bean. The two packages supply those beans and nothing
 else — see [feed-source.md](feed-source.md) and
 [research-source.md](research-source.md).
 
 ## 3. Stack
 
-Java 25, Spring Boot 4.1, Maven multi-module, Lombok, JSpecify
+Java 25, Spring Boot 4.1, Maven (single module), Lombok, JSpecify
 (`@NullMarked` per package), Spring Data MongoDB, Rome (feed parsing), jsoup
 (HTML and OPML), Lingua (language detection), Apache Commons, JUnit 5 +
 Mockito + AssertJ.

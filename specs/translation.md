@@ -21,10 +21,12 @@ article. The article does carry a searchable copy of the newest one — a
 derived read model, written by the same step; see
 [enrichments.md](enrichments.md) §2.1.
 
-## 2. Module boundary
+## 2. Package boundary
 
-`hrafnagud-translate` is its own module so that Munin keeps no dependency on
-Vancetope. Munin owns the queue; it owns neither the engine nor the result.
+`de.mhus.hrafnagud.translate` is its own package so that Munin keeps no
+dependency on Vancetope. Munin owns the queue; it owns neither the engine nor
+the result — see [architecture.md](architecture.md) §2.1 for how that survives
+without a module to enforce it.
 
 Who does the translating is a `TranslationProvider`:
 

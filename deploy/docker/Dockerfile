@@ -8,11 +8,11 @@
 # context.
 #
 # The JAR is pre-built on the host rather than inside a builder stage on
-# purpose: hrafnagud-translate and hrafnagud-centauri depend on
-# de.mhus.vance.ode:* artifacts that are installed into the local Maven
-# repository from a sibling checkout, not resolvable from Maven Central. An
-# in-image `mvn package` would need that repository mounted in, which buys
-# nothing here — the host build is the one that already works.
+# purpose: hrafnagud depends on de.mhus.vance.ode:* artifacts that are
+# installed into the local Maven repository from a sibling checkout, not
+# resolvable from Maven Central. An in-image `mvn package` would need that
+# repository mounted in, which buys nothing here — the host build is the one
+# that already works.
 
 # ── Stage 1: split the uber JAR into layers ─────────────────────────────
 #
@@ -27,7 +27,7 @@ FROM eclipse-temurin:25-jre-noble AS extractor
 # The JAR sits outside the destination directory on purpose: `extract`
 # refuses a destination that is not empty, so extracting into the directory
 # holding the JAR fails.
-COPY server/hrafnagud-server/target/hrafnagud.jar /hrafnagud.jar
+COPY server/target/hrafnagud.jar /hrafnagud.jar
 # --launcher keeps the Spring Boot loader as its own layer, which lets the
 # runtime stage start via JarLauncher against the exploded tree instead of
 # the JAR. `-Djarmode=tools` is the Boot 3.3+ successor to the older
@@ -43,12 +43,54 @@ FROM eclipse-temurin:25-jre-noble
 ENV JAVA_OPTS="-XX:+UseG1GC -XX:MaxRAMPercentage=75.0" \
     SPRING_PROFILES_ACTIVE=prod
 
+# Optional apt mirrors for a build host whose route to the default Ubuntu
+# mirrors is unusable — a lossy path to their Cloudflare edge makes apt retry
+# forever at a few hundred bytes per second.
+#
+# Two args, because Ubuntu has two archives and they are not interchangeable:
+# archive/security.ubuntu.com serve amd64 and i386, while every other
+# architecture lives in ubuntu-ports with its own mirror set. Pointing an
+# arm64 build at a country mirror of the main archive fails with `Ign:` on
+# every Packages file, which is how this was found.
+#
+# Both empty by default, so CI, releases and every other build behave exactly
+# as before: a local escape hatch, not a mirror policy. The original sources
+# are restored inside the same RUN, so a mirror used to get a build through
+# never ends up baked into a published image.
+#
+#   amd64: APT_MIRROR=http://de.archive.ubuntu.com/ubuntu
+#   arm64: APT_PORTS_MIRROR=http://ftp.tu-chemnitz.de/pub/linux/ubuntu-ports
+ARG APT_MIRROR=""
+ARG APT_PORTS_MIRROR=""
+
 # curl is for the HEALTHCHECK below and nothing else. Everything hrafnagud
 # does at runtime — feed parsing, HTML extraction, language detection — is
 # pure Java, so there is no native tooling to install.
-RUN apt-get update \
+RUN if [ -n "${APT_MIRROR}${APT_PORTS_MIRROR}" ]; then \
+        echo "apt: main=${APT_MIRROR:-default} ports=${APT_PORTS_MIRROR:-default}"; \
+        n=0; \
+        for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do \
+            if [ -f "$f" ]; then \
+                cp -a "$f" "$f.vance-orig"; \
+                if [ -n "${APT_MIRROR}" ]; then \
+                    sed -i -E "s#https?://(archive|security)\.ubuntu\.com/ubuntu#${APT_MIRROR}#g" "$f"; \
+                fi; \
+                if [ -n "${APT_PORTS_MIRROR}" ]; then \
+                    sed -i -E "s#https?://ports\.ubuntu\.com/ubuntu-ports#${APT_PORTS_MIRROR}#g" "$f"; \
+                fi; \
+                n=$((n+1)); \
+            fi; \
+        done; \
+        [ "$n" -gt 0 ] || { echo "apt mirror set but no apt sources file found" >&2; exit 1; }; \
+    fi \
+ && apt-get update \
  && apt-get install -y --no-install-recommends curl \
  && rm -rf /var/lib/apt/lists/* \
+ && if [ -n "${APT_MIRROR}${APT_PORTS_MIRROR}" ]; then \
+        for f in /etc/apt/sources.list.d/ubuntu.sources /etc/apt/sources.list; do \
+            if [ -f "$f.vance-orig" ]; then mv "$f.vance-orig" "$f"; fi; \
+        done; \
+    fi \
  && groupadd --system --gid 1500 hrafnagud \
  && useradd  --system --uid 1500 --gid 1500 --home-dir /app --shell /bin/bash hrafnagud \
  && mkdir -p /app/config \

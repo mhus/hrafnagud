@@ -11,27 +11,29 @@ analyses. Today only Munin exists.
 > **Status:** backend only, REST, no authentication. Bind it to localhost or
 > put it behind a reverse proxy — see [Known gaps](#known-gaps).
 
-## Modules
+## Layout
+
+One Maven artifact, built from `server/`. The packages carry the structure:
 
 ```
-server/
-  hrafnagud-api/      DTOs and enums crossing the REST boundary. No Spring, no MongoDB.
-  hrafnagud-munin/    Source registry, feed ingest, deduplication, full-text fetch, persistence.
-  hrafnagud-translate/ Works Munin's translation backlog. Separate module so Munin keeps
-                       no dependency on Vancetope.
-  hrafnagud-centauri/ Serves the archive to Vancetope as a Centauri feed source. Outside
-                       Munin for the same reason — the mirror image of translate: that one
-                       calls a brain, this one answers one.
-  hrafnagud-zarniwoop/ Answers Vancetope research queries out of the archive. Same data as
-                       centauri, opposite question: a ranked answer, not a timeline.
-  hrafnagud-server/   Boot module: entrypoint plus runtime configuration, nothing else.
+de.mhus.hrafnagud.
+  api/        DTOs and enums crossing the REST boundary. No Spring, no MongoDB.
+  munin/      Source registry, feed ingest, deduplication, full-text fetch, persistence.
+  translate/  Works Munin's translation backlog by calling a Vancetope brain.
+  centauri/   Serves the archive to Vancetope as a Centauri feed source — the mirror
+              image of translate: that one calls a brain, this one answers one.
+  zarniwoop/  Answers Vancetope research queries out of the archive. Same data as
+              centauri, opposite question: a ranked answer, not a timeline.
+  server/     Entrypoint plus runtime configuration, nothing else.
 ```
 
-`hrafnagud-server` is deliberately thin so that a second feature module
-(Hugin) can be added beside Munin without either of them owning the
-application.
+**Munin imports nothing Vancetope-facing**, and the three packages that do
+import only from it. That was six Maven modules and therefore compiler-checked
+until the service turned out not to need the ceremony — see
+[architecture.md](specs/architecture.md) §2 for the rule and how to check it
+now.
 
-**Stack:** Java 25, Spring Boot 4.1, Maven multi-module, Lombok, JSpecify,
+**Stack:** Java 25, Spring Boot 4.1, Maven (single module), Lombok, JSpecify,
 Spring Data MongoDB, Rome (feed parsing), jsoup (HTML), Lingua (language
 detection), JUnit 5 + Mockito + AssertJ.
 
@@ -41,7 +43,7 @@ Needs a MongoDB. The defaults expect one on `localhost:27017`:
 
 ```bash
 cd server && mvn install
-java -jar hrafnagud-server/target/hrafnagud.jar
+java -jar target/hrafnagud.jar
 ```
 
 Listens on `:9800`. Override with `HRAFNAGUD_PORT`, `HRAFNAGUD_MONGO_URI`,
@@ -110,7 +112,7 @@ Body fetching is off by default (`munin.content.enabled`). Turning it on
 works through whatever has accumulated, since ingest queues everything:
 
 ```bash
-java -jar hrafnagud-server/target/hrafnagud.jar --munin.content.enabled=true
+java -jar server/target/hrafnagud.jar --munin.content.enabled=true
 ```
 
 `POST /api/v1/articles/{id}/fetch-content` requeues one article with a fresh
