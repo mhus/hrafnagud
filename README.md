@@ -200,196 +200,32 @@ Two properties of this that are worth knowing before they surprise you:
 
 ## Design decisions
 
-These are the choices that were not obvious, with the reasoning, because
-each of them is somewhere a reasonable person would do it differently.
+The choices that were not obvious, with the reasoning, live in
+[`specs/`](specs/) — one document per topic, because there are enough of them
+that a single list stopped being readable:
 
-**A source's identity is its normalised URL — not its name, not its Mongo id.**
-Two entries pointing at the same feed are the same source however they were
-spelled. Without this, a publisher who starts appending a campaign parameter
-to its own feed link gets imported a second time, along with a second copy
-of its archive.
+| Document | Covers |
+|---|---|
+| [architecture](specs/architecture.md) | Modules, the rule that keeps Munin free of Vancetope, collections, why two timestamps |
+| [collection](specs/collection.md) | Source identity, deduplication, URL normalisation, adaptive polling, source lists, language provenance |
+| [content-extraction](specs/content-extraction.md) | The four-rung ladder, images, script-aware word counts, the fixture corpus |
+| [enrichments](specs/enrichments.md) | Why a processing result is a document and not a field |
+| [translation](specs/translation.md) | The pivot language, the provider SPI, the Vancetope event, the nested timeouts |
+| [feed-source](specs/feed-source.md) | Serving the archive: streams, cursor, declared capabilities and the two declined ones |
 
-**Deduplication is a unique index, not an application check.** The dedup key
-is a SHA-256 over the normalised article URL, and the index is unique, so two
-workers racing on the same feed entry resolve at the database. A wire report
-reaches us from every outlet that carries it; without this the archive would
-be mostly duplicates and every query would return the same story a dozen
-times.
+A few that shape everything else, in short:
 
-**URL normalisation leans conservative.** Over-normalising merges distinct
-articles and loses content, which is unrecoverable; under-normalising costs
-disk. Tracking parameters, AMP markers, fragments, `www.`, default ports and
-query-parameter order are folded. An `m.` host prefix and an `amp.`
-subdomain are *not* — those are frequently distinct hosts with distinct
-content. IRIs are converted to URIs (punycode plus percent-encoding) rather
-than rejected, because `java.net.URI` refuses non-ASCII outright and a
-worldwide collector cannot drop every internationalised domain.
-
-**An article records every source that delivered it.** Once articles are
-deduplicated across sources, "which feed did this come from" has more than
-one answer, and keeping only the first would discard exactly the information
-that makes the deduplication measurable.
-
-**The ingest path does not write in the common case.** A feed re-serves its
-whole window on every poll, so most ingest calls concern an article the same
-source already delivered. Those resolve to an upsert that matches, adds
-nothing and modifies nothing. There is deliberately no "still there"
-timestamp — it would make the archive's largest write load a field with no
-reader. `lastSourceAddedAt` is named for what it actually is: the last time
-a feed that *did not already have* the article delivered it.
-
-**Ordering uses `firstSeenAt`, never `publishedAt`.** Publishers backdate,
-forward-date and mis-timezone their dates often enough that one broken feed
-would dominate any sort built on them. `publishedAt` is kept as the
-publisher's claim, sanity-checked and nulled when implausible.
-
-**Language is stored with its provenance.** `SOURCE` (a human configured it)
-beats `FEED` (the publisher declared it) beats `DETECTED` (we classified
-it). A feed's `<language>` element is frequently absent or simply wrong, so
-a consumer filtering on "German articles" needs to know whether it is
-trusting a publisher or a classifier. Detection abstains rather than guesses
-on short input — `UNKNOWN` is more useful than a confident wrong answer.
-
-**Categories are stored verbatim, never normalised.** Publishers disagree
-completely about what a category is; some emit sections, some emit tags,
-some emit both in one field. Folding them into a taxonomy at ingest would
-destroy information no later step could recover. A `topics` layer can be
-built on top later.
-
-**Poll intervals adapt per feed.** A fixed interval is wrong in both
-directions at once: a wire service outruns it and entries are lost when its
-feed window rolls over, while a regional weekly gets polled two thousand
-times per published item. Delivering a lot halves the interval, delivering
-nothing grows it gently, failing backs off geometrically. Adjustment is
-asymmetric on purpose — reacting fast to a feed we are behind on, slowly to
-a quiet weekend.
-
-**A failing source is never auto-disabled.** Outages end, certificates get
-renewed, DNS changes settle. Backoff is capped at a daily retry so a feed
-that returns resumes by itself. A registry that quietly shrinks on every
-transient problem is one nobody can trust.
-
-**A source list is authoritative except where a human has spoken.** Every
-field written through the API is recorded in `lockedFields` and becomes
-off-limits to the list. Without it, disabling a feed that publishes garbage
-lasts until the next refresh — and then nobody bothers correcting anything
-again. Sources the list has dropped are *disabled*, not deleted: effective
-without being destructive, so a briefly truncated upstream response cannot
-delete half the registry.
-
-**A `304 Not Modified` on a source list skips reconciliation entirely.** Not
-an optimisation but a correctness requirement: reconciliation decides which
-sources the list has dropped, and a document we did not read cannot support
-that conclusion. Treating "unchanged" as "empty" would disable every source
-the list owns.
-
-**Full-text fetching is a separate queue, separate state machine, and off by
-default.** It is an order of magnitude slower than a feed poll, fails in far
-more ways, and is a qualitatively different act — reading a document
-published for polling, versus fetching a page that was not. Each rejection
-gets a status that says *why* (`BLOCKED`, `PAYWALL`, `FAILED`, or staying
-`PENDING`), because the four call for four different responses and
-collapsing them would keep retrying pages that can never succeed.
-
-**Ingest queues every article, regardless of whether the fetcher runs.** The
-feed run creates open jobs; working them is the fetcher's business. Letting
-the producer consult the consumer's configuration would bake a runtime
-decision into stored state — switch the fetcher on later and every article
-collected until then would be stranded, unfetchable, with no way back short
-of a bulk rewrite. The cost is honest and small: with the fetcher off the
-`PENDING` index covers the whole archive rather than just the backlog.
-
-**Extraction asks before it guesses.** Four rungs, and which one produced a
-given body is recorded in `article_contents.extractor`:
-
-1. `json-ld` — the publisher's own `schema.org` metadata. Not a heuristic:
-   an answer. Nearly every news site emits it because Google News requires
-   it, so coverage is far better than the effort suggests.
-2. `semantic` — a container the page marks as its article body.
-3. `scored` — most paragraph text relative to link density.
-4. `body` — last resort.
-
-Metadata merges across rungs independently of the body, because JSON-LD
-frequently carries no `articleBody` while its headline, image, date,
-language and author still beat anything derived from the DOM. A JSON-LD
-body shorter than fifty words is treated as a description in the wrong
-field and the DOM rungs are used instead.
-
-Recording the rung is what makes extraction quality *measurable*: the
-failure mode here is silent — a navigation rail stored as article text
-throws nothing and is discovered months later. Aggregating on `extractor`
-shows which publishers fall through to the guessing rungs, and those are
-the ones worth looking at.
-
-**Images are collected as URLs with captions, never as bytes.** A reference
-is cheap and uncontroversial; storing publishers' image files is a storage
-question and a copyright question at once, and a URL leaves that decision
-open where the reverse would not. The lead image comes from the
-declaration; inline images come from inside the chosen container, because
-position is a far better discriminator than anything about the image
-itself. Captions are a field of the image rather than part of the body — in
-news writing the caption is often the most informative sentence about the
-photograph, and burying it in the prose loses that.
-
-Two traps, both found by measuring against real pages rather than by
-reasoning: on many sites `src` holds a transparent placeholder and the real
-image is in `srcset` or `data-src`, so reading `src` first fills the archive
-with references to the same blank GIF; and an image with no caption, no alt
-text and no declared geometry is page furniture — a newspaper's own
-front-page thumbnail advertising a subscription is the archetype — because
-nothing about it was meant to be read.
-
-**Word counts are script-aware.** Counting whitespace-separated tokens is
-the obvious implementation and is wrong for a large part of the world:
-Japanese, Chinese, Korean and Thai do not separate words with spaces, so a
-complete article scores a handful of "words". Every length threshold built
-on that then misfires in the same direction, and the archive quietly ends up
-holding no CJK bodies at all. This was caught by the fixture corpus on its
-first run, which is precisely what the corpus is for.
-
-**Politeness is centralised, not conventional.** One HTTP client, one user
-agent, one per-host rate limiter, one body cap. A directory import easily
-puts fifty feeds of one publisher into the registry; without per-host pacing
-they all get polled in the same second and the publisher responds the way
-any operator would. `robots.txt` is obeyed for article pages — and
-deliberately not consulted for feeds, which are published expressly to be
-polled.
-
-**Extraction scores containers by link density.** Navigation and
-related-story rails are text-heavy too, but nearly all of their text sits
-inside anchors while article prose sits outside them. That one ratio
-separates the two more reliably than any word count.
-
-**Processing results go in `enrichments`, not on the article.** A
-translation is the output of a step that can be repeated — with a better
-model, a fixed prompt, a different provider — and each run is a fact worth
-keeping: what was produced, by which model, when. Written onto the article
-it would be a single mutable field, and re-running would destroy the
-comparison that makes re-running worth doing. The collection is
-append-only and read newest-first, so an improved run supersedes an older
-one without erasing it. Rating, keywords and sentiment are the same shape
-and are why the collection is not called `translations`.
-
-**One pivot language, decided at ingest.** An article already in the pivot
-language is `SKIPPED` when it is stored, not queued and then discovered to
-be a no-op. That makes the backlog the count of actual work, and keeps the
-common case — a German source in a German-pivot archive — free.
-
-**Title and teaser are one unit of work, not two.** The earlier design
-translated each separately so a failing teaser could not sink the title.
-That trade is only worth it when the calls cost the same; here the recipe
-prompt is several times the length of the text, so splitting doubles the
-expensive half to protect the cheap one. A failed pair is retried whole.
-
-**The translation queue is a state field, not a query.** `translationStatus`
-plus a partial index on `PENDING` is one indexed scan; deriving the queue
-by asking which articles have no enrichment of type `TRANSLATION` is a join
-across two collections on every tick.
-
-**Permanent failures spend the whole retry budget at once.** Retrying a
-rejected token four more times produces four more rejections. The provider
-says whether its failure is worth repeating; the queue does not
-second-guess it.
+**A source's identity is its normalised URL** — not its name, not its Mongo id.
+**Deduplication is a unique index**, not an application check, so two workers
+racing on the same feed entry resolve at the database. **Normalisation leans
+conservative**, because over-normalising loses content unrecoverably while
+under-normalising costs disk. **Ordering uses `firstSeenAt`** on the operator
+API and `publishedAt` only where a contract demands it, because publishers
+backdate and mis-timezone often enough that one broken feed would dominate any
+sort built on their dates. **Queues are state fields with partial indexes**, so
+an index tracks the backlog rather than the archive. **Processing results go in
+`enrichments`**, never onto the article, so re-running a step does not destroy
+the comparison that made re-running worth doing.
 
 ## Known gaps
 
