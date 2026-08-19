@@ -45,6 +45,17 @@ import org.springframework.data.mongodb.core.mapping.Document;
         @CompoundIndex(name = "source_seen_idx", def = "{ 'sourceNames': 1, 'firstSeenAt': -1 }"),
         @CompoundIndex(name = "language_seen_idx", def = "{ 'language': 1, 'firstSeenAt': -1 }"),
         @CompoundIndex(name = "category_seen_idx", def = "{ 'categories': 1, 'firstSeenAt': -1 }"),
+        // Feed ordering. Distinct from the seen_* family above because it
+        // answers a different question: those order by when this archive
+        // learned of an article, these by when it was published, which is
+        // the only key a reader can merge several sources on. The id is
+        // part of the key so a cursor can step through a batch that shares
+        // a timestamp — see ArticleCursor.
+        @CompoundIndex(name = "published_idx", def = "{ 'publishedAt': -1, '_id': -1 }"),
+        @CompoundIndex(name = "source_published_idx",
+                def = "{ 'sourceNames': 1, 'publishedAt': -1, '_id': -1 }"),
+        @CompoundIndex(name = "language_published_idx",
+                def = "{ 'language': 1, 'publishedAt': -1, '_id': -1 }"),
         // The content worker's claim query. Partial-filtered to PENDING so
         // the index stays proportional to the backlog rather than to the
         // archive — the difference between thousands and tens of millions.

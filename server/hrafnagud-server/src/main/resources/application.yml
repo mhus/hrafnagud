@@ -125,6 +125,16 @@ munin:
     # actually present in the registry is both faster and more accurate.
     languages: []
 
+  # Named for the Vancetope subsystem it serves, not `feed`, because
+  # munin.feed above is the opposite direction: that one pulls feeds in,
+  # this one hands the archive out.
+  centauri:
+    # Serve the archive to Vancetope as a Centauri feed source. Off by
+    # default — the endpoint is unauthenticated unless an api key is set
+    # (see vance.ode.centauri below), and collecting news should not imply
+    # publishing it.
+    enabled: ${HRAFNAGUD_CENTAURI_ENABLED:false}
+
 # Vancetope binding (vance-ode). Everything here is inert until base-url
 # is set — no client, no translation provider, no outbound traffic. The
 # brain side is the `translation` kit: it defines the event, the script
@@ -141,6 +151,18 @@ vance:
         # A model call is slow by HTTP standards; this has to clear the
         # brain-side script timeout, not undercut it.
         timeout: PT150S
+    # The served side — endpoints Vancetope calls, rather than calls we
+    # make, which is why base-url/tenant/project above do not apply to it.
+    # Only mounted when munin.centauri.enabled is true.
+    centauri:
+      path: ${HRAFNAGUD_CENTAURI_PATH:/ode/feed}
+      # Expected as `Authorization: Bearer <key>`. Empty means no check —
+      # fine behind a reverse proxy that already authenticates, wide open
+      # otherwise. The startup log says which of the two you have.
+      apiKey: ${HRAFNAGUD_CENTAURI_API_KEY:}
+      # Ceiling on what one request may cost, independent of what the
+      # source declares it can serve.
+      maxLimit: 200
 
 logging:
   level:

@@ -19,6 +19,9 @@ server/
   hrafnagud-munin/    Source registry, feed ingest, deduplication, full-text fetch, persistence.
   hrafnagud-translate/ Works Munin's translation backlog. Separate module so Munin keeps
                        no dependency on Vancetope.
+  hrafnagud-centauri/ Serves the archive to Vancetope as a Centauri feed source. Outside
+                       Munin for the same reason — the mirror image of translate: that one
+                       calls a brain, this one answers one.
   hrafnagud-server/   Boot module: entrypoint plus runtime configuration, nothing else.
 ```
 
@@ -148,6 +151,52 @@ The translation itself lands in `enrichments`, not on the article.
 `GET /api/v1/articles?withTranslation=true` folds the newest one into each
 article; `GET /api/v1/articles/{id}/enrichments` lists all of them, and
 `POST /api/v1/articles/{id}/translate` requeues one article.
+
+## Serving the archive to Vancetope
+
+Off by default. The archive collects whether anybody reads it or not; handing
+it out is a separate decision, and the endpoint is unauthenticated until a key
+is set.
+
+```yaml
+munin:
+  centauri:
+    enabled: true
+vance:
+  ode:
+    centauri:
+      apiKey: ${HRAFNAGUD_CENTAURI_API_KEY:}   # empty = no check
+```
+
+or `HRAFNAGUD_CENTAURI_ENABLED=true`. The startup log states which of the two
+auth situations you are in. The REST contract is served by
+[vance-ode](https://github.com/mhus/vance-ode) — this service only supplies a
+`FeedSource` bean:
+
+```bash
+curl -H 'Authorization: Bearer <key>' localhost:9800/ode/feed/capabilities
+curl -H 'Authorization: Bearer <key>' localhost:9800/ode/feed/selectors
+curl -H 'Authorization: Bearer <key>' \
+  'localhost:9800/ode/feed/items?selector=source:bbc-world&limit=20'
+```
+
+Streams are `all` or `source:<name>`. A translated article is served **in the
+pivot language** — that is what the pivot is for — with the original kept in
+`extras.originalTitle` / `originalLanguage` alongside the model that produced
+it. An article still waiting for translation is served in its own language
+rather than withheld.
+
+Two properties of this that are worth knowing before they surprise you:
+
+- **Ordering is by `publishedAt`**, not by when the archive collected the
+  article, because that is the key a reader merges several sources on.
+  Consequence: an article published before a reader's cursor but collected
+  after it sits behind that cursor, so a pull-forward misses it. Scrolling
+  backwards finds it.
+- **Text search matches the original**, since the text index covers the
+  article's own title and teaser. A translated entry is findable by its
+  English words and not by the German ones on screen. Making translations
+  searchable means indexing the enrichment.
 
 ## Design decisions
 
@@ -377,6 +426,16 @@ Named rather than left to be discovered:
   defensible form.
 - **One source type.** `SourceType` and the reader SPI exist so a scraper or
   API client is a new bean, but only `RSS` (covering Atom) is implemented.
+- **Articles without a `publishedAt` never appear in the feed.** They are
+  collected and queryable through `/api/v1/articles`, but a chronological
+  stream has no defensible position for them, and deriving one from
+  `firstSeenAt` would place a week-old article at today's date. Nothing
+  reports how many are affected.
+- **Translations are not searchable.** See the note above — the text index
+  covers the article, not its enrichments.
+- **The feed accepts no signals.** `signalsAccepted` is empty, so a reader
+  hides those controls rather than offering one that would be dropped here.
+  A report has nowhere to go in this archive yet.
 
 ## Licence
 

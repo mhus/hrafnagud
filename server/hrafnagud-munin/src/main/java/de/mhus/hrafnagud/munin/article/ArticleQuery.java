@@ -35,6 +35,18 @@ public class ArticleQuery {
     /** Lower bound on {@code firstSeenAt}, inclusive. */
     @Nullable Instant since;
 
+    /**
+     * Lower bound on {@code publishedAt}, inclusive.
+     *
+     * <p>Deliberately separate from {@link #since}: "collected since" and
+     * "published since" are different questions and routinely give
+     * different answers — an archive that starts polling a feed today
+     * collects articles published last week. An operator browsing the
+     * archive means the first; a reader walking a timeline means the
+     * second.
+     */
+    @Nullable Instant publishedSince;
+
     /** Upper bound on {@code firstSeenAt}, exclusive. */
     @Nullable Instant until;
 

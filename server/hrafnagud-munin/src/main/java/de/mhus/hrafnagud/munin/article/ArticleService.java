@@ -53,6 +53,8 @@ public class ArticleService {
     private static final String F_DEDUP_KEY = "dedupKey";
     private static final String F_SOURCE_NAMES = "sourceNames";
     private static final String F_FIRST_SEEN_AT = "firstSeenAt";
+    private static final String F_PUBLISHED_AT = "publishedAt";
+    private static final String F_ID = "_id";
     private static final String F_LAST_SOURCE_ADDED_AT = "lastSourceAddedAt";
     private static final String F_LANGUAGE = "language";
     private static final String F_CATEGORIES = "categories";
@@ -200,6 +202,59 @@ public class ArticleService {
     }
 
     /**
+     * One page ordered by {@code publishedAt}, positioned by a cursor
+     * rather than an offset.
+     *
+     * <p>Deliberately a different ordering from {@link #search}, which runs
+     * on {@code firstSeenAt}. That one answers "what has this archive
+     * collected lately" — the operator's question, and stable under late
+     * arrivals. This one answers "what was published, in order" — the
+     * question a reader merging several sources into one timeline asks, and
+     * there the article's own timestamp is the only comparable key.
+     *
+     * <p>Articles without a {@code publishedAt} are excluded. There is no
+     * defensible position for them in a chronological stream, and inventing
+     * one from {@code firstSeenAt} would silently place a week-old article
+     * at today's date.
+     *
+     * <p>The cursor is (timestamp, id) rather than the timestamp alone:
+     * feeds routinely stamp a whole batch with the same minute, and a
+     * timestamp-only cursor either repeats those rows or skips them.
+     *
+     * @param cursor    exclusive lower/upper bound; {@code null} starts at the end
+     * @param ascending oldest-first, for a reader pulling forward in time
+     * @return at most {@code limit} articles, ordered as requested
+     */
+    public List<ArticleDocument> pageByPublished(ArticleQuery filter,
+            @Nullable ArticleCursor cursor, boolean ascending, int limit) {
+
+        Query query = buildQuery(filter);
+        query.addCriteria(Criteria.where(F_PUBLISHED_AT).ne(null));
+        if (cursor != null) {
+            // (publishedAt, _id) lexicographic, expressed the way Mongo can
+            // still use the compound index: strictly beyond the timestamp,
+            // or equal on it and beyond on the id.
+            Criteria beyond = ascending
+                    ? new Criteria().orOperator(
+                            Criteria.where(F_PUBLISHED_AT).gt(cursor.publishedAt()),
+                            new Criteria().andOperator(
+                                    Criteria.where(F_PUBLISHED_AT).is(cursor.publishedAt()),
+                                    Criteria.where(F_ID).gt(cursor.articleId())))
+                    : new Criteria().orOperator(
+                            Criteria.where(F_PUBLISHED_AT).lt(cursor.publishedAt()),
+                            new Criteria().andOperator(
+                                    Criteria.where(F_PUBLISHED_AT).is(cursor.publishedAt()),
+                                    Criteria.where(F_ID).lt(cursor.articleId())));
+            query.addCriteria(beyond);
+        }
+        Sort.Direction direction = ascending ? Sort.Direction.ASC : Sort.Direction.DESC;
+        return mongoTemplate.find(
+                query.with(Sort.by(direction, F_PUBLISHED_AT).and(Sort.by(direction, F_ID)))
+                        .limit(limit),
+                ArticleDocument.class);
+    }
+
+    /**
      * Counts matches.
      *
      * <p>Deliberately separate from {@link #search}: over a large archive an
@@ -224,6 +279,9 @@ public class ArticleService {
         }
         if (filter.getContentStatus() != null) {
             parts.add(Criteria.where(F_CONTENT_STATUS).is(filter.getContentStatus()));
+        }
+        if (filter.getPublishedSince() != null) {
+            parts.add(Criteria.where(F_PUBLISHED_AT).gte(filter.getPublishedSince()));
         }
         if (filter.getSince() != null || filter.getUntil() != null) {
             Criteria window = Criteria.where(F_FIRST_SEEN_AT);
