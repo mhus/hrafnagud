@@ -24,6 +24,7 @@ public class MuninProperties {
     private final Content content = new Content();
     private final SourceList sourceList = new SourceList();
     private final Language language = new Language();
+    private final Translation translation = new Translation();
 
     /** Shared HTTP behaviour for feed, list and article requests. */
     @Data
@@ -202,6 +203,56 @@ public class MuninProperties {
         private int maxEntries = 10_000;
 
         private Duration claimLease = Duration.ofMinutes(15);
+    }
+
+    /**
+     * Translation queue.
+     *
+     * <p>Munin owns the queue and the storage; it does not own the
+     * engine. Which service performs a translation is decided by whoever
+     * supplies a {@code TranslationProvider} — with none on the
+     * classpath, articles simply accumulate a backlog and nothing works
+     * it, which is a legible state rather than a broken one.
+     */
+    @Data
+    public static class Translation {
+
+        /**
+         * Languages every ingested article should end up in, as BCP-47
+         * primary subtags. Empty — the default — means no article is ever
+         * queued and the whole subsystem stays dormant.
+         */
+        private List<String> targets = new ArrayList<>();
+
+        /**
+         * Whether the teaser is translated alongside the title.
+         *
+         * <p>Off doubles the archive's multilingual reach per unit cost:
+         * a translated title is enough to make a list, a search result or
+         * a digest usable, and the teaser is roughly ten times the text.
+         * On when the teaser itself has to be readable.
+         */
+        private boolean translateSummary = true;
+
+        private Duration tickInterval = Duration.ofSeconds(20);
+
+        /** Articles claimed per tick. */
+        private int batchSize = 10;
+
+        /** Attempts per language before it is dropped from the backlog. */
+        private int maxAttempts = 3;
+
+        /** Delay before the first retry; doubles per attempt. */
+        private Duration retryDelay = Duration.ofMinutes(5);
+
+        private Duration claimLease = Duration.ofMinutes(5);
+
+        /**
+         * Longest source text handed to a provider in one go. A provider
+         * is typically a model call, and an article body arriving where a
+         * teaser was expected is the case this guards against.
+         */
+        private int maxSourceChars = 8000;
     }
 
     /** Language detection. */

@@ -57,6 +57,8 @@ public class ArticleService {
     private static final String F_CONTENT_STATUS = "contentStatus";
     private static final String F_CONTENT_NEXT_ATTEMPT_AT = "contentNextAttemptAt";
     private static final String F_CONTENT_ATTEMPTS = "contentAttempts";
+    private static final String F_PENDING_TRANSLATIONS = "pendingTranslations";
+    private static final String F_TRANSLATION_NEXT_ATTEMPT_AT = "translationNextAttemptAt";
 
     /** Languages reported by the statistics endpoint. */
     private static final int TOP_LANGUAGES = 20;
@@ -65,6 +67,7 @@ public class ArticleService {
     private final ArticleContentRepository contentRepository;
     private final MongoTemplate mongoTemplate;
     private final MuninProperties.Content contentConfig;
+    private final MuninProperties.Translation translationConfig;
 
     public ArticleService(ArticleRepository repository, ArticleContentRepository contentRepository,
             MongoTemplate mongoTemplate, MuninProperties properties) {
@@ -72,6 +75,7 @@ public class ArticleService {
         this.contentRepository = contentRepository;
         this.mongoTemplate = mongoTemplate;
         this.contentConfig = properties.getContent();
+        this.translationConfig = properties.getTranslation();
     }
 
     /** What one ingest call did. */
@@ -98,8 +102,8 @@ public class ArticleService {
     public IngestOutcome ingest(ArticleCandidate candidate, SourceDocument source,
             LanguageResolver.Resolution language, ContentStatus contentStatus, Instant now) {
 
-        ArticleDocument document =
-                ArticleFactory.build(candidate, source, language, contentStatus, now);
+        ArticleDocument document = ArticleFactory.build(candidate, source, language,
+                contentStatus, translationConfig.getTargets(), now);
 
         try {
             return upsert(document, source.getName(), now);
@@ -135,6 +139,9 @@ public class ArticleService {
                 .setOnInsert(F_CONTENT_ATTEMPTS, 0)
                 .setOnInsert("contentWordCount", 0)
                 .setOnInsert("translations", new LinkedHashMap<String, ArticleTranslation>())
+                .setOnInsert("pendingTranslations", document.getPendingTranslations())
+                .setOnInsert(F_TRANSLATION_NEXT_ATTEMPT_AT, document.getTranslationNextAttemptAt())
+                .setOnInsert("translationAttempts", 0)
                 // Spring Data treats a null @Version as "not yet persisted"
                 // and would turn a later save() into an insert. An upsert
                 // does not populate it, so it is seeded here.
@@ -351,6 +358,120 @@ public class ArticleService {
                         .set(F_CONTENT_NEXT_ATTEMPT_AT, now)
                         .set(F_CONTENT_ATTEMPTS, 0)
                         .unset("contentError"),
+                ArticleDocument.class);
+    }
+
+    // ─── Translation queue ───
+
+    /**
+     * Atomically claims articles that still owe a translation.
+     *
+     * <p>Same lease-in-the-schedule-field trick as the other two queues:
+     * {@code translationNextAttemptAt} is pushed out on claim, so a
+     * worker that dies mid-call releases the article when the lease
+     * expires rather than pinning it.
+     */
+    public List<ArticleDocument> claimTranslationDue(Instant now, int limit) {
+        Instant leaseUntil = now.plus(translationConfig.getClaimLease());
+        List<ArticleDocument> claimed = new ArrayList<>();
+        for (int i = 0; i < limit; i++) {
+            Query query = Query.query(Criteria.where(F_PENDING_TRANSLATIONS + ".0").exists(true)
+                            .and(F_TRANSLATION_NEXT_ATTEMPT_AT).lte(now))
+                    .with(Sort.by(Sort.Direction.ASC, F_TRANSLATION_NEXT_ATTEMPT_AT));
+            ArticleDocument article = mongoTemplate.findAndModify(query,
+                    new Update().set(F_TRANSLATION_NEXT_ATTEMPT_AT, leaseUntil)
+                            .inc("translationAttempts", 1),
+                    FindAndModifyOptions.options().returnNew(true),
+                    ArticleDocument.class);
+            if (article == null) {
+                break;
+            }
+            claimed.add(article);
+        }
+        return claimed;
+    }
+
+    /**
+     * Stores one language's translation and takes it off the backlog.
+     *
+     * <p>The write is per language rather than per article: a two-target
+     * article whose second language fails should keep the first, and an
+     * all-or-nothing write would throw it away on the retry.
+     */
+    public void recordTranslation(String articleId, String language,
+            ArticleTranslation translation, Instant now) {
+
+        Update update = new Update()
+                .set("translations." + language, translation)
+                .pull(F_PENDING_TRANSLATIONS, language)
+                .set(F_TRANSLATION_NEXT_ATTEMPT_AT, now)
+                .set("translationAttempts", 0)
+                .unset("translationError");
+        mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(articleId)), update,
+                ArticleDocument.class);
+        clearQueueMarkerIfDrained(articleId);
+    }
+
+    /**
+     * Records a failed translation, retrying or giving the language up.
+     *
+     * <p>Giving up drops the language from the backlog. Leaving it there
+     * would make the queue grow without bound on a provider that is
+     * permanently misconfigured, and the article's {@code translations}
+     * map already shows what is missing.
+     */
+    public void recordTranslationFailure(String articleId, String language,
+            @Nullable String error, int attempts, Instant now) {
+
+        Update update = new Update().set("translationError",
+                StringUtils.abbreviate(StringUtils.defaultString(error, "translation failed"), 500));
+
+        if (attempts >= translationConfig.getMaxAttempts()) {
+            update.pull(F_PENDING_TRANSLATIONS, language);
+            update.set("translationAttempts", 0);
+            log.info("Giving up on '{}' translation of article {} after {} attempts",
+                    language, articleId, attempts);
+        } else {
+            long delaySeconds = translationConfig.getRetryDelay().getSeconds()
+                    * (1L << Math.min(attempts, 6));
+            update.set(F_TRANSLATION_NEXT_ATTEMPT_AT, now.plusSeconds(delaySeconds));
+        }
+
+        mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(articleId)), update,
+                ArticleDocument.class);
+        clearQueueMarkerIfDrained(articleId);
+    }
+
+    /**
+     * Clears the schedule field once nothing is owed.
+     *
+     * <p>The partial index is keyed on a non-empty backlog, so a drained
+     * article leaves it either way; unsetting the timestamp keeps the
+     * document honest about not being queued.
+     */
+    private void clearQueueMarkerIfDrained(String articleId) {
+        mongoTemplate.updateFirst(
+                Query.query(Criteria.where("_id").is(articleId)
+                        .and(F_PENDING_TRANSLATIONS).size(0)),
+                new Update().unset(F_TRANSLATION_NEXT_ATTEMPT_AT),
+                ArticleDocument.class);
+    }
+
+    /** Queues an article for a language again — used by the manual endpoint. */
+    public void requeueTranslation(String articleId, String language, Instant now) {
+        mongoTemplate.updateFirst(
+                Query.query(Criteria.where("_id").is(articleId)),
+                new Update().addToSet(F_PENDING_TRANSLATIONS, language)
+                        .set(F_TRANSLATION_NEXT_ATTEMPT_AT, now)
+                        .set("translationAttempts", 0)
+                        .unset("translationError"),
+                ArticleDocument.class);
+    }
+
+    /** Articles with at least one language still owed. */
+    public long countTranslationBacklog() {
+        return mongoTemplate.count(
+                Query.query(Criteria.where(F_PENDING_TRANSLATIONS + ".0").exists(true)),
                 ArticleDocument.class);
     }
 

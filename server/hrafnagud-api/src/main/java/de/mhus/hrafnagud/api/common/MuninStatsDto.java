@@ -38,6 +38,12 @@ public class MuninStatsDto {
     /** Article count per body-fetch state, keyed by {@code ContentStatus}. */
     private Map<String, Long> articlesByContentStatus = new LinkedHashMap<>();
 
+    /**
+     * Articles still owing at least one translation. Climbing steadily
+     * means nothing is draining the queue.
+     */
+    private long translationBacklog;
+
     /** Article count per language, most frequent first, top 20. */
     private Map<String, Long> articlesByLanguage = new LinkedHashMap<>();
 

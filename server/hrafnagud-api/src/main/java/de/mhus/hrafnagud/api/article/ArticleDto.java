@@ -97,6 +97,13 @@ public class ArticleDto {
     private @Nullable String contentError;
 
     /**
+     * Target languages still owed. Non-empty means the article is queued
+     * for translation; empty means either done or never queued — which of
+     * the two is answered by {@link #translations}.
+     */
+    private List<String> pendingTranslations = new ArrayList<>();
+
+    /**
      * Translations keyed by BCP-47 primary subtag. Deliberately a map rather
      * than a pair of {@code titleEn}/{@code titleDe} fields: the third
      * target language must not be a schema change.

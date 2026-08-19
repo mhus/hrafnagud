@@ -19,6 +19,7 @@
     <modules>
         <module>hrafnagud-api</module>
         <module>hrafnagud-munin</module>
+        <module>hrafnagud-translate</module>
         <module>hrafnagud-server</module>
     </modules>
 

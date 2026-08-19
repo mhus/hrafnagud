@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Builds the stored article from a candidate, its source and a resolved
@@ -55,8 +56,27 @@ public final class ArticleFactory {
      */
     public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
             LanguageResolver.Resolution language, ContentStatus contentStatus, Instant now) {
+        return build(candidate, source, language, contentStatus, List.of(), now);
+    }
 
+    /**
+     * Assembles the document to insert, queued for translation.
+     *
+     * @param translationTargets languages the article is owed; a target
+     *                           equal to the article's own language is
+     *                           dropped, since translating German into
+     *                           German is a model call that can only
+     *                           return what it was given
+     */
+    public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
+            LanguageResolver.Resolution language, ContentStatus contentStatus,
+            List<String> translationTargets, Instant now) {
+
+        List<String> pending = pendingTranslations(translationTargets, language.language());
         return ArticleDocument.builder()
+                .pendingTranslations(pending)
+                // Only a queued article belongs in the partial index.
+                .translationNextAttemptAt(pending.isEmpty() ? null : now)
                 .dedupKey(dedupKey(candidate.getUrl()))
                 .url(candidate.getUrl())
                 .originalUrl(candidate.getOriginalUrl())
@@ -81,6 +101,26 @@ public final class ArticleFactory {
                 // index for a worker that will never claim it.
                 .contentNextAttemptAt(contentStatus == ContentStatus.PENDING ? now : null)
                 .build();
+    }
+
+    /**
+     * Targets the article still owes, minus its own language.
+     *
+     * <p>An unknown source language keeps every target: without knowing
+     * what it is, we cannot rule any out, and a provider asked to
+     * translate text that is already in the target language returns it
+     * unchanged — the recipe says so explicitly. Guessing wrong here
+     * would silently drop a language.
+     */
+    static List<String> pendingTranslations(List<String> targets, @Nullable String articleLanguage) {
+        Set<String> pending = new LinkedHashSet<>();
+        for (String target : targets) {
+            String normalized = TextCleaner.normalizeLanguage(target);
+            if (normalized != null && !normalized.equals(articleLanguage)) {
+                pending.add(normalized);
+            }
+        }
+        return new ArrayList<>(pending);
     }
 
     /**

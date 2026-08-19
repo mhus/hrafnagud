@@ -82,6 +82,7 @@ public class SourceDocument {
     private @Nullable String country;
 
     /** Applied to every article from this source, in addition to the feed's own. */
+    @Builder.Default
     private List<String> categories = new ArrayList<>();
 
     // ─── Provenance ───
@@ -95,6 +96,7 @@ public class SourceDocument {
      * Fields a human edited after import. A list refresh skips these.
      * Holds document field names, e.g. {@code enabled}, {@code language}.
      */
+    @Builder.Default
     private Set<String> lockedFields = new LinkedHashSet<>();
 
     /**

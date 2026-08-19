@@ -54,6 +54,7 @@ public class ArticleContentDocument {
     private @Nullable String imageUrl;
 
     /** Every image belonging to the article: the lead one, then the inline ones. */
+    @Builder.Default
     private List<ArticleImage> images = new ArrayList<>();
 
     /** Byline the page declared. Feeds frequently omit this; pages rarely do. */
@@ -88,5 +89,6 @@ public class ArticleContentDocument {
     private Instant fetchedAt = Instant.EPOCH;
 
     /** Translated bodies keyed by BCP-47 primary subtag. */
+    @Builder.Default
     private Map<String, String> translations = new LinkedHashMap<>();
 }

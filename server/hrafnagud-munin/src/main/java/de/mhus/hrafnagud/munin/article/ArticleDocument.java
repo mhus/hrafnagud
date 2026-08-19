@@ -53,7 +53,13 @@ import org.springframework.data.mongodb.core.mapping.Document;
                 def = "{ 'contentNextAttemptAt': 1 }",
                 partialFilter = "{ 'contentStatus': 'PENDING' }"),
         // Near-duplicate detection: same story, different URL.
-        @CompoundIndex(name = "content_hash_idx", def = "{ 'contentHash': 1 }")
+        @CompoundIndex(name = "content_hash_idx", def = "{ 'contentHash': 1 }"),
+        // The translation worker's claim query. Partial-filtered on a
+        // non-empty backlog so the index tracks what is owed rather than
+        // the whole archive — the same reason the content queue is.
+        @CompoundIndex(name = "translation_queue_idx",
+                def = "{ 'translationNextAttemptAt': 1 }",
+                partialFilter = "{ 'pendingTranslations.0': { '$exists': true } }")
 })
 @Data
 @Builder
@@ -103,11 +109,13 @@ public class ArticleDocument {
     private LanguageSource languageSource = LanguageSource.UNKNOWN;
 
     /** Feed and source categories, verbatim and un-normalised. */
+    @Builder.Default
     private List<String> categories = new ArrayList<>();
 
     // ─── Provenance ───
 
     /** Every source that has delivered this article. */
+    @Builder.Default
     private List<String> sourceNames = new ArrayList<>();
 
     /** The source that delivered it first. Never rewritten. */
@@ -160,7 +168,34 @@ public class ArticleDocument {
     // ─── Translations ───
 
     /** Keyed by BCP-47 primary subtag. */
+    @Builder.Default
     private Map<String, ArticleTranslation> translations = new LinkedHashMap<>();
+
+    /**
+     * Target languages still to be produced, drained as each is stored.
+     *
+     * <p>The queue is a field rather than a query over what
+     * {@link #translations} is missing, because the set of targets is
+     * configuration: a query would have to be rebuilt — and re-indexed —
+     * every time an operator adds a language. Emptying this list is what
+     * takes an article out of the worker's sight.
+     *
+     * <p>Munin owns the queue but not the engine. Which service performs
+     * a translation is decided by whatever module supplies a provider;
+     * from here it is only "still owed".
+     */
+    @Builder.Default
+    private List<String> pendingTranslations = new ArrayList<>();
+
+    /**
+     * When the translation worker may next try. Doubles as the claim
+     * lease, exactly as {@link #contentNextAttemptAt} does for bodies.
+     */
+    private @Nullable Instant translationNextAttemptAt;
+
+    private int translationAttempts;
+
+    private @Nullable String translationError;
 
     @Version
     private @Nullable Long version;

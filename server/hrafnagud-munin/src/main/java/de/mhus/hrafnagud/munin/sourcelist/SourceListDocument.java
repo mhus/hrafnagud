@@ -58,6 +58,7 @@ public class SourceListDocument {
 
     private @Nullable String defaultCountry;
 
+    @Builder.Default
     private List<String> defaultCategories = new ArrayList<>();
 
     private @Nullable Long defaultFetchIntervalSeconds;

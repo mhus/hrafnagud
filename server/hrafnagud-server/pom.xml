@@ -19,6 +19,16 @@
             <artifactId>hrafnagud-munin</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!--
+            Translation is assembled in, not built in: Munin has no
+            dependency on Vancetope, and dropping this module leaves a
+            collector that still works, just monolingual.
+        -->
+        <dependency>
+            <groupId>de.mhus.hrafnagud</groupId>
+            <artifactId>hrafnagud-translate</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>

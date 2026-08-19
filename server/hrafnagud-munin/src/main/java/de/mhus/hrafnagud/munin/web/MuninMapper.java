@@ -107,6 +107,7 @@ public final class MuninMapper {
                 .contentFetchedAt(article.getContentFetchedAt())
                 .contentWordCount(article.getContentWordCount())
                 .contentError(article.getContentError())
+                .pendingTranslations(new ArrayList<>(article.getPendingTranslations()))
                 .translations(translations)
                 .build();
     }

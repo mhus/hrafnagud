@@ -93,6 +93,22 @@ munin:
     maxEntries: 10000
     claimLease: PT15M
 
+  translation:
+    # Empty means no article is ever queued and the subsystem stays
+    # dormant. Adding a language here starts filling a backlog — make
+    # sure something is wired to work it (see vance.ode below), or the
+    # queue grows with nothing draining it.
+    targets: []
+    # Titles alone make lists, search results and digests usable at a
+    # tenth of the text. Turn on when the teaser itself must be readable.
+    translateSummary: true
+    tickInterval: PT20S
+    batchSize: 10
+    maxAttempts: 3
+    retryDelay: PT5M
+    claimLease: PT5M
+    maxSourceChars: 8000
+
   language:
     enabled: true
     # Below this many characters of title plus teaser, detection abstains.
@@ -105,6 +121,23 @@ munin:
     # Empty means every language Lingua knows. Narrowing it to the languages
     # actually present in the registry is both faster and more accurate.
     languages: []
+
+# Vancetope binding (vance-ode). Everything here is inert until base-url
+# is set — no client, no translation provider, no outbound traffic. The
+# brain side is the `translation` kit: it defines the event, the script
+# and the recipe, so the prompt and the model stay editable there rather
+# than being compiled in here.
+vance:
+  ode:
+    base-url: ${VANCE_BRAIN_URL:}
+    tenant: ${VANCE_TENANT:}
+    project: ${VANCE_PROJECT:_tenant}
+    events:
+      translate-article:
+        token: ${VANCE_TRANSLATE_TOKEN:}
+        # A model call is slow by HTTP standards; this has to clear the
+        # brain-side script timeout, not undercut it.
+        timeout: PT150S
 
 logging:
   level:

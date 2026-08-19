@@ -17,6 +17,8 @@ analyses. Today only Munin exists.
 server/
   hrafnagud-api/      DTOs and enums crossing the REST boundary. No Spring, no MongoDB.
   hrafnagud-munin/    Source registry, feed ingest, deduplication, full-text fetch, persistence.
+  hrafnagud-translate/ Works Munin's translation backlog. Separate module so Munin keeps
+                       no dependency on Vancetope.
   hrafnagud-server/   Boot module: entrypoint plus runtime configuration, nothing else.
 ```
 
@@ -92,6 +94,43 @@ java -jar hrafnagud-server/target/hrafnagud.jar --munin.content.enabled=true
 
 `POST /api/v1/articles/{id}/fetch-content` requeues one article with a fresh
 retry budget; `POST .../skip-content` takes one out of the queue for good.
+
+## Translation
+
+Off by default. Adding target languages starts filling a backlog:
+
+```yaml
+munin:
+  translation:
+    targets: [de, en]
+    translateSummary: true      # titles alone cost a tenth of the text
+```
+
+Munin owns the queue and the storage but not the engine — it only records
+that a language is *owed*. Who produces it is a `TranslationProvider`, and
+one ships: firing an event at a [Vancetope](https://github.com/mhus/vance)
+brain through [vance-ode](https://github.com/mhus/vance-ode).
+
+```yaml
+vance:
+  ode:
+    base-url: https://brain.example.com
+    tenant: acme
+    project: news
+    events:
+      translate-article:
+        token: ${VANCE_TRANSLATE_TOKEN}
+```
+
+The brain side is the `translation` kit: the event, the script and the
+recipe live there as documents, so the prompt and the model are editable
+without redeploying this service. That is the reason to integrate through
+an event rather than to call a model directly from here.
+
+Configure targets with no provider wired and the backlog grows with
+nothing draining it — a legible state, and the startup log says so
+explicitly rather than leaving it to be discovered. `GET /api/v1/stats`
+reports `translationBacklog` for the same reason.
 
 ## Design decisions
 
@@ -256,8 +295,25 @@ inside anchors while article prose sits outside them. That one ratio
 separates the two more reliably than any word count.
 
 **Translations are a map keyed by language, not `titleDe`/`titleEn`
-fields.** No translation engine exists yet; the shape is defined now so the
-third target language is not a schema change.
+fields.** The third target language must not be a schema change.
+
+**The translation queue is a field, not a query.** Which languages an
+article still owes is stored on it rather than derived from what the
+translations map is missing, because the set of targets is configuration:
+a derived query would need rebuilding — and re-indexing — every time an
+operator adds a language.
+
+**A translation is one article and one language.** An article owing two
+languages is two units of work, so a provider failing on the second does
+not cost the first, and the storage write is per-language rather than a
+whole-map replace. A failing teaser likewise does not sink the title: a
+translated headline with an untranslated teaser is a usable entry, losing
+both to one call is not.
+
+**Permanent failures spend the whole retry budget at once.** Retrying a
+rejected token four more times produces four more rejections. The provider
+says whether its failure is worth repeating; the queue does not
+second-guess it.
 
 ## Known gaps
 

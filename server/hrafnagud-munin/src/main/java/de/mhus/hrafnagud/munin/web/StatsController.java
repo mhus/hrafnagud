@@ -38,6 +38,7 @@ public class StatsController {
                 .articlesLast24h(articleService.countSince(now.minus(Duration.ofHours(24))))
                 .articlesByContentStatus(articleService.countByContentStatus())
                 .articlesByLanguage(articleService.countByLanguage())
+                .translationBacklog(articleService.countTranslationBacklog())
                 .newestArticleAt(articleService.newestArticleAt().orElse(null))
                 .oldestArticleAt(articleService.oldestArticleAt().orElse(null))
                 .serverTime(now)
