@@ -17,7 +17,6 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
@@ -61,8 +60,7 @@ public class SourceDocument {
     @Id
     private @Nullable String id;
 
-    /** Stable technical key, derived from the URL. Unique. */
-    @Indexed
+    /** Stable technical key, derived from the URL. Unique (siehe name_idx oben). */
     private String name = "";
 
     private String title = "";
