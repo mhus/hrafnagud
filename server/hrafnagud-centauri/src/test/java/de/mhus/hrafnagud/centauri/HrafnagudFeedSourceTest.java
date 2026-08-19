@@ -226,7 +226,7 @@ class HrafnagudFeedSourceTest {
                 .thenReturn(new ArrayList<>());
 
         feed.items(new OdeItemQuery("all", null, OdeDirection.OLDER, 5,
-                null, Set.of(), T1, null));
+                null, Set.of(), T1, null, null));
 
         ArgumentCaptor<ArticleQuery> filter = ArgumentCaptor.forClass(ArticleQuery.class);
         verify(articles).pageByPublished(filter.capture(), any(), anyBoolean(), anyInt());
@@ -293,8 +293,11 @@ class HrafnagudFeedSourceTest {
 
     private static OdeItemQuery query(String selector, String cursor,
             OdeDirection direction, int limit) {
+        // Trailing nulls: no reader pseudonym and no authenticated caller. The
+        // archive serves both the same way — it authenticates with the static
+        // api-key and does not publish an OdeAuthService.
         return new OdeItemQuery(selector, cursor, direction, limit,
-                null, Set.of(), null, null);
+                null, Set.of(), null, null, null);
     }
 
     private static ArticleDocument article(String id, Instant publishedAt, String title) {

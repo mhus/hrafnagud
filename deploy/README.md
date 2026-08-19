@@ -103,6 +103,7 @@ exactly one definition:
 | `HRAFNAGUD_MONGO_URI` | yes | Full connection string. The prod profile deliberately has no default. |
 | `VANCE_TRANSLATE_TOKEN` | no | Ursa event token for the brain-side `translation` kit. |
 | `HRAFNAGUD_CENTAURI_API_KEY` | no | Bearer key for the feed endpoint. Empty = no check at all. |
+| `HRAFNAGUD_ZARNIWOOP_API_KEY` | no | Bearer key for the search endpoint. Empty = no check at all. |
 
 If a GitOps tool owns your secrets (sealed-secrets, SOPS, External
 Secrets), create a Secret of that name with those keys and pass
@@ -119,6 +120,16 @@ Two independent directions, both off by default:
 - **Centauri** — the brain calls hrafnagud, to read the archive as a feed
   source. Needs `HRAFNAGUD_CENTAURI_ENABLED=true` and, before you expose it,
   `HRAFNAGUD_CENTAURI_API_KEY`.
+- **Zarniwoop** — the brain calls hrafnagud, to search the same archive.
+  Switched separately: `HRAFNAGUD_ZARNIWOOP_ENABLED=true` plus
+  `HRAFNAGUD_ZARNIWOOP_API_KEY`. Serving a timeline is not a reason to answer
+  queries, so neither flag implies the other.
+
+Both keys are one static shared secret each, compared in constant time, and
+empty means no check. That is the right size here: hrafnagud serves one brain,
+and the endpoints read a public news archive. A source with several readers, or
+one that sells access, publishes an `OdeAuthService` instead — see the
+`vance-ode` README.
 
 ## MongoDB
 

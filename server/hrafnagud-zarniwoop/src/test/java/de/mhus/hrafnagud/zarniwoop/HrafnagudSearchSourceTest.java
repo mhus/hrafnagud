@@ -116,7 +116,7 @@ class HrafnagudSearchSourceTest {
                 .thenReturn(new ArrayList<>());
 
         source.search(new OdeSearchQuery("tariffs", OdeSearchModality.NEWS,
-                OdeSearchTier.EXPERT, 10, null, Map.of("since", "last tuesday")));
+                OdeSearchTier.EXPERT, 10, null, Map.of("since", "last tuesday"), null));
 
         // The caller cannot know this source's schema, so a refusal would
         // cost the whole query over one filter it guessed at.
@@ -134,7 +134,8 @@ class HrafnagudSearchSourceTest {
         source.search(new OdeSearchQuery("tariffs", OdeSearchModality.NEWS,
                 OdeSearchTier.EXPERT, 10, null,
                 Map.of("source", "bbc-world", "originalLanguage", "en",
-                        "category", "business", "since", "2026-08-01T00:00:00Z")));
+                        "category", "business", "since", "2026-08-01T00:00:00Z"),
+                null));
 
         ArgumentCaptor<ArticleQuery> filter = ArgumentCaptor.forClass(ArticleQuery.class);
         verifyFilter(filter);
@@ -167,7 +168,7 @@ class HrafnagudSearchSourceTest {
                 .thenReturn(new ArrayList<>());
 
         source.search(new OdeSearchQuery("Zölle", OdeSearchModality.NEWS,
-                OdeSearchTier.NORMAL, 10, "de-DE", Map.of()));
+                OdeSearchTier.NORMAL, 10, "de-DE", Map.of(), null));
 
         verifyLocale("de-DE");
     }
@@ -268,8 +269,10 @@ class HrafnagudSearchSourceTest {
     }
 
     private static OdeSearchQuery query(String text) {
+        // Trailing null: no authenticated caller. The archive authenticates
+        // with the static api-key and does not publish an OdeAuthService.
         return new OdeSearchQuery(text, OdeSearchModality.NEWS,
-                OdeSearchTier.NORMAL, 10, null, Map.of());
+                OdeSearchTier.NORMAL, 10, null, Map.of(), null);
     }
 
     private static ArticleDocument article(String id, String title, String language) {

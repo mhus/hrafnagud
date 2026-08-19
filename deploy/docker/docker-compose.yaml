@@ -57,6 +57,11 @@ services:
       # Serving the archive back to Vancetope as a Centauri source.
       HRAFNAGUD_CENTAURI_ENABLED: ${HRAFNAGUD_CENTAURI_ENABLED:-false}
       HRAFNAGUD_CENTAURI_API_KEY: ${HRAFNAGUD_CENTAURI_API_KEY:-}
+      # And as a Zarniwoop research provider — separately switchable, because
+      # serving one is not a reason to serve the other. Both keys empty means
+      # no check at all; set them before the endpoints are reachable.
+      HRAFNAGUD_ZARNIWOOP_ENABLED: ${HRAFNAGUD_ZARNIWOOP_ENABLED:-false}
+      HRAFNAGUD_ZARNIWOOP_API_KEY: ${HRAFNAGUD_ZARNIWOOP_API_KEY:-}
       JAVA_OPTS: ${JAVA_OPTS:--XX:+UseG1GC -XX:MaxRAMPercentage=75.0}
     # Mirrors the Kubernetes securityContext, so a change that starts
     # writing outside /tmp fails here rather than only in the cluster.
