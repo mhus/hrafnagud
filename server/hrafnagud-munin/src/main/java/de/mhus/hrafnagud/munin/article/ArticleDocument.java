@@ -2,11 +2,10 @@ package de.mhus.hrafnagud.munin.article;
 
 import de.mhus.hrafnagud.api.article.ContentStatus;
 import de.mhus.hrafnagud.api.article.LanguageSource;
+import de.mhus.hrafnagud.api.article.TranslationStatus;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -54,12 +53,12 @@ import org.springframework.data.mongodb.core.mapping.Document;
                 partialFilter = "{ 'contentStatus': 'PENDING' }"),
         // Near-duplicate detection: same story, different URL.
         @CompoundIndex(name = "content_hash_idx", def = "{ 'contentHash': 1 }"),
-        // The translation worker's claim query. Partial-filtered on a
-        // non-empty backlog so the index tracks what is owed rather than
-        // the whole archive — the same reason the content queue is.
+        // The translation worker's claim query. Partial-filtered to
+        // PENDING so the index tracks the backlog rather than the whole
+        // archive — the same reason the content queue is.
         @CompoundIndex(name = "translation_queue_idx",
                 def = "{ 'translationNextAttemptAt': 1 }",
-                partialFilter = "{ 'pendingTranslations.0': { '$exists': true } }")
+                partialFilter = "{ 'translationStatus': 'PENDING' }")
 })
 @Data
 @Builder
@@ -165,27 +164,17 @@ public class ArticleDocument {
 
     private @Nullable String contentError;
 
-    // ─── Translations ───
-
-    /** Keyed by BCP-47 primary subtag. */
-    @Builder.Default
-    private Map<String, ArticleTranslation> translations = new LinkedHashMap<>();
+    // ─── Translation ───
 
     /**
-     * Target languages still to be produced, drained as each is stored.
+     * Whether this article has been rendered into the pivot language.
      *
-     * <p>The queue is a field rather than a query over what
-     * {@link #translations} is missing, because the set of targets is
-     * configuration: a query would have to be rebuilt — and re-indexed —
-     * every time an operator adds a language. Emptying this list is what
-     * takes an article out of the worker's sight.
-     *
-     * <p>Munin owns the queue but not the engine. Which service performs
-     * a translation is decided by whatever module supplies a provider;
-     * from here it is only "still owed".
+     * <p>Only the state lives here; the translation itself is an
+     * {@code EnrichmentDocument}. A result that can be produced again by
+     * a better model does not belong on the article — the article is what
+     * was collected, not what has since been computed from it.
      */
-    @Builder.Default
-    private List<String> pendingTranslations = new ArrayList<>();
+    private TranslationStatus translationStatus = TranslationStatus.PENDING;
 
     /**
      * When the translation worker may next try. Doubles as the claim

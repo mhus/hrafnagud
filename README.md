@@ -84,6 +84,7 @@ curl 'localhost:9800/api/v1/articles?language=de&size=5'
 | `source_lists` | directories that populate `sources` |
 | `articles` | article metadata, deduplicated across sources |
 | `article_contents` | extracted bodies, images and page metadata, separate because bodies are ~50× larger |
+| `enrichments` | results of processing steps over an article — one document per run, append-only |
 
 Body fetching is off by default (`munin.content.enabled`). Turning it on
 works through whatever has accumulated, since ingest queues everything:
@@ -97,19 +98,30 @@ retry budget; `POST .../skip-content` takes one out of the queue for good.
 
 ## Translation
 
-Off by default. Adding target languages starts filling a backlog:
+Off by default. Setting a **pivot language** starts filling a backlog:
 
 ```yaml
 munin:
   translation:
-    targets: [de, en]
+    pivotLanguage: de
     translateSummary: true      # titles alone cost a tenth of the text
 ```
 
-Munin owns the queue and the storage but not the engine — it only records
-that a language is *owed*. Who produces it is a `TranslationProvider`, and
-one ships: firing an event at a [Vancetope](https://github.com/mhus/vance)
-brain through [vance-ode](https://github.com/mhus/vance-ode).
+One pivot language, not a list of targets. Everything downstream — search,
+rating, clustering — reads one language, and an article already in it is
+marked `SKIPPED` at ingest rather than queued. Translating into a second
+language is a presentation concern and belongs wherever it is displayed,
+not in the archive.
+
+Title and teaser go out in **one** call. At realistic volume the recipe
+prompt dominates the token bill — roughly five times the length of the
+text itself — so a second call would double the expensive half to save
+nothing.
+
+Munin owns the queue but neither the engine nor the result. Who produces
+the translation is a `TranslationProvider`, and one ships: firing an event
+at a [Vancetope](https://github.com/mhus/vance) brain through
+[vance-ode](https://github.com/mhus/vance-ode).
 
 ```yaml
 vance:
@@ -127,10 +139,15 @@ recipe live there as documents, so the prompt and the model are editable
 without redeploying this service. That is the reason to integrate through
 an event rather than to call a model directly from here.
 
-Configure targets with no provider wired and the backlog grows with
+Set a pivot language with no provider wired and the backlog grows with
 nothing draining it — a legible state, and the startup log says so
 explicitly rather than leaving it to be discovered. `GET /api/v1/stats`
 reports `translationBacklog` for the same reason.
+
+The translation itself lands in `enrichments`, not on the article.
+`GET /api/v1/articles?withTranslation=true` folds the newest one into each
+article; `GET /api/v1/articles/{id}/enrichments` lists all of them, and
+`POST /api/v1/articles/{id}/translate` requeues one article.
 
 ## Design decisions
 
@@ -294,21 +311,31 @@ related-story rails are text-heavy too, but nearly all of their text sits
 inside anchors while article prose sits outside them. That one ratio
 separates the two more reliably than any word count.
 
-**Translations are a map keyed by language, not `titleDe`/`titleEn`
-fields.** The third target language must not be a schema change.
+**Processing results go in `enrichments`, not on the article.** A
+translation is the output of a step that can be repeated — with a better
+model, a fixed prompt, a different provider — and each run is a fact worth
+keeping: what was produced, by which model, when. Written onto the article
+it would be a single mutable field, and re-running would destroy the
+comparison that makes re-running worth doing. The collection is
+append-only and read newest-first, so an improved run supersedes an older
+one without erasing it. Rating, keywords and sentiment are the same shape
+and are why the collection is not called `translations`.
 
-**The translation queue is a field, not a query.** Which languages an
-article still owes is stored on it rather than derived from what the
-translations map is missing, because the set of targets is configuration:
-a derived query would need rebuilding — and re-indexing — every time an
-operator adds a language.
+**One pivot language, decided at ingest.** An article already in the pivot
+language is `SKIPPED` when it is stored, not queued and then discovered to
+be a no-op. That makes the backlog the count of actual work, and keeps the
+common case — a German source in a German-pivot archive — free.
 
-**A translation is one article and one language.** An article owing two
-languages is two units of work, so a provider failing on the second does
-not cost the first, and the storage write is per-language rather than a
-whole-map replace. A failing teaser likewise does not sink the title: a
-translated headline with an untranslated teaser is a usable entry, losing
-both to one call is not.
+**Title and teaser are one unit of work, not two.** The earlier design
+translated each separately so a failing teaser could not sink the title.
+That trade is only worth it when the calls cost the same; here the recipe
+prompt is several times the length of the text, so splitting doubles the
+expensive half to protect the cheap one. A failed pair is retried whole.
+
+**The translation queue is a state field, not a query.** `translationStatus`
+plus a partial index on `PENDING` is one indexed scan; deriving the queue
+by asking which articles have no enrichment of type `TRANSLATION` is a join
+across two collections on every tick.
 
 **Permanent failures spend the whole retry budget at once.** Retrying a
 rejected token four more times produces four more rejections. The provider

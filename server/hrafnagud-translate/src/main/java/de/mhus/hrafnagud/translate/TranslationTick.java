@@ -45,15 +45,15 @@ public class TranslationTick {
      */
     @PostConstruct
     void reportConfiguration() {
-        if (config.getTargets().isEmpty()) {
-            log.info("Translation is off — no munin.translation.targets configured");
+        if (config.getPivotLanguage().isBlank()) {
+            log.info("Translation is off — no munin.translation.pivotLanguage configured");
         } else if (!translationService.isAvailable()) {
-            log.warn("Translation targets {} are configured but no provider is wired — "
-                            + "articles will queue and nothing will translate them. "
+            log.warn("Pivot language '{}' is configured but no provider is wired — articles "
+                            + "will queue and nothing will translate them. "
                             + "Set vance.ode.base-url to use a Vancetope brain.",
-                    config.getTargets());
+                    config.getPivotLanguage());
         } else {
-            log.info("Translating into {} via {}", config.getTargets(),
+            log.info("Translating into '{}' via {}", config.getPivotLanguage(),
                     translationService.providerName());
         }
     }
@@ -61,7 +61,7 @@ public class TranslationTick {
     @Scheduled(fixedDelayString = "${munin.translation.tickInterval:PT20S}",
             initialDelayString = "${munin.translation.initialDelay:PT30S}")
     public void tick() {
-        if (config.getTargets().isEmpty() || !translationService.isAvailable()) {
+        if (config.getPivotLanguage().isBlank() || !translationService.isAvailable()) {
             return;
         }
         if (running.get() > 0) {
@@ -93,16 +93,13 @@ public class TranslationTick {
 
         for (ArticleDocument article : claimed) {
             try {
-                translationService.translateNext(article, now);
+                translationService.translate(article, now);
             } catch (RuntimeException e) {
-                // translateNext already records TranslationException; this
+                // translate() already records TranslationException; this
                 // catches everything else so one bad article cannot end the
                 // round and strand the rest of the batch under its lease.
                 log.warn("Translating article {} threw: {}", article.getId(), e.toString());
-                articleService.recordTranslationFailure(
-                        String.valueOf(article.getId()),
-                        article.getPendingTranslations().isEmpty()
-                                ? "?" : article.getPendingTranslations().getFirst(),
+                articleService.recordTranslationFailure(String.valueOf(article.getId()),
                         e.getClass().getSimpleName() + ": " + e.getMessage(),
                         article.getTranslationAttempts(), now);
             }

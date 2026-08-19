@@ -9,16 +9,14 @@ import lombok.NoArgsConstructor;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A translated rendering of an article's title and teaser.
+ * An article's title and teaser in the pivot language.
  *
- * <p>No translation engine exists yet; the shape is defined now so that the
- * eventual one writes into a place the schema already has, and so that
- * consumers can code against the field today. {@code engine} records which
- * system produced it, because a corpus translated by three different
- * services over two years is otherwise impossible to re-evaluate.
- *
- * <p>The translated body does not live here — it sits with the original
- * body in the content resource, for the same size reason.
+ * <p>A flattened view of the newest {@code TRANSLATION} enrichment, for
+ * callers that want to read the archive rather than audit how it was
+ * produced. {@code producer} and {@code model} are carried along because
+ * a corpus translated by three systems over two years is otherwise
+ * impossible to re-evaluate; everything else about the run is at
+ * {@code GET /articles/{id}/enrichments}.
  */
 @Data
 @Builder
@@ -31,8 +29,13 @@ public class ArticleTranslationDto {
 
     private @Nullable String summary;
 
-    /** Identifier of the translating system, e.g. {@code deepl}, {@code gpt-4o}. */
-    private String engine = "";
+    private @Nullable String language;
+
+    /** Component that produced it, e.g. {@code vance-ode}. */
+    private String producer = "";
+
+    /** Model behind the producer, when it reported one. */
+    private @Nullable String model;
 
     private @Nullable Instant translatedAt;
 }

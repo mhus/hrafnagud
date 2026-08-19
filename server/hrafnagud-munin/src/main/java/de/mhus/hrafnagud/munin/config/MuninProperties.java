@@ -218,19 +218,24 @@ public class MuninProperties {
     public static class Translation {
 
         /**
-         * Languages every ingested article should end up in, as BCP-47
-         * primary subtags. Empty — the default — means no article is ever
-         * queued and the whole subsystem stays dormant.
+         * The one language everything is normalised into, as a BCP-47
+         * primary subtag. Empty — the default — means no article is ever
+         * queued and the subsystem stays dormant.
+         *
+         * <p>One language rather than a list: translation here is the
+         * step that lets every later stage work in a single language.
+         * Rendering the archive in several display languages is a
+         * different job, and one field cannot honestly be both.
          */
-        private List<String> targets = new ArrayList<>();
+        private String pivotLanguage = "";
 
         /**
          * Whether the teaser is translated alongside the title.
          *
-         * <p>Off doubles the archive's multilingual reach per unit cost:
-         * a translated title is enough to make a list, a search result or
-         * a digest usable, and the teaser is roughly ten times the text.
-         * On when the teaser itself has to be readable.
+         * <p>Both go in one call either way, so switching this off saves
+         * the teaser's tokens but not a request. Titles alone already
+         * carry lists, search results and clustering; the teaser is worth
+         * its cost when it has to be readable.
          */
         private boolean translateSummary = true;
 

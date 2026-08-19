@@ -94,13 +94,16 @@ munin:
     claimLease: PT15M
 
   translation:
-    # Empty means no article is ever queued and the subsystem stays
-    # dormant. Adding a language here starts filling a backlog — make
-    # sure something is wired to work it (see vance.ode below), or the
-    # queue grows with nothing draining it.
-    targets: []
-    # Titles alone make lists, search results and digests usable at a
-    # tenth of the text. Turn on when the teaser itself must be readable.
+    # The one language everything is normalised into. Empty means no
+    # article is ever queued and the subsystem stays dormant. Setting it
+    # starts filling a backlog — make sure something is wired to work it
+    # (see vance.ode below), or the queue grows with nothing draining it.
+    #
+    # One language, not a list: this is the step that lets later stages —
+    # keywords, clustering, embeddings — work in a single language.
+    pivotLanguage: ${HRAFNAGUD_PIVOT_LANGUAGE:}
+    # Title and teaser go in one call either way; switching this off saves
+    # the teaser's tokens but not a request.
     translateSummary: true
     tickInterval: PT20S
     batchSize: 10

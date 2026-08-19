@@ -44,6 +44,12 @@ public class MuninStatsDto {
      */
     private long translationBacklog;
 
+    /** Article count per {@code TranslationStatus}. */
+    private Map<String, Long> articlesByTranslationStatus = new LinkedHashMap<>();
+
+    /** Translation enrichments stored — more than one per article after a re-run. */
+    private long enrichmentsTotal;
+
     /** Article count per language, most frequent first, top 20. */
     private Map<String, Long> articlesByLanguage = new LinkedHashMap<>();
 

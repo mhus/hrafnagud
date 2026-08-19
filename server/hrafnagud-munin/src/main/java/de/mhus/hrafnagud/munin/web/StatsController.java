@@ -1,7 +1,9 @@
 package de.mhus.hrafnagud.munin.web;
 
 import de.mhus.hrafnagud.api.common.MuninStatsDto;
+import de.mhus.hrafnagud.api.enrichment.EnrichmentType;
 import de.mhus.hrafnagud.munin.article.ArticleService;
+import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.hrafnagud.munin.source.SourceService;
 import de.mhus.hrafnagud.munin.sourcelist.SourceListService;
 import java.time.Duration;
@@ -25,6 +27,7 @@ public class StatsController {
     private final SourceService sourceService;
     private final SourceListService listService;
     private final ArticleService articleService;
+    private final EnrichmentService enrichmentService;
 
     @GetMapping("/api/v1/stats")
     public MuninStatsDto stats() {
@@ -39,6 +42,8 @@ public class StatsController {
                 .articlesByContentStatus(articleService.countByContentStatus())
                 .articlesByLanguage(articleService.countByLanguage())
                 .translationBacklog(articleService.countTranslationBacklog())
+                .articlesByTranslationStatus(articleService.countByTranslationStatus())
+                .enrichmentsTotal(enrichmentService.countByType(EnrichmentType.TRANSLATION))
                 .newestArticleAt(articleService.newestArticleAt().orElse(null))
                 .oldestArticleAt(articleService.oldestArticleAt().orElse(null))
                 .serverTime(now)

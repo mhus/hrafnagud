@@ -4,18 +4,20 @@ import de.mhus.hrafnagud.api.article.ArticleContentDto;
 import de.mhus.hrafnagud.api.article.ArticleDto;
 import de.mhus.hrafnagud.api.article.ArticleImageDto;
 import de.mhus.hrafnagud.api.article.ArticleTranslationDto;
+import de.mhus.hrafnagud.api.enrichment.EnrichmentDto;
 import de.mhus.hrafnagud.api.source.SourceDto;
 import de.mhus.hrafnagud.api.source.SourceListDto;
 import de.mhus.hrafnagud.munin.article.ArticleContentDocument;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleImage;
-import de.mhus.hrafnagud.munin.article.ArticleTranslation;
+import de.mhus.hrafnagud.munin.enrichment.EnrichmentDocument;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
 import de.mhus.hrafnagud.munin.sourcelist.SourceListDocument;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Documents to DTOs.
@@ -83,10 +85,16 @@ public final class MuninMapper {
     }
 
     public static ArticleDto toDto(ArticleDocument article) {
-        Map<String, ArticleTranslationDto> translations = new LinkedHashMap<>();
-        article.getTranslations().forEach((language, translation) ->
-                translations.put(language, toDto(translation)));
+        return toDto(article, null);
+    }
 
+    /**
+     * @param translation newest {@code TRANSLATION} enrichment for this
+     *                    article, or {@code null} when there is none or
+     *                    the caller did not ask for it
+     */
+    public static ArticleDto toDto(ArticleDocument article,
+            @Nullable EnrichmentDocument translation) {
         return ArticleDto.builder()
                 .id(StringUtils.defaultString(article.getId()))
                 .url(article.getUrl())
@@ -107,18 +115,41 @@ public final class MuninMapper {
                 .contentFetchedAt(article.getContentFetchedAt())
                 .contentWordCount(article.getContentWordCount())
                 .contentError(article.getContentError())
-                .pendingTranslations(new ArrayList<>(article.getPendingTranslations()))
-                .translations(translations)
+                .translationStatus(article.getTranslationStatus())
+                .translationError(article.getTranslationError())
+                .translation(translation == null ? null : toTranslationDto(translation))
                 .build();
     }
 
-    private static ArticleTranslationDto toDto(ArticleTranslation translation) {
+    /** Flattens a translation enrichment for the article view. */
+    private static ArticleTranslationDto toTranslationDto(EnrichmentDocument enrichment) {
+        Map<String, Object> content = enrichment.getContent();
         return ArticleTranslationDto.builder()
-                .title(translation.getTitle())
-                .summary(translation.getSummary())
-                .engine(translation.getEngine())
-                .translatedAt(translation.getTranslatedAt())
+                .title(str(content.get("title")))
+                .summary(StringUtils.trimToNull(str(content.get("summary"))))
+                .language(enrichment.getLanguage())
+                .producer(enrichment.getProducer())
+                .model(enrichment.getModel())
+                .translatedAt(enrichment.getCreatedAt())
                 .build();
+    }
+
+    /** Full record of one processing run. */
+    public static EnrichmentDto toDto(EnrichmentDocument enrichment) {
+        return EnrichmentDto.builder()
+                .id(StringUtils.defaultString(enrichment.getId()))
+                .articleId(enrichment.getArticleId())
+                .type(enrichment.getType())
+                .producer(enrichment.getProducer())
+                .model(enrichment.getModel())
+                .language(enrichment.getLanguage())
+                .createdAt(enrichment.getCreatedAt())
+                .content(new LinkedHashMap<>(enrichment.getContent()))
+                .build();
+    }
+
+    private static String str(@Nullable Object value) {
+        return value instanceof String s ? s : "";
     }
 
     public static ArticleContentDto toDto(ArticleContentDocument content) {

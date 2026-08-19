@@ -4,13 +4,19 @@ import de.mhus.hrafnagud.api.article.ArticleContentDto;
 import de.mhus.hrafnagud.api.article.ArticleDto;
 import de.mhus.hrafnagud.api.article.ContentStatus;
 import de.mhus.hrafnagud.api.common.PageDto;
+import de.mhus.hrafnagud.api.enrichment.EnrichmentDto;
+import de.mhus.hrafnagud.api.enrichment.EnrichmentType;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleQuery;
 import de.mhus.hrafnagud.munin.article.ArticleService;
+import de.mhus.hrafnagud.munin.enrichment.EnrichmentDocument;
+import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.hrafnagud.munin.error.BadRequestException;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import org.apache.commons.lang3.StringUtils;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatus;
@@ -32,6 +38,7 @@ public class ArticleController {
     private static final int MAX_PAGE_SIZE = 200;
 
     private final ArticleService articleService;
+    private final EnrichmentService enrichmentService;
 
     /**
      * Lists articles, newest first.
@@ -53,6 +60,7 @@ public class ArticleController {
             @RequestParam(value = "until", required = false) @Nullable Instant until,
             @RequestParam(value = "oldestFirst", defaultValue = "false") boolean oldestFirst,
             @RequestParam(value = "count", defaultValue = "false") boolean count,
+            @RequestParam(value = "withTranslation", defaultValue = "false") boolean withTranslation,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "50") int size) {
 
@@ -75,12 +83,45 @@ public class ArticleController {
         int pageIndex = Math.max(page, 0);
         List<ArticleDocument> articles = articleService.search(filter, pageIndex, pageSize);
         long total = count ? articleService.count(filter) : -1;
-        return PageDto.of(articles.stream().map(MuninMapper::toDto).toList(),
+        // One extra query for the whole page rather than one per article.
+        // Off by default because most callers read the original.
+        Map<String, EnrichmentDocument> translations = withTranslation
+                ? enrichmentService.latestForEach(
+                        articles.stream().map(a -> StringUtils.defaultString(a.getId())).toList(),
+                        EnrichmentType.TRANSLATION)
+                : Map.of();
+        return PageDto.of(
+                articles.stream()
+                        .map(a -> MuninMapper.toDto(a, translations.get(a.getId())))
+                        .toList(),
                 pageIndex, pageSize, total);
     }
 
     @GetMapping("/{id}")
     public ArticleDto get(@PathVariable("id") String id) {
+        ArticleDocument article = articleService.requireById(id);
+        return MuninMapper.toDto(article,
+                enrichmentService.latest(id, EnrichmentType.TRANSLATION).orElse(null));
+    }
+
+    /**
+     * Every processing result for this article, newest first.
+     *
+     * <p>Including superseded ones — that is the point of the collection.
+     * Comparing what two models made of the same article is only possible
+     * if the older result is still there.
+     */
+    @GetMapping("/{id}/enrichments")
+    public List<EnrichmentDto> enrichments(@PathVariable("id") String id) {
+        articleService.requireById(id);
+        return enrichmentService.allFor(id).stream().map(MuninMapper::toDto).toList();
+    }
+
+    /** Queues the article for translation again, with a fresh budget. */
+    @PostMapping("/{id}/translate")
+    public ArticleDto requeueTranslation(@PathVariable("id") String id) {
+        articleService.requireById(id);
+        articleService.requeueTranslation(id, Instant.now());
         return MuninMapper.toDto(articleService.requireById(id));
     }
 

@@ -37,11 +37,15 @@ class TranslateWiringTest {
     static class StubMuninBeans {
         @Bean ArticleService articleService() { return mock(ArticleService.class); }
         @Bean MuninProperties muninProperties() { return new MuninProperties(); }
+        @Bean de.mhus.hrafnagud.munin.enrichment.EnrichmentService enrichmentService() {
+            return mock(de.mhus.hrafnagud.munin.enrichment.EnrichmentService.class);
+        }
         @Bean TranslationService translationService(ArticleService articles,
+                de.mhus.hrafnagud.munin.enrichment.EnrichmentService enrichments,
                 MuninProperties properties,
                 org.springframework.beans.factory.ObjectProvider<TranslationProvider> provider) {
             // Same construction the production @Service uses.
-            return new TranslationService(articles, properties, provider);
+            return new TranslationService(articles, enrichments, properties, provider);
         }
     }
 

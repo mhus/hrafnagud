@@ -1,7 +1,9 @@
 package de.mhus.hrafnagud.munin.article;
 
 import de.mhus.hrafnagud.api.article.ContentStatus;
+import de.mhus.hrafnagud.api.article.TranslationStatus;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
 import de.mhus.hrafnagud.munin.lang.LanguageResolver;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
@@ -57,7 +59,7 @@ public class ArticleService {
     private static final String F_CONTENT_STATUS = "contentStatus";
     private static final String F_CONTENT_NEXT_ATTEMPT_AT = "contentNextAttemptAt";
     private static final String F_CONTENT_ATTEMPTS = "contentAttempts";
-    private static final String F_PENDING_TRANSLATIONS = "pendingTranslations";
+    private static final String F_TRANSLATION_STATUS = "translationStatus";
     private static final String F_TRANSLATION_NEXT_ATTEMPT_AT = "translationNextAttemptAt";
 
     /** Languages reported by the statistics endpoint. */
@@ -66,13 +68,16 @@ public class ArticleService {
     private final ArticleRepository repository;
     private final ArticleContentRepository contentRepository;
     private final MongoTemplate mongoTemplate;
+    private final EnrichmentService enrichmentService;
     private final MuninProperties.Content contentConfig;
     private final MuninProperties.Translation translationConfig;
 
     public ArticleService(ArticleRepository repository, ArticleContentRepository contentRepository,
-            MongoTemplate mongoTemplate, MuninProperties properties) {
+            EnrichmentService enrichmentService, MongoTemplate mongoTemplate,
+            MuninProperties properties) {
         this.repository = repository;
         this.contentRepository = contentRepository;
+        this.enrichmentService = enrichmentService;
         this.mongoTemplate = mongoTemplate;
         this.contentConfig = properties.getContent();
         this.translationConfig = properties.getTranslation();
@@ -103,7 +108,7 @@ public class ArticleService {
             LanguageResolver.Resolution language, ContentStatus contentStatus, Instant now) {
 
         ArticleDocument document = ArticleFactory.build(candidate, source, language,
-                contentStatus, translationConfig.getTargets(), now);
+                contentStatus, translationConfig.getPivotLanguage(), now);
 
         try {
             return upsert(document, source.getName(), now);
@@ -138,8 +143,7 @@ public class ArticleService {
                 .setOnInsert(F_CONTENT_NEXT_ATTEMPT_AT, document.getContentNextAttemptAt())
                 .setOnInsert(F_CONTENT_ATTEMPTS, 0)
                 .setOnInsert("contentWordCount", 0)
-                .setOnInsert("translations", new LinkedHashMap<String, ArticleTranslation>())
-                .setOnInsert("pendingTranslations", document.getPendingTranslations())
+                .setOnInsert(F_TRANSLATION_STATUS, document.getTranslationStatus())
                 .setOnInsert(F_TRANSLATION_NEXT_ATTEMPT_AT, document.getTranslationNextAttemptAt())
                 .setOnInsert("translationAttempts", 0)
                 // Spring Data treats a null @Version as "not yet persisted"
@@ -364,7 +368,7 @@ public class ArticleService {
     // ─── Translation queue ───
 
     /**
-     * Atomically claims articles that still owe a translation.
+     * Atomically claims articles awaiting translation.
      *
      * <p>Same lease-in-the-schedule-field trick as the other two queues:
      * {@code translationNextAttemptAt} is pushed out on claim, so a
@@ -375,8 +379,9 @@ public class ArticleService {
         Instant leaseUntil = now.plus(translationConfig.getClaimLease());
         List<ArticleDocument> claimed = new ArrayList<>();
         for (int i = 0; i < limit; i++) {
-            Query query = Query.query(Criteria.where(F_PENDING_TRANSLATIONS + ".0").exists(true)
-                            .and(F_TRANSLATION_NEXT_ATTEMPT_AT).lte(now))
+            Query query = Query.query(
+                            Criteria.where(F_TRANSLATION_STATUS).is(TranslationStatus.PENDING)
+                                    .and(F_TRANSLATION_NEXT_ATTEMPT_AT).lte(now))
                     .with(Sort.by(Sort.Direction.ASC, F_TRANSLATION_NEXT_ATTEMPT_AT));
             ArticleDocument article = mongoTemplate.findAndModify(query,
                     new Update().set(F_TRANSLATION_NEXT_ATTEMPT_AT, leaseUntil)
@@ -392,45 +397,36 @@ public class ArticleService {
     }
 
     /**
-     * Stores one language's translation and takes it off the backlog.
-     *
-     * <p>The write is per language rather than per article: a two-target
-     * article whose second language fails should keep the first, and an
-     * all-or-nothing write would throw it away on the retry.
+     * Marks an article translated. The translation itself is an
+     * enrichment and was already written by the caller.
      */
-    public void recordTranslation(String articleId, String language,
-            ArticleTranslation translation, Instant now) {
-
-        Update update = new Update()
-                .set("translations." + language, translation)
-                .pull(F_PENDING_TRANSLATIONS, language)
-                .set(F_TRANSLATION_NEXT_ATTEMPT_AT, now)
-                .set("translationAttempts", 0)
-                .unset("translationError");
-        mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(articleId)), update,
+    public void recordTranslated(String articleId) {
+        mongoTemplate.updateFirst(
+                Query.query(Criteria.where("_id").is(articleId)),
+                new Update()
+                        .set(F_TRANSLATION_STATUS, TranslationStatus.DONE)
+                        .unset(F_TRANSLATION_NEXT_ATTEMPT_AT)
+                        .unset("translationError"),
                 ArticleDocument.class);
-        clearQueueMarkerIfDrained(articleId);
     }
 
     /**
-     * Records a failed translation, retrying or giving the language up.
+     * Records a failed translation, retrying or giving up.
      *
-     * <p>Giving up drops the language from the backlog. Leaving it there
-     * would make the queue grow without bound on a provider that is
-     * permanently misconfigured, and the article's {@code translations}
-     * map already shows what is missing.
+     * <p>Giving up is a terminal {@code FAILED} rather than an endlessly
+     * retried {@code PENDING}: a provider that is permanently
+     * misconfigured would otherwise grow the backlog without bound, and
+     * the status is what an operator reads to find out.
      */
-    public void recordTranslationFailure(String articleId, String language,
-            @Nullable String error, int attempts, Instant now) {
+    public void recordTranslationFailure(String articleId, @Nullable String error,
+            int attempts, Instant now) {
 
         Update update = new Update().set("translationError",
                 StringUtils.abbreviate(StringUtils.defaultString(error, "translation failed"), 500));
 
         if (attempts >= translationConfig.getMaxAttempts()) {
-            update.pull(F_PENDING_TRANSLATIONS, language);
-            update.set("translationAttempts", 0);
-            log.info("Giving up on '{}' translation of article {} after {} attempts",
-                    language, articleId, attempts);
+            update.set(F_TRANSLATION_STATUS, TranslationStatus.FAILED);
+            update.unset(F_TRANSLATION_NEXT_ATTEMPT_AT);
         } else {
             long delaySeconds = translationConfig.getRetryDelay().getSeconds()
                     * (1L << Math.min(attempts, 6));
@@ -439,46 +435,37 @@ public class ArticleService {
 
         mongoTemplate.updateFirst(Query.query(Criteria.where("_id").is(articleId)), update,
                 ArticleDocument.class);
-        clearQueueMarkerIfDrained(articleId);
     }
 
-    /**
-     * Clears the schedule field once nothing is owed.
-     *
-     * <p>The partial index is keyed on a non-empty backlog, so a drained
-     * article leaves it either way; unsetting the timestamp keeps the
-     * document honest about not being queued.
-     */
-    private void clearQueueMarkerIfDrained(String articleId) {
-        mongoTemplate.updateFirst(
-                Query.query(Criteria.where("_id").is(articleId)
-                        .and(F_PENDING_TRANSLATIONS).size(0)),
-                new Update().unset(F_TRANSLATION_NEXT_ATTEMPT_AT),
-                ArticleDocument.class);
-    }
-
-    /** Queues an article for a language again — used by the manual endpoint. */
-    public void requeueTranslation(String articleId, String language, Instant now) {
+    /** Queues an article for translation again, with a fresh budget. */
+    public void requeueTranslation(String articleId, Instant now) {
         mongoTemplate.updateFirst(
                 Query.query(Criteria.where("_id").is(articleId)),
-                new Update().addToSet(F_PENDING_TRANSLATIONS, language)
+                new Update()
+                        .set(F_TRANSLATION_STATUS, TranslationStatus.PENDING)
                         .set(F_TRANSLATION_NEXT_ATTEMPT_AT, now)
                         .set("translationAttempts", 0)
                         .unset("translationError"),
                 ArticleDocument.class);
     }
 
-    /** Articles with at least one language still owed. */
+    /** Articles awaiting translation. */
     public long countTranslationBacklog() {
         return mongoTemplate.count(
-                Query.query(Criteria.where(F_PENDING_TRANSLATIONS + ".0").exists(true)),
+                Query.query(Criteria.where(F_TRANSLATION_STATUS).is(TranslationStatus.PENDING)),
                 ArticleDocument.class);
     }
 
-    /** Deletes an article and its body. */
+    /** Article count per {@link TranslationStatus}. */
+    public Map<String, Long> countByTranslationStatus() {
+        return groupCount(F_TRANSLATION_STATUS, Integer.MAX_VALUE);
+    }
+
+    /** Deletes an article, its body, and everything derived from it. */
     public void delete(String articleId) {
         ArticleDocument article = requireById(articleId);
         contentRepository.deleteByArticleId(articleId);
+        enrichmentService.deleteForArticle(articleId);
         repository.delete(article);
     }
 

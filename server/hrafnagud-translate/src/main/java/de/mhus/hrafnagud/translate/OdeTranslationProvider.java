@@ -1,9 +1,13 @@
 package de.mhus.hrafnagud.translate;
 
 import de.mhus.vance.ode.core.VanceOdeException;
+import de.mhus.vance.ode.ursa.EventResult;
 import de.mhus.vance.ode.ursa.UrsaEventClient;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Translates by firing a Vancetope event.
@@ -15,9 +19,7 @@ import lombok.extern.slf4j.Slf4j;
  * without a redeploy here, which is the whole reason to integrate through
  * an event rather than to call a model directly.
  *
- * <p>Built by {@link TranslateConfiguration} only when Ode is
- * configured. Without {@code vance.ode.base-url} there is no client bean,
- * no provider, and the backlog simply goes unworked.
+ * <p>Built by {@link TranslateConfiguration} only when Ode is configured.
  */
 @Slf4j
 public class OdeTranslationProvider implements TranslationProvider {
@@ -36,18 +38,36 @@ public class OdeTranslationProvider implements TranslationProvider {
     }
 
     @Override
-    public String translate(String text, String targetLanguage) {
+    public TranslatedText translate(String title, @Nullable String summary,
+            String targetLanguage) {
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("title", title);
+        payload.put("summary", StringUtils.defaultString(summary));
+        payload.put("targetLang", targetLanguage);
+
         try {
-            String translated = events.requireText(eventName,
-                    Map.of("text", text, "targetLang", targetLanguage));
-            if (translated.isBlank()) {
-                // A blank result for non-blank input is the event answering
-                // something other than a translation. Storing it would put
-                // an empty title in the archive and call it translated.
-                throw TranslationException.permanent(
-                        "event '" + eventName + "' returned a blank translation", null);
+            EventResult result = events.fire(eventName, payload);
+            Map<String, Object> output = result.getOutput();
+            if (output == null) {
+                // The event answered, but with nothing. Almost always a
+                // configuration mistake on the brain side — async: true, or
+                // an output the caller is not allowed to see.
+                throw TranslationException.permanent("event '" + eventName
+                        + "' returned no output; is it async or withholding it?", null);
             }
-            return translated;
+
+            String translatedTitle = text(output, "title");
+            if (translatedTitle.isBlank()) {
+                // A blank title for a non-blank one is the event answering
+                // something other than a translation. Storing it would put
+                // an empty headline in the archive and call it translated.
+                throw TranslationException.permanent(
+                        "event '" + eventName + "' returned no title", null);
+            }
+            return new TranslatedText(translatedTitle,
+                    StringUtils.trimToNull(text(output, "summary")));
+
         } catch (VanceOdeException e) {
             // Ode already decided whether the far end might behave
             // differently next time; re-deriving that from the status here
@@ -55,5 +75,10 @@ public class OdeTranslationProvider implements TranslationProvider {
             throw new TranslationException(
                     "event '" + eventName + "' failed: " + e.getMessage(), e.isRetryable(), e);
         }
+    }
+
+    private static String text(Map<String, Object> output, String key) {
+        Object value = output.get(key);
+        return value instanceof String s ? s.trim() : "";
     }
 }

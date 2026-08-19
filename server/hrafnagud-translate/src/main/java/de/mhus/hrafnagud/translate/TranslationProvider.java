@@ -1,5 +1,7 @@
 package de.mhus.hrafnagud.translate;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Whatever actually performs a translation.
  *
@@ -10,25 +12,29 @@ package de.mhus.hrafnagud.translate;
  * this cannot tell them apart, and swapping one for another must not touch
  * anything but the bean that is wired.
  *
- * <p>One text per call. A provider that could translate a title and a
- * teaser in a single request would save the prompt overhead, but only by
- * requiring structured output and the error handling that comes with it —
- * worth doing when the cost is measured, not before.
+ * <p>Title and teaser go in <em>one</em> call. Measured against a paid
+ * model at realistic volume, the recipe prompt dominates the token bill —
+ * roughly five times the article text — so translating the two fields
+ * separately doubles the cost of the expensive half to save nothing.
  */
 public interface TranslationProvider {
 
-    /** Identifier stored with each translation, e.g. {@code vance-ode}. */
+    /** Identifier stored with each result, e.g. {@code vance-ode}. */
     String name();
 
+    /** Model behind it when known, for the enrichment record. */
+    default @Nullable String model() {
+        return null;
+    }
+
     /**
-     * Translates {@code text} into {@code targetLanguage}.
+     * Translates an article's title and teaser in one request.
      *
+     * @param summary        may be {@code null} — many feeds carry none
      * @param targetLanguage BCP-47 primary subtag ({@code de}, {@code en})
-     * @return the translation; never {@code null}, never blank for
-     *         non-blank input
      * @throws TranslationException when the translation could not be
-     *         produced — the caller decides whether to retry from
+     *         produced; the caller decides whether to retry from
      *         {@link TranslationException#isRetryable()}
      */
-    String translate(String text, String targetLanguage);
+    TranslatedText translate(String title, @Nullable String summary, String targetLanguage);
 }

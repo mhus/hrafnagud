@@ -96,17 +96,19 @@ public class ArticleDto {
 
     private @Nullable String contentError;
 
-    /**
-     * Target languages still owed. Non-empty means the article is queued
-     * for translation; empty means either done or never queued — which of
-     * the two is answered by {@link #translations}.
-     */
-    private List<String> pendingTranslations = new ArrayList<>();
+    /** Whether the article has been rendered into the pivot language. */
+    private TranslationStatus translationStatus = TranslationStatus.PENDING;
+
+    private @Nullable String translationError;
 
     /**
-     * Translations keyed by BCP-47 primary subtag. Deliberately a map rather
-     * than a pair of {@code titleEn}/{@code titleDe} fields: the third
-     * target language must not be a schema change.
+     * The current translation, when one exists and was asked for.
+     *
+     * <p>Filled from the newest {@code TRANSLATION} enrichment rather
+     * than stored on the article: a processing result that can be
+     * produced again by a better model is not a property of the news.
+     * Every result ever produced is at
+     * {@code GET /articles/{id}/enrichments}.
      */
-    private Map<String, ArticleTranslationDto> translations = new LinkedHashMap<>();
+    private @Nullable ArticleTranslationDto translation;
 }

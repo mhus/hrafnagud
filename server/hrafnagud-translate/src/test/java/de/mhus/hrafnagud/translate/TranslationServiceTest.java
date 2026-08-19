@@ -7,12 +7,13 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
+import de.mhus.hrafnagud.api.enrichment.EnrichmentType;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleService;
-import de.mhus.hrafnagud.munin.article.ArticleTranslation;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.enrichment.EnrichmentDocument;
+import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,8 +24,8 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.ObjectProvider;
 
 /**
- * The queue's behaviour around a provider: what it stores, what it
- * retries, and what it refuses to let one failure take down with it.
+ * What the queue does around a provider: what it records, what it
+ * retries, and what it refuses to store.
  */
 class TranslationServiceTest {
 
@@ -32,19 +33,22 @@ class TranslationServiceTest {
     private static final String ID = "a1";
 
     private ArticleService articleService;
+    private EnrichmentService enrichmentService;
     private MuninProperties properties;
 
     @BeforeEach
     void setUp() {
         articleService = mock(ArticleService.class);
+        enrichmentService = mock(EnrichmentService.class);
         properties = new MuninProperties();
+        properties.getTranslation().setPivotLanguage("de");
     }
 
     private TranslationService serviceWith(@Nullable TranslationProvider provider) {
-        return new TranslationService(articleService, properties, objectProviderOf(provider));
+        return new TranslationService(articleService, enrichmentService, properties,
+                objectProviderOf(provider));
     }
 
-    /** Minimal ObjectProvider: only getIfAvailable is exercised. */
     private static ObjectProvider<TranslationProvider> objectProviderOf(
             @Nullable TranslationProvider provider) {
         return new ObjectProvider<>() {
@@ -63,145 +67,146 @@ class TranslationServiceTest {
         };
     }
 
-    private static ArticleDocument article(String... pending) {
+    private static ArticleDocument article() {
         ArticleDocument article = new ArticleDocument();
         article.setId(ID);
         article.setTitle("Council approves transit plan");
         article.setSummary("The vote ended a three-year debate.");
-        article.setPendingTranslations(new ArrayList<>(List.of(pending)));
         return article;
     }
 
-    /** Provider that echoes the target language into the result. */
-    private static TranslationProvider echoing() {
-        return new TranslationProvider() {
-            @Override public String name() { return "test"; }
-            @Override public String translate(String text, String targetLanguage) {
-                return "[" + targetLanguage + "] " + text;
-            }
-        };
+    /** Records what it was asked to translate and echoes the language back. */
+    private static class Recording implements TranslationProvider {
+        final List<String> titles = new ArrayList<>();
+        final List<String> summaries = new ArrayList<>();
+        int calls;
+
+        @Override public String name() { return "test"; }
+        @Override public @Nullable String model() { return "test-model-1"; }
+        @Override public TranslatedText translate(String title, @Nullable String summary,
+                String targetLanguage) {
+            calls++;
+            titles.add(title);
+            summaries.add(String.valueOf(summary));
+            return new TranslatedText("[" + targetLanguage + "] " + title,
+                    summary == null ? null : "[" + targetLanguage + "] " + summary);
+        }
     }
 
     @Test
-    void translates_the_first_pending_language_and_stores_it() {
-        TranslationService service = serviceWith(echoing());
+    void a_translation_is_recorded_as_an_enrichment_not_on_the_article() {
+        // The article is what was collected; a translation is what a model
+        // made of it later, and re-running must not destroy the earlier one.
+        TranslationService service = serviceWith(new Recording());
 
-        String done = service.translateNext(article("de", "fr"), NOW);
+        assertThat(service.translate(article(), NOW)).isTrue();
 
-        assertThat(done).isEqualTo("de");
-        ArgumentCaptor<ArticleTranslation> stored =
-                ArgumentCaptor.forClass(ArticleTranslation.class);
-        verify(articleService).recordTranslation(eq(ID), eq("de"), stored.capture(), eq(NOW));
-        assertThat(stored.getValue().getTitle()).isEqualTo("[de] Council approves transit plan");
-        assertThat(stored.getValue().getSummary())
-                .isEqualTo("[de] The vote ended a three-year debate.");
-        assertThat(stored.getValue().getEngine()).isEqualTo("test");
+        ArgumentCaptor<EnrichmentDocument> stored =
+                ArgumentCaptor.forClass(EnrichmentDocument.class);
+        verify(enrichmentService).record(stored.capture());
+        EnrichmentDocument enrichment = stored.getValue();
+        assertThat(enrichment.getArticleId()).isEqualTo(ID);
+        assertThat(enrichment.getType()).isEqualTo(EnrichmentType.TRANSLATION);
+        assertThat(enrichment.getLanguage()).isEqualTo("de");
+        assertThat(enrichment.getProducer()).isEqualTo("test");
+        assertThat(enrichment.getModel()).isEqualTo("test-model-1");
+        assertThat(enrichment.getCreatedAt()).isEqualTo(NOW);
+        assertThat(enrichment.getContent())
+                .containsEntry("title", "[de] Council approves transit plan")
+                .containsEntry("summary", "[de] The vote ended a three-year debate.");
+        verify(articleService).recordTranslated(ID);
     }
 
     @Test
-    void one_language_per_call_so_a_later_failure_cannot_cost_an_earlier_success() {
-        // Two pending languages are two units of work. Draining both here
-        // would put them under one retry and one lease.
-        TranslationService service = serviceWith(echoing());
+    void title_and_teaser_go_in_one_call() {
+        // The prompt dominates the token bill, so a second call would
+        // double the expensive half to save nothing.
+        Recording provider = new Recording();
 
-        service.translateNext(article("de", "fr"), NOW);
+        serviceWith(provider).translate(article(), NOW);
 
-        verify(articleService).recordTranslation(eq(ID), eq("de"), any(), any());
-        verify(articleService, never()).recordTranslation(eq(ID), eq("fr"), any(), any());
+        assertThat(provider.calls).isEqualTo(1);
+        assertThat(provider.titles).containsExactly("Council approves transit plan");
+        assertThat(provider.summaries).containsExactly("The vote ended a three-year debate.");
     }
 
     @Test
-    void summary_translation_can_be_switched_off() {
+    void the_teaser_can_be_left_out() {
         properties.getTranslation().setTranslateSummary(false);
-        TranslationService service = serviceWith(echoing());
+        Recording provider = new Recording();
 
-        service.translateNext(article("de"), NOW);
+        serviceWith(provider).translate(article(), NOW);
 
-        ArgumentCaptor<ArticleTranslation> stored =
-                ArgumentCaptor.forClass(ArticleTranslation.class);
-        verify(articleService).recordTranslation(any(), any(), stored.capture(), any());
-        assertThat(stored.getValue().getTitle()).isNotBlank();
-        assertThat(stored.getValue().getSummary()).isNull();
+        assertThat(provider.calls).isEqualTo(1);
+        assertThat(provider.summaries).containsExactly("null");
+        ArgumentCaptor<EnrichmentDocument> stored =
+                ArgumentCaptor.forClass(EnrichmentDocument.class);
+        verify(enrichmentService).record(stored.capture());
+        assertThat(stored.getValue().getContent()).doesNotContainKey("summary");
     }
 
     @Test
-    void a_failing_summary_does_not_cost_the_title() {
-        // A translated headline with an untranslated teaser is a usable
-        // archive entry; losing both to one bad call is not.
-        TranslationProvider titleOnly = new TranslationProvider() {
-            @Override public String name() { return "test"; }
-            @Override public String translate(String text, String targetLanguage) {
-                if (text.startsWith("The vote")) {
-                    throw TranslationException.transient_("summary blew up", null);
-                }
-                return "[" + targetLanguage + "] " + text;
-            }
-        };
+    void an_article_without_a_teaser_is_still_translated() {
+        ArticleDocument article = article();
+        article.setSummary(null);
 
-        String done = serviceWith(titleOnly).translateNext(article("de"), NOW);
-
-        assertThat(done).isEqualTo("de");
-        ArgumentCaptor<ArticleTranslation> stored =
-                ArgumentCaptor.forClass(ArticleTranslation.class);
-        verify(articleService).recordTranslation(any(), any(), stored.capture(), any());
-        assertThat(stored.getValue().getTitle()).isNotBlank();
-        assertThat(stored.getValue().getSummary()).isNull();
+        assertThat(serviceWith(new Recording()).translate(article, NOW)).isTrue();
     }
 
     @Test
     void a_retryable_failure_keeps_the_attempt_count_so_the_backoff_applies() {
-        ArticleDocument article = article("de");
+        ArticleDocument article = article();
         article.setTranslationAttempts(1);
         TranslationProvider failing = new TranslationProvider() {
             @Override public String name() { return "test"; }
-            @Override public String translate(String text, String targetLanguage) {
+            @Override public TranslatedText translate(String t, @Nullable String s, String l) {
                 throw TranslationException.transient_("brain unreachable", null);
             }
         };
 
-        String done = serviceWith(failing).translateNext(article, NOW);
+        assertThat(serviceWith(failing).translate(article, NOW)).isFalse();
 
-        assertThat(done).isNull();
-        verify(articleService).recordTranslationFailure(eq(ID), eq("de"), any(), eq(1), eq(NOW));
+        verify(articleService).recordTranslationFailure(eq(ID), any(), eq(1), eq(NOW));
+        verify(enrichmentService, never()).record(any());
     }
 
     @Test
     void a_permanent_failure_spends_the_whole_budget_at_once() {
         // Retrying a rejected token four more times produces four more
         // rejections. The queue should say so and move on.
-        ArticleDocument article = article("de");
+        ArticleDocument article = article();
         article.setTranslationAttempts(1);
         TranslationProvider rejecting = new TranslationProvider() {
             @Override public String name() { return "test"; }
-            @Override public String translate(String text, String targetLanguage) {
+            @Override public TranslatedText translate(String t, @Nullable String s, String l) {
                 throw TranslationException.permanent("token rejected", null);
             }
         };
 
-        serviceWith(rejecting).translateNext(article, NOW);
+        serviceWith(rejecting).translate(article, NOW);
 
-        verify(articleService).recordTranslationFailure(eq(ID), eq("de"), any(),
+        verify(articleService).recordTranslationFailure(eq(ID), any(),
                 eq(properties.getTranslation().getMaxAttempts()), eq(NOW));
     }
 
     @Test
     void an_article_without_a_title_is_dropped_rather_than_retried() {
-        ArticleDocument article = article("de");
+        ArticleDocument article = article();
         article.setTitle("  ");
 
-        String done = serviceWith(echoing()).translateNext(article, NOW);
+        assertThat(serviceWith(new Recording()).translate(article, NOW)).isFalse();
 
-        assertThat(done).isNull();
-        verify(articleService).recordTranslationFailure(eq(ID), eq("de"), any(),
+        verify(articleService).recordTranslationFailure(eq(ID), any(),
                 eq(properties.getTranslation().getMaxAttempts()), eq(NOW));
     }
 
     @Test
-    void nothing_pending_is_not_an_error() {
-        assertThat(serviceWith(echoing()).translateNext(article(), NOW)).isNull();
-        verify(articleService, never()).recordTranslation(any(), any(), any(), any());
-        verify(articleService, never())
-                .recordTranslationFailure(any(), any(), any(), anyInt(), any());
+    void without_a_pivot_language_nothing_happens() {
+        properties.getTranslation().setPivotLanguage("");
+
+        assertThat(serviceWith(new Recording()).translate(article(), NOW)).isFalse();
+        verify(enrichmentService, never()).record(any());
+        verify(articleService, never()).recordTranslationFailure(any(), any(), anyInt(), any());
     }
 
     @Test
@@ -212,27 +217,19 @@ class TranslationServiceTest {
 
         assertThat(service.isAvailable()).isFalse();
         assertThat(service.providerName()).isNull();
-        assertThat(service.translateNext(article("de"), NOW)).isNull();
-        verify(articleService, never()).recordTranslation(any(), any(), any(), any());
+        assertThat(service.translate(article(), NOW)).isFalse();
+        verify(enrichmentService, never()).record(any());
     }
 
     @Test
     void long_source_text_is_truncated_before_it_reaches_the_provider() {
         properties.getTranslation().setMaxSourceChars(50);
-        ArticleDocument article = article("de");
+        ArticleDocument article = article();
         article.setTitle("x".repeat(500));
-        List<Integer> seenLengths = new ArrayList<>();
-        TranslationProvider measuring = new TranslationProvider() {
-            @Override public String name() { return "test"; }
-            @Override public String translate(String text, String targetLanguage) {
-                seenLengths.add(text.length());
-                return "ok";
-            }
-        };
+        Recording provider = new Recording();
 
-        serviceWith(measuring).translateNext(article, NOW);
+        serviceWith(provider).translate(article, NOW);
 
-        assertThat(seenLengths).isNotEmpty();
-        assertThat(seenLengths.getFirst()).isLessThanOrEqualTo(52);
+        assertThat(provider.titles.getFirst().length()).isLessThanOrEqualTo(52);
     }
 }

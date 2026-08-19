@@ -1,6 +1,7 @@
 package de.mhus.hrafnagud.munin.article;
 
 import de.mhus.hrafnagud.api.article.ContentStatus;
+import de.mhus.hrafnagud.api.article.TranslationStatus;
 import de.mhus.hrafnagud.munin.lang.LanguageResolver;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
 import de.mhus.hrafnagud.munin.util.Hashes;
@@ -56,27 +57,26 @@ public final class ArticleFactory {
      */
     public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
             LanguageResolver.Resolution language, ContentStatus contentStatus, Instant now) {
-        return build(candidate, source, language, contentStatus, List.of(), now);
+        return build(candidate, source, language, contentStatus, "", now);
     }
 
     /**
      * Assembles the document to insert, queued for translation.
      *
-     * @param translationTargets languages the article is owed; a target
-     *                           equal to the article's own language is
-     *                           dropped, since translating German into
-     *                           German is a model call that can only
-     *                           return what it was given
+     * @param pivotLanguage the one language everything is normalised
+     *                      into; empty disables translation entirely
      */
     public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
             LanguageResolver.Resolution language, ContentStatus contentStatus,
-            List<String> translationTargets, Instant now) {
+            String pivotLanguage, Instant now) {
 
-        List<String> pending = pendingTranslations(translationTargets, language.language());
+        TranslationStatus translationStatus =
+                initialTranslationStatus(pivotLanguage, language.language());
         return ArticleDocument.builder()
-                .pendingTranslations(pending)
+                .translationStatus(translationStatus)
                 // Only a queued article belongs in the partial index.
-                .translationNextAttemptAt(pending.isEmpty() ? null : now)
+                .translationNextAttemptAt(
+                        translationStatus == TranslationStatus.PENDING ? now : null)
                 .dedupKey(dedupKey(candidate.getUrl()))
                 .url(candidate.getUrl())
                 .originalUrl(candidate.getOriginalUrl())
@@ -104,23 +104,26 @@ public final class ArticleFactory {
     }
 
     /**
-     * Targets the article still owes, minus its own language.
+     * Whether the article needs translating at all.
      *
-     * <p>An unknown source language keeps every target: without knowing
-     * what it is, we cannot rule any out, and a provider asked to
-     * translate text that is already in the target language returns it
-     * unchanged — the recipe says so explicitly. Guessing wrong here
-     * would silently drop a language.
+     * <p>An article already in the pivot language is {@code SKIPPED}, not
+     * queued — a model asked to translate German into German can only
+     * return what it was given, at full price.
+     *
+     * <p>An <em>unknown</em> source language is queued. Without knowing
+     * what it is we cannot rule it out, and a provider handed text that is
+     * already in the target returns it unchanged; the cost of being wrong
+     * that way is one call, while skipping wrongly loses the translation
+     * silently.
      */
-    static List<String> pendingTranslations(List<String> targets, @Nullable String articleLanguage) {
-        Set<String> pending = new LinkedHashSet<>();
-        for (String target : targets) {
-            String normalized = TextCleaner.normalizeLanguage(target);
-            if (normalized != null && !normalized.equals(articleLanguage)) {
-                pending.add(normalized);
-            }
+    static TranslationStatus initialTranslationStatus(String pivotLanguage,
+            @Nullable String articleLanguage) {
+
+        String pivot = TextCleaner.normalizeLanguage(pivotLanguage);
+        if (pivot == null) {
+            return TranslationStatus.SKIPPED;
         }
-        return new ArrayList<>(pending);
+        return pivot.equals(articleLanguage) ? TranslationStatus.SKIPPED : TranslationStatus.PENDING;
     }
 
     /**
