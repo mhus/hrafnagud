@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Overlay for the shared Mac-Mini k3s node (the same cluster that runs
+# Vancetope in the `vance` namespace). Two things differ from the base, both
+# consequences of that machine having two CPU cores and a reverse proxy in
+# front of it:
+#
+#   - the rollout drains before it surges, so two Java cold starts never
+#     compete for the same two cores
+#   - the Service is a NodePort, because Caddy runs as a container on the
+#     host and reaches cluster services through 127.0.0.1:<nodePort>
+#
+# Everything else — image, config, probes, resources — comes from the base.
+
+namespace: hrafnagud
+
+resources:
+  - ../../base
+
+patches:
+  - path: patch-deployment.yaml
+  - path: patch-service.yaml

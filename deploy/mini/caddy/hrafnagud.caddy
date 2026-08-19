@@ -1,0 +1,35 @@
+# hrafnagud — __PUBLIC_HOST__
+#
+# TEMPLATE. install-caddy.sh substitutes __PUBLIC_HOST__ and __NODE_PORT__
+# before uploading, and wraps the result in marker comments so re-installing
+# replaces this block in place and leaves the rest of the host's Caddyfile
+# alone.
+#
+# Only the Centauri feed path is published. The rest of the API — the whole
+# of /api/v1, which can add sources, trigger refreshes and read everything
+# collected — has no authentication of its own and stays inside the cluster,
+# reachable via `kubectl port-forward`. Publishing it here would put an
+# unauthenticated write API on the open internet.
+#
+# The Centauri path is safe to expose only once HRAFNAGUD_CENTAURI_API_KEY is
+# set: with an empty key the endpoint performs no check at all. The
+# application logs which of the two states it is in at startup.
+__PUBLIC_HOST__ {
+    handle /ode/feed* {
+        reverse_proxy 127.0.0.1:__NODE_PORT__ {
+            # Feed pages are small JSON responses; no streaming concerns, so
+            # the default buffering is fine here.
+            transport http {
+                read_timeout 2m
+                write_timeout 2m
+            }
+        }
+    }
+
+    # Anything else on this host is not part of hrafnagud's public surface.
+    handle {
+        respond "not found" 404
+    }
+
+    header -Server
+}

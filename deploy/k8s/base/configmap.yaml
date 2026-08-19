@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hrafnagud-config
+  labels:
+    app: hrafnagud
+data:
+  SPRING_PROFILES_ACTIVE: "prod"
+
+  # Database name inside the MongoDB the Secret's URI points at.
+  HRAFNAGUD_MONGO_DB: "hrafnagud"
+
+  # Identify the crawler and give publishers somebody to contact before
+  # running this at any scale.
+  HRAFNAGUD_USER_AGENT: "Hrafnagud/0.1 (+https://github.com/mhus/hrafnagud; news aggregator)"
+
+  # Fetching publisher article pages is a separate activity from polling the
+  # feeds they publish — an explicit operator decision, not a side effect of
+  # deploying.
+  HRAFNAGUD_CONTENT_ENABLED: "false"
+
+  # Comma-separated ISO codes, e.g. "de,en,fr". Empty means every language
+  # Lingua knows: slower, and the largest single contributor to heap usage.
+  # Narrow this first when the pod approaches its memory limit.
+  HRAFNAGUD_LANGUAGES: ""
+
+  # Outbound proxy for every fetch. A host set without a valid port fails at
+  # startup rather than quietly connecting directly.
+  HRAFNAGUD_PROXY_HOST: ""
+  HRAFNAGUD_PROXY_PORT: "0"
+
+  HRAFNAGUD_LOG_LEVEL: "INFO"
+
+  # ── Translation ──────────────────────────────────────────────────────
+  # The one language everything is normalised into. Empty keeps the
+  # subsystem dormant; setting it starts filling a backlog, so only set it
+  # once the brain binding below is complete and something is draining the
+  # queue.
+  HRAFNAGUD_PIVOT_LANGUAGE: ""
+
+  # Vancetope binding. Everything stays inert while VANCE_BRAIN_URL is
+  # empty — no client, no translation provider, no outbound traffic. The
+  # matching token is in the Secret.
+  VANCE_BRAIN_URL: ""
+  VANCE_TENANT: ""
+  VANCE_PROJECT: "_tenant"
+
+  # ── Centauri ─────────────────────────────────────────────────────────
+  # Serve the archive back to Vancetope as a feed source. Off by default:
+  # collecting news should not imply publishing it, and the endpoint is
+  # unauthenticated unless HRAFNAGUD_CENTAURI_API_KEY (Secret) is set.
+  HRAFNAGUD_CENTAURI_ENABLED: "false"
+  HRAFNAGUD_CENTAURI_PATH: "/ode/feed"

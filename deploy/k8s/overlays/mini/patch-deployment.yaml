@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hrafnagud
+spec:
+  strategy:
+    # Sequential instead of the base's surge-first: on two cores a second
+    # JVM cold start would slow the first one down enough to look like a
+    # failing startup probe. The claim leases make the resulting gap
+    # harmless — no work is lost, ingest just pauses for the restart.
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1

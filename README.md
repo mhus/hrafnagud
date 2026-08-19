@@ -79,6 +79,21 @@ curl localhost:9800/api/v1/stats
 curl 'localhost:9800/api/v1/articles?language=de&size=5'
 ```
 
+### In a container
+
+`deploy/` holds everything needed to run this as an image: a Dockerfile,
+build and push scripts, a compose stack with MongoDB, and Kubernetes
+manifests (base plus an overlay for a small k3s node).
+
+```bash
+deploy/docker/build-image.sh                    # image, Maven build included
+cd deploy/docker && docker compose up -d        # + MongoDB, on localhost:9800
+deploy/k8s/apply.sh                             # current kubectl context
+```
+
+Details, configuration surface and the reasoning behind the layout:
+[deploy/README.md](deploy/README.md).
+
 ## Data model
 
 | Collection | Holds |

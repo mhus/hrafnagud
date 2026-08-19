@@ -1,0 +1,64 @@
+# Production overrides for hrafnagud.
+#
+# Loaded via SPRING_PROFILES_ACTIVE=prod and baked into the image at
+# /app/config/application-prod.yaml — Spring Boot picks up
+# application-<profile>.yaml from the working directory's config/ folder
+# automatically.
+#
+# Anything not set here keeps the value from the bundled application.yml.
+# Credentials arrive through the environment (Kubernetes Secret, compose
+# .env) and are never written into this file.
+
+spring:
+  mongodb:
+    # No default, unlike application.yml. In a container the development
+    # default (root:example@localhost) can only ever produce a connection
+    # error far away from the actual mistake; an unset variable instead
+    # fails the boot naming HRAFNAGUD_MONGO_URI.
+    uri: ${HRAFNAGUD_MONGO_URI}
+    database: ${HRAFNAGUD_MONGO_DB:hrafnagud}
+
+server:
+  # Behind Caddy / an ingress the proxy owns the externally visible scheme
+  # and host. Without this, generated absolute URLs and the request scheme
+  # seen by the application are the in-cluster http ones.
+  forward-headers-strategy: framework
+
+munin:
+  http:
+    # The upstream default names the project's GitHub URL. A deployment that
+    # actually crawls at volume should point publishers at a mailbox someone
+    # reads — that is the difference between being rate-limited and being
+    # blocked.
+    userAgent: ${HRAFNAGUD_USER_AGENT:Hrafnagud/0.1 (+https://github.com/mhus/hrafnagud; news aggregator)}
+  content:
+    # Fetching publisher article pages is a separate activity from polling
+    # the feeds they publish, so it stays an explicit operator decision —
+    # here reachable without rebuilding the image.
+    enabled: ${HRAFNAGUD_CONTENT_ENABLED:false}
+  language:
+    # Comma-separated ISO codes, e.g. "de,en,fr". Empty means every language
+    # Lingua knows, which is both the slowest and the most memory-hungry
+    # setting — narrowing it to what the registry actually contains is the
+    # first thing to try when the pod hits its memory limit.
+    languages: ${HRAFNAGUD_LANGUAGES:}
+
+management:
+  endpoint:
+    health:
+      # Splits /actuator/health into the liveness and readiness groups the
+      # Kubernetes probes address. Spring Boot enables these automatically
+      # when it detects Kubernetes, but the plain-Docker case does not get
+      # that detection — and probes that exist in one environment and not
+      # the other are a trap.
+      probes:
+        enabled: true
+
+logging:
+  # Stdout only, no file appender: in Kubernetes the container runtime owns
+  # log collection (the Mini ships pod logs to Loki via Alloy), and a file
+  # inside the container would need a volume to survive and would still be
+  # invisible to `kubectl logs`.
+  level:
+    root: INFO
+    de.mhus.hrafnagud: ${HRAFNAGUD_LOG_LEVEL:INFO}

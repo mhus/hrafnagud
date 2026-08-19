@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hrafnagud
+  labels:
+    app: hrafnagud
+spec:
+  replicas: 1
+  strategy:
+    # Surge first, then drain: the ingest workers claim work with leases
+    # (munin.*.claimLease), so a brief overlap of old and new pod is safe —
+    # neither takes work the other holds. On a small cluster where two Java
+    # cold starts do not fit side by side, the mini overlay flips this to
+    # maxSurge 0 / maxUnavailable 1.
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: hrafnagud
+  template:
+    metadata:
+      labels:
+        app: hrafnagud
+    spec:
+      securityContext:
+        # Matches the image's own user; stated here so the pod is rejected
+        # rather than silently running as root if the image ever changes.
+        runAsNonRoot: true
+        runAsUser: 1500
+        runAsGroup: 1500
+      containers:
+        - name: hrafnagud
+          image: docker.io/mhus/hrafnagud:latest
+          # :latest is a floating tag — without this, a node that already
+          # has an image by that name never fetches the new one.
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 9800
+          envFrom:
+            - configMapRef:
+                name: hrafnagud-config
+            # Required, not optional: HRAFNAGUD_MONGO_URI lives here and the
+            # prod profile has no default for it. A missing Secret should
+            # keep the pod from starting, not start it against nothing.
+            - secretRef:
+                name: hrafnagud-secrets
+          env:
+            - name: JAVA_OPTS
+              # Mirrors the Dockerfile ENV so the flags can be changed with a
+              # rollout instead of an image rebuild.
+              value: "-XX:+UseG1GC -XX:MaxRAMPercentage=75.0"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "100m"
+            limits:
+              # Lingua over all languages in low-accuracy mode is the driver
+              # here. Setting HRAFNAGUD_LANGUAGES to the languages actually
+              # present in the registry is the cheaper fix for memory
+              # pressure than raising this.
+              memory: "1536Mi"
+              cpu: "1000m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            # Nothing is written outside /tmp: the image ships the
+            # application exploded and read-only, and every artefact of a
+            # run goes to MongoDB. Tomcat's work directory is the one
+            # exception, and it lives under /tmp.
+            readOnlyRootFilesystem: true
+          # The startup probe carries the cold-start budget (Spring context,
+          # Mongo index creation) so that liveness cannot kill a pod that is
+          # merely still booting. 60 × 5s = 5 minutes, far more than the
+          # observed ~30s, because the cost of being wrong here is a crash
+          # loop that looks like an application fault.
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 15
+            failureThreshold: 4
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # emptyDir, not a PVC: hrafnagud keeps no state on disk. Everything
+        # it collects is in MongoDB, so a pod can be replaced at any time.
+        - name: tmp
+          emptyDir: {}

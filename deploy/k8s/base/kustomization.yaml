@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# The namespace is part of the base rather than something the operator is
+# expected to create by hand — `kubectl apply -k` then works against an
+# empty cluster in one call.
+namespace: hrafnagud
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+
+# secret.template.yaml is deliberately NOT listed: it still contains
+# placeholders and would fail the apply. deploy/k8s/apply.sh renders it from
+# the deploy env file into a temp file and applies that separately, so no
+# credential ever lands in the repository or in a kustomize build output.

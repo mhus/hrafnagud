@@ -1,0 +1,72 @@
+# hrafnagud + mongodb, for running the image locally.
+#
+#   cd deploy/docker
+#   ./build-image.sh
+#   cp .env.example .env        # adjust if you like
+#   docker compose up -d
+#   curl localhost:9800/api/v1/stats
+#
+# This is the "does the image work" stack, not a production topology. In
+# Kubernetes MongoDB lives outside the deployment and its URI arrives from a
+# Secret — see deploy/k8s/.
+
+name: hrafnagud
+
+services:
+
+  mongodb:
+    image: mongo:7.0
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-example}
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      # For mongosh from the host. Set MONGO_PORT= (empty) to keep MongoDB
+      # on the internal network only.
+      - "${MONGO_PORT:-27017}:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  hrafnagud:
+    image: ${IMAGE_NAME:-hrafnagud}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      HRAFNAGUD_MONGO_URI: mongodb://${MONGO_ROOT_USERNAME:-root}:${MONGO_ROOT_PASSWORD:-example}@mongodb:27017/${HRAFNAGUD_MONGO_DB:-hrafnagud}?authSource=admin
+      HRAFNAGUD_MONGO_DB: ${HRAFNAGUD_MONGO_DB:-hrafnagud}
+      HRAFNAGUD_USER_AGENT: ${HRAFNAGUD_USER_AGENT:-}
+      HRAFNAGUD_CONTENT_ENABLED: ${HRAFNAGUD_CONTENT_ENABLED:-false}
+      HRAFNAGUD_LANGUAGES: ${HRAFNAGUD_LANGUAGES:-}
+      HRAFNAGUD_PIVOT_LANGUAGE: ${HRAFNAGUD_PIVOT_LANGUAGE:-}
+      HRAFNAGUD_PROXY_HOST: ${HRAFNAGUD_PROXY_HOST:-}
+      HRAFNAGUD_PROXY_PORT: ${HRAFNAGUD_PROXY_PORT:-0}
+      # Vancetope binding — inert while VANCE_BRAIN_URL is empty.
+      VANCE_BRAIN_URL: ${VANCE_BRAIN_URL:-}
+      VANCE_TENANT: ${VANCE_TENANT:-}
+      VANCE_PROJECT: ${VANCE_PROJECT:-_tenant}
+      VANCE_TRANSLATE_TOKEN: ${VANCE_TRANSLATE_TOKEN:-}
+      # Serving the archive back to Vancetope as a Centauri source.
+      HRAFNAGUD_CENTAURI_ENABLED: ${HRAFNAGUD_CENTAURI_ENABLED:-false}
+      HRAFNAGUD_CENTAURI_API_KEY: ${HRAFNAGUD_CENTAURI_API_KEY:-}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:+UseG1GC -XX:MaxRAMPercentage=75.0}
+    # Mirrors the Kubernetes securityContext, so a change that starts
+    # writing outside /tmp fails here rather than only in the cluster.
+    read_only: true
+    tmpfs:
+      - /tmp
+    ports:
+      # The API has no authentication. Bound to loopback on purpose — see
+      # the repository README's "Known gaps".
+      - "127.0.0.1:${HRAFNAGUD_PORT:-9800}:9800"
+
+volumes:
+  mongo-data:

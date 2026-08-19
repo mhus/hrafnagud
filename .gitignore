@@ -3,3 +3,9 @@ target/
 .idea/
 *.iml
 .DS_Store
+
+# Deploy credentials. The .example files are the committed ones; anything
+# filled in stays local.
+deploy/secrets.env
+deploy/**/secrets.env
+deploy/docker/.env
