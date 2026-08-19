@@ -70,7 +70,11 @@ class HrafnagudSearchSourceTest {
     void expert_tier_is_declared_because_there_are_real_filters_behind_it() {
         assertThat(source.capabilities().tiers()).contains(OdeSearchTier.EXPERT);
         assertThat(source.capabilities().expertParams())
-                .containsExactlyInAnyOrder("source", "language", "category", "since", "until");
+                .containsExactlyInAnyOrder(
+                        // originalLanguage, not language: a hit is labelled with the
+                        // pivot it is presented in, so a filter called "language"
+                        // would have removed exactly the translated articles.
+                        "source", "originalLanguage", "category", "since", "until");
     }
 
     @Test
@@ -129,7 +133,7 @@ class HrafnagudSearchSourceTest {
 
         source.search(new OdeSearchQuery("tariffs", OdeSearchModality.NEWS,
                 OdeSearchTier.EXPERT, 10, null,
-                Map.of("source", "bbc-world", "language", "en",
+                Map.of("source", "bbc-world", "originalLanguage", "en",
                         "category", "business", "since", "2026-08-01T00:00:00Z")));
 
         ArgumentCaptor<ArticleQuery> filter = ArgumentCaptor.forClass(ArticleQuery.class);

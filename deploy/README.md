@@ -131,6 +131,32 @@ declare are created on first connect. That matters: without the unique index
 on `articles.dedupKey`, deduplication degrades to a best-effort application
 check.
 
+### Changing an index means dropping it first
+
+Auto-creation only *creates*. MongoDB will not redefine an existing index, and
+when the declaration no longer matches what is stored it answers
+`IndexKeySpecsConflict` (86) — which Spring rethrows, so the pod does not start
+with a stale index, it does not start at all. Against an empty database nothing
+happens; against a database that has been collecting, the deploy crash-loops.
+
+The text index is the one that moves, because both its fields and its options
+have changed once already (`pivotTitle`/`pivotSummary` were added, and the
+language override was pointed at `textLanguage` — see `specs/collection.md`
+§4.1). Its generated name stays `ArticleDocument_TextIndex` throughout, which is
+exactly why the conflict is possible.
+
+So before rolling out a release that changes an index, drop the old one and let
+the new pod recreate it:
+
+```bash
+mongosh "$HRAFNAGUD_MONGO_URI" --eval '
+  db.articles.dropIndex("ArticleDocument_TextIndex")'
+```
+
+Search is unavailable until the new index finishes building; collection is not
+affected. Check what is actually stored with
+`db.articles.getIndexes()` before assuming which state you are in.
+
 ## Kubernetes
 
 `kubectl apply -k` against `base/` or an overlay; `apply.sh` wraps it and

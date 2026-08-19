@@ -63,6 +63,17 @@ final class FeedItemMapper {
 
         return new OdeItem(
                 article.getId(),
+                // The resume token for exactly this entry.
+                //
+                // Not optional for this source, and the failure without it is
+                // silent: we page by (publishedAt, id) — timestamps are not
+                // unique in a news archive — so a reader that fell back to the
+                // bare item id would hand us something FeedCursor cannot parse,
+                // we would read that as "start at the beginning", and the reader's
+                // scroll would serve the same page forever. The reader cuts a
+                // merged page in the middle far more often than it consumes a
+                // whole batch, so this is the common path, not the corner.
+                FeedCursor.encode(article.getPublishedAt(), article.getId()),
                 article.getPublishedAt(),
                 title,
                 article.getUrl(),

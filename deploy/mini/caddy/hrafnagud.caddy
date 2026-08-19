@@ -5,20 +5,36 @@
 # replaces this block in place and leaves the rest of the host's Caddyfile
 # alone.
 #
-# Only the Centauri feed path is published. The rest of the API — the whole
-# of /api/v1, which can add sources, trigger refreshes and read everything
-# collected — has no authentication of its own and stays inside the cluster,
-# reachable via `kubectl port-forward`. Publishing it here would put an
-# unauthenticated write API on the open internet.
+# Only the two Ode paths are published — the feed contract and the search
+# contract. The rest of the API — the whole of /api/v1, which can add sources,
+# trigger refreshes and read everything collected — has no authentication of its
+# own and stays inside the cluster, reachable via `kubectl port-forward`.
+# Publishing it here would put an unauthenticated write API on the open internet.
 #
-# The Centauri path is safe to expose only once HRAFNAGUD_CENTAURI_API_KEY is
-# set: with an empty key the endpoint performs no check at all. The
-# application logs which of the two states it is in at startup.
+# Both are safe to expose only once their key is set —
+# HRAFNAGUD_CENTAURI_API_KEY and HRAFNAGUD_ZARNIWOOP_API_KEY: with an empty key
+# the endpoint performs no check at all. The application logs which of the two
+# states it is in at startup.
+#
+# Both paths, not just the feed: a search endpoint that Vancetope cannot reach is
+# an endpoint that does not exist, and the module is enabled by the presence of
+# its bean rather than by anything visible here.
 __PUBLIC_HOST__ {
     handle /ode/feed* {
         reverse_proxy 127.0.0.1:__NODE_PORT__ {
             # Feed pages are small JSON responses; no streaming concerns, so
             # the default buffering is fine here.
+            transport http {
+                read_timeout 2m
+                write_timeout 2m
+            }
+        }
+    }
+
+    handle /ode/search* {
+        reverse_proxy 127.0.0.1:__NODE_PORT__ {
+            # A body served through /ode/search/content can be a full article,
+            # so the timeouts match the feed's rather than the default.
             transport http {
                 read_timeout 2m
                 write_timeout 2m

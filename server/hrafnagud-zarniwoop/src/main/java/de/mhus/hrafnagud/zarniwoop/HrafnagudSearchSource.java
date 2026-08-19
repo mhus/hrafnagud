@@ -76,7 +76,7 @@ public class HrafnagudSearchSource implements SearchSource {
                 // against.
                 Set.of(OdeSearchTier.NORMAL, OdeSearchTier.EXPERT),
                 MAX_RESULTS,
-                Set.of(ExpertParams.SOURCE, ExpertParams.LANGUAGE,
+                Set.of(ExpertParams.SOURCE, ExpertParams.ORIGINAL_LANGUAGE,
                         ExpertParams.CATEGORY, ExpertParams.SINCE, ExpertParams.UNTIL),
                 // Bodies are fetched on their own schedule into their own
                 // collection, so they are served on demand rather than
@@ -90,7 +90,7 @@ public class HrafnagudSearchSource implements SearchSource {
         ArticleQuery.ArticleQueryBuilder filter = ArticleQuery.builder()
                 .text(query.query())
                 .sourceName(string(query, ExpertParams.SOURCE))
-                .language(string(query, ExpertParams.LANGUAGE))
+                .language(string(query, ExpertParams.ORIGINAL_LANGUAGE))
                 .category(string(query, ExpertParams.CATEGORY))
                 .publishedSince(instant(query, ExpertParams.SINCE))
                 // publishedUntil, not until: the caller means "published
@@ -237,7 +237,19 @@ public class HrafnagudSearchSource implements SearchSource {
     /** The filter vocabulary this source understands. Names are its own. */
     static final class ExpertParams {
         static final String SOURCE = "source";
-        static final String LANGUAGE = "language";
+        /**
+         * The language the article was <em>published</em> in.
+         *
+         * <p>Named for what it filters, which is not what a hit's
+         * {@code language} says. With a pivot language configured a translated
+         * hit is presented in the pivot and labelled with it, so a caller that
+         * saw {@code language: de} on every row and narrowed on {@code language:
+         * de} would have removed exactly the translated articles — the filter and
+         * the label would have been the same word for two different fields. The
+         * pair is {@code originalLanguage} here and {@code originalLanguage} in
+         * the hit's extras.
+         */
+        static final String ORIGINAL_LANGUAGE = "originalLanguage";
         static final String CATEGORY = "category";
         static final String SINCE = "since";
         static final String UNTIL = "until";

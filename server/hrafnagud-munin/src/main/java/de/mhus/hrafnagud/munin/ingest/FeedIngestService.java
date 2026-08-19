@@ -68,6 +68,7 @@ public class FeedIngestService {
         int created = 0;
         int sameSource = 0;
         int crossSource = 0;
+        int failed = 0;
 
         if (read.getOutcome() == FetchOutcome.OK) {
             // Every ingested article is queued for the body fetcher,
@@ -79,16 +80,38 @@ public class FeedIngestService {
             ContentStatus initialStatus = ContentStatus.PENDING;
 
             for (ArticleCandidate candidate : read.getCandidates()) {
-                LanguageResolver.Resolution language = languageResolver.resolve(
-                        source.getLanguage(),
-                        StringUtils.defaultIfBlank(candidate.getDeclaredLanguage(),
-                                read.getFeedLanguage()),
-                        detectionText(candidate));
-                switch (articleService.ingest(candidate, source, language, initialStatus, now)) {
-                    case CREATED -> created++;
-                    case DUPLICATE_CROSS_SOURCE -> crossSource++;
-                    case DUPLICATE_SAME_SOURCE -> sameSource++;
+                // One article per attempt, and one article per failure.
+                //
+                // Without this catch a single unstorable entry aborted the whole
+                // poll: the loop unwound, the fetch result was never recorded,
+                // and the caller booked the source as a fetch error — so a feed
+                // lost not that entry but every entry, on every tick, for as long
+                // as the entry stayed in its window. That is how one Japanese
+                // article took eight languages out of the archive; the text-index
+                // stemmer was the trigger, and this is the shape that made it
+                // fatal. What we cannot store, we count and say.
+                try {
+                    LanguageResolver.Resolution language = languageResolver.resolve(
+                            source.getLanguage(),
+                            StringUtils.defaultIfBlank(candidate.getDeclaredLanguage(),
+                                    read.getFeedLanguage()),
+                            detectionText(candidate));
+                    switch (articleService.ingest(candidate, source, language, initialStatus, now)) {
+                        case CREATED -> created++;
+                        case DUPLICATE_CROSS_SOURCE -> crossSource++;
+                        case DUPLICATE_SAME_SOURCE -> sameSource++;
+                    }
+                } catch (RuntimeException e) {
+                    failed++;
+                    log.warn("Ingest of '{}' from {} failed, skipping this entry: {}",
+                            candidate.getUrl(), source.getName(), e.toString());
                 }
+            }
+            if (failed > 0) {
+                // At WARN as well as in the report: a feed that quietly drops a
+                // tenth of its entries looks like a feed with fewer entries.
+                log.warn("Polled {}: {} of {} entries could not be stored",
+                        source.getName(), failed, read.getCandidates().size());
             }
             if (created > 0) {
                 sourceService.recordArticles(source.getName(), created, now);
@@ -100,6 +123,9 @@ public class FeedIngestService {
                 source.getFetchIntervalSeconds(), now);
 
         SourceFetchReport finished = report
+                // Counted with the entries the reader rejected: from the outside
+                // both are "the feed offered it and it is not in the archive".
+                .itemsInvalid(read.getInvalidCount() + failed)
                 .articlesCreated(created)
                 .duplicatesInSource(sameSource)
                 .duplicatesCrossSource(crossSource)

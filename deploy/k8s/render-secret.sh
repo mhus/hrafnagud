@@ -54,6 +54,9 @@ data:
   # Bearer key guarding the Centauri feed endpoint. Empty means no check at
   # all — acceptable only behind a proxy that authenticates for it.
   HRAFNAGUD_CENTAURI_API_KEY: "$(b64 "${HRAFNAGUD_CENTAURI_API_KEY:-}")"
+  # The same, for the search endpoint. A separate key on purpose: the two
+  # surfaces are enabled separately, and a leak should cost one of them.
+  HRAFNAGUD_ZARNIWOOP_API_KEY: "$(b64 "${HRAFNAGUD_ZARNIWOOP_API_KEY:-}")"
 EOF
 
 echo "${out}"

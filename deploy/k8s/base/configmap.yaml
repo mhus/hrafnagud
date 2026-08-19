@@ -51,3 +51,11 @@ data:
   # unauthenticated unless HRAFNAGUD_CENTAURI_API_KEY (Secret) is set.
   HRAFNAGUD_CENTAURI_ENABLED: "false"
   HRAFNAGUD_CENTAURI_PATH: "/ode/feed"
+
+  # ── Zarniwoop ────────────────────────────────────────────────────────
+  # The other Vancetope-facing read surface: the same archive answering a
+  # query instead of handing out a timeline. Independently switchable —
+  # serving one is not a reason to serve the other — and unauthenticated
+  # unless HRAFNAGUD_ZARNIWOOP_API_KEY (Secret) is set.
+  HRAFNAGUD_ZARNIWOOP_ENABLED: "false"
+  HRAFNAGUD_ZARNIWOOP_PATH: "/ode/search"

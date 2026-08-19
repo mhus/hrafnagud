@@ -110,6 +110,16 @@ at the beginning". A reader that kept a cursor across a change of format would
 otherwise be stuck on a stream it can never open again. One glitchy page beats a
 permanent error.
 
+**Every entry carries its own cursor**, in `OdeItem.cursor`. That is not
+redundancy next to the page-level `nextCursor`: the reader merges this stream with
+others, so it usually shows only part of the batch it fetched and has to resume
+from the entry it stopped at — which a page-level token cannot express. Without
+the per-entry token the reader falls back to the bare item id, which this source
+cannot parse; it would read that as "start at the beginning" and the reader's
+scroll would serve the same page forever. Nothing errors, which is why it is
+stated here: the tolerance for an unparsable cursor above is exactly what makes
+the failure quiet.
+
 ### 4.3 `hasMore` is answered by looking
 
 One row beyond the requested limit is fetched. An unfiltered count over a

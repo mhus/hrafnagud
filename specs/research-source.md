@@ -150,7 +150,7 @@ wrongly.
 | `modalities` | `NEWS` only | a news archive answering an `ACADEMIC` query would be answering a question it was not asked |
 | `domains` | `NEWS` | " |
 | `tiers` | `NORMAL` + `EXPERT` | there is a real filter vocabulary behind it — the contract warns against declaring `EXPERT` without one |
-| `expertParams` | `source`, `language`, `category`, `since`, `until` | Munin stores all five |
+| `expertParams` | `source`, `originalLanguage`, `category`, `since`, `until` | Munin stores all five |
 | `maxResults` | 25 | these go into a model's context, where the twentieth hit costs tokens and adds little |
 | `servesContent` | true | bodies exist, on demand |
 | `cacheTtl` | 1 h | the answer is a constant |
@@ -158,6 +158,13 @@ wrongly.
 `since` and `until` map to `publishedSince` / `publishedUntil`, not to the
 `firstSeenAt` window: a caller asking for "published after" means the
 article's date, not ours.
+
+`originalLanguage` is named for the field it filters, and the name is the point.
+A hit is *presented* in the pivot language and labelled with it (§6), so a filter
+called `language` would have meant two different fields under one word: a model
+that saw `language: de` on every row and narrowed on `language: de` would have
+removed exactly the translated articles. The filter and the extras key now agree:
+`originalLanguage` in both.
 
 ## 5. Two contract rules that are easy to get backwards
 
@@ -176,8 +183,9 @@ Presented in the pivot language where a translation exists, the same way the
 feed does it — a model reading the result should not have to notice which
 entries the archive happened to translate. The original travels in `extras`.
 
-`extras` carries `publishedAt`, `language`, `categories`, `bodyWords` and the
-original title/language. Recency is not the ranking here, so a model judging a
+`extras` carries `publishedAt`, `language` (the language it is *shown* in),
+`categories`, `bodyWords` and the original title/language — the latter under
+`originalLanguage`, the same name the expert filter uses (§4). Recency is not the ranking here, so a model judging a
 news hit has no other way to tell whether it is reading last week or last year.
 
 ### 6.1 Bodies are offered, not shipped

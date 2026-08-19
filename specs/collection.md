@@ -133,10 +133,16 @@ there. Anything else is not degraded, it is **rejected on write**:
 language override unsupported: ja
 ```
 
-Because the ingest loop has no per-article catch, one such entry aborted the
-whole poll of its feed — every tick, indefinitely. A worldwide collector that
-could not store Japanese, Chinese, Korean, Polish, Czech, Arabic, Ukrainian or
-Greek, and did not say so.
+One such entry aborted the whole poll of its feed — every tick, indefinitely. A
+worldwide collector that could not store Japanese, Chinese, Korean, Polish,
+Czech, Arabic, Ukrainian or Greek, and did not say so.
+
+Two separate faults, and only one of them was about languages. The stemmer
+override was the trigger; what made it fatal was that the ingest loop had **no
+per-article catch**, so one unstorable entry cost every entry of that feed rather
+than itself. Both are fixed: the derived field below removes this trigger, and
+the loop now counts a failed entry into `itemsInvalid` and carries on — because
+the next trigger will not be a language.
 
 It went unnoticed for the same reason the CJK word count did (see
 [content-extraction.md](content-extraction.md) §5): a German and English
@@ -149,9 +155,13 @@ default: applying English stop words to Japanese is worse than doing nothing,
 and it still indexes the tokens. See `TextIndexLanguage`.
 
 > **Upgrading an existing database.** The index definition changes, so the
-> first boot against an older archive fails with `IndexOptionsConflict` naming
-> both definitions. Drop `ArticleDocument_TextIndex`; Spring Data recreates it.
-> There is no migration framework here yet, and the failure is at least loud.
+> first boot against an older archive fails — `IndexKeySpecsConflict` (86),
+> because the generated name `ArticleDocument_TextIndex` stays the same while its
+> keys and options do not. Auto-creation only ever *creates*; it never redefines.
+> Drop `ArticleDocument_TextIndex` and Spring Data recreates it. There is no
+> migration framework here yet, and the failure is at least loud — the pod
+> crash-loops rather than running with a stale index. Runbook:
+> `deploy/README.md` § "Changing an index means dropping it first".
 
 ## 5. Categories are stored verbatim
 

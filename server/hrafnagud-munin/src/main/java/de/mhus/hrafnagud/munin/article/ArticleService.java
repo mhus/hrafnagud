@@ -246,25 +246,12 @@ public class ArticleService {
     public List<ArticleDocument> pageByPublished(ArticleQuery filter,
             @Nullable ArticleCursor cursor, boolean ascending, int limit) {
 
-        Query query = buildQuery(filter);
-        query.addCriteria(Criteria.where(F_PUBLISHED_AT).ne(null));
-        if (cursor != null) {
-            // (publishedAt, _id) lexicographic, expressed the way Mongo can
-            // still use the compound index: strictly beyond the timestamp,
-            // or equal on it and beyond on the id.
-            Criteria beyond = ascending
-                    ? new Criteria().orOperator(
-                            Criteria.where(F_PUBLISHED_AT).gt(cursor.publishedAt()),
-                            new Criteria().andOperator(
-                                    Criteria.where(F_PUBLISHED_AT).is(cursor.publishedAt()),
-                                    Criteria.where(F_ID).gt(cursor.articleId())))
-                    : new Criteria().orOperator(
-                            Criteria.where(F_PUBLISHED_AT).lt(cursor.publishedAt()),
-                            new Criteria().andOperator(
-                                    Criteria.where(F_PUBLISHED_AT).is(cursor.publishedAt()),
-                                    Criteria.where(F_ID).lt(cursor.articleId())));
-            query.addCriteria(beyond);
-        }
+        // Both extra conditions go in as arguments: the cursor's is keyless, and
+        // so is the filter's own $and — adding it afterwards used to throw. See
+        // buildQuery.
+        Query query = buildQuery(filter,
+                Criteria.where(F_PUBLISHED_AT).ne(null),
+                beyond(cursor, ascending));
         Sort.Direction direction = ascending ? Sort.Direction.ASC : Sort.Direction.DESC;
         return mongoTemplate.find(
                 query.with(Sort.by(direction, F_PUBLISHED_AT).and(Sort.by(direction, F_ID)))
@@ -363,19 +350,24 @@ public class ArticleService {
             Set<String> exclude, int limit) {
 
         TextQuery contentQuery = new TextQuery(text).sortByScore();
-        List<String> articleIds = mongoTemplate
+        // Over-fetched ids, NOT cut to `limit` here: the article-level filter runs
+        // in the second query below, so truncating first would throw away the
+        // candidates the over-fetch exists to provide. With a source filter and
+        // ten wanted, the ten best body matches may all be from other sources
+        // while the matching ones sit further down the list — cutting early
+        // returned nothing and made BODY_OVERFETCH decoration.
+        List<String> candidateIds = mongoTemplate
                 .find(contentQuery.limit(limit * BODY_OVERFETCH), ArticleContentDocument.class)
                 .stream()
                 .map(ArticleContentDocument::getArticleId)
                 .filter(id -> !exclude.contains(id))
-                .limit(limit)
                 .toList();
-        if (articleIds.isEmpty()) {
+        if (candidateIds.isEmpty()) {
             return List.of();
         }
 
         List<Criteria> parts = new ArrayList<>(filterCriteria(filter));
-        parts.add(Criteria.where("_id").in(articleIds));
+        parts.add(Criteria.where("_id").in(candidateIds));
         List<ArticleDocument> found = mongoTemplate.find(
                 new Query(new Criteria().andOperator(parts)), ArticleDocument.class);
 
@@ -384,7 +376,13 @@ public class ArticleService {
         // order the index walk produced.
         Map<String, ArticleDocument> byId = found.stream()
                 .collect(Collectors.toMap(ArticleDocument::getId, a -> a, (a, b) -> a));
-        return articleIds.stream().map(byId::get).filter(Objects::nonNull).toList();
+        // Cut to `limit` here, after filtering, so the page is filled with what
+        // actually survived rather than with whatever the first `limit` ids were.
+        return candidateIds.stream()
+                .map(byId::get)
+                .filter(Objects::nonNull)
+                .limit(limit)
+                .toList();
     }
 
     /**
@@ -399,8 +397,29 @@ public class ArticleService {
         return mongoTemplate.count(buildQuery(filter), ArticleDocument.class);
     }
 
-    private Query buildQuery(ArticleQuery filter) {
-        List<Criteria> parts = filterCriteria(filter);
+    /**
+     * The filter as a query, optionally with further conditions folded in.
+     *
+     * <p><b>Extra conditions are arguments, not later {@code addCriteria} calls},
+     * and that is not a style preference.</b> {@code new Criteria().andOperator(…)}
+     * produces a criteria whose key is {@code null}, and {@code Query} stores
+     * criteria in a map keyed by exactly that — so a second keyless criteria
+     * added afterwards throws {@code InvalidMongoDbApiUsageException} („you can't
+     * add a second 'null' criteria"). It only shows up when both halves are
+     * present, which is why a filtered first page worked and its follow-up page
+     * did not. Everything keyless has to arrive here, before the {@code $and} is
+     * built.
+     *
+     * <p>The text criteria is added separately on purpose: its key is
+     * {@code $text}, so it cannot collide.
+     */
+    private Query buildQuery(ArticleQuery filter, Criteria... extra) {
+        List<Criteria> parts = new ArrayList<>(filterCriteria(filter));
+        for (Criteria criteria : extra) {
+            if (criteria != null) {
+                parts.add(criteria);
+            }
+        }
         Query query = parts.isEmpty()
                 ? new Query()
                 : new Query(new Criteria().andOperator(parts));
@@ -409,6 +428,28 @@ public class ArticleService {
                     .matchingAny(filter.getText().trim()));
         }
         return query;
+    }
+
+    /**
+     * „Strictly after the cursor", expressed so Mongo can still use the
+     * {@code (publishedAt, _id)} compound index: beyond the timestamp, or equal
+     * on it and beyond on the id. Null for no cursor.
+     */
+    private static @Nullable Criteria beyond(@Nullable ArticleCursor cursor, boolean ascending) {
+        if (cursor == null) {
+            return null;
+        }
+        return ascending
+                ? new Criteria().orOperator(
+                        Criteria.where(F_PUBLISHED_AT).gt(cursor.publishedAt()),
+                        new Criteria().andOperator(
+                                Criteria.where(F_PUBLISHED_AT).is(cursor.publishedAt()),
+                                Criteria.where(F_ID).gt(cursor.articleId())))
+                : new Criteria().orOperator(
+                        Criteria.where(F_PUBLISHED_AT).lt(cursor.publishedAt()),
+                        new Criteria().andOperator(
+                                Criteria.where(F_PUBLISHED_AT).is(cursor.publishedAt()),
+                                Criteria.where(F_ID).lt(cursor.articleId())));
     }
 
     /**
