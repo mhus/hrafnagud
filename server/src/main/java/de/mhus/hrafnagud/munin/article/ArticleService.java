@@ -3,6 +3,7 @@ package de.mhus.hrafnagud.munin.article;
 import de.mhus.hrafnagud.api.article.ContentStatus;
 import de.mhus.hrafnagud.api.article.TranslationStatus;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.place.PlaceRegistry;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
 import de.mhus.hrafnagud.munin.lang.LanguageResolver;
@@ -90,14 +91,16 @@ public class ArticleService {
     private final EnrichmentService enrichmentService;
     private final MuninProperties.Content contentConfig;
     private final MuninProperties.Translation translationConfig;
+    private final PlaceRegistry placeRegistry;
 
     public ArticleService(ArticleRepository repository, ArticleContentRepository contentRepository,
             EnrichmentService enrichmentService, MongoTemplate mongoTemplate,
-            MuninProperties properties) {
+            PlaceRegistry placeRegistry, MuninProperties properties) {
         this.repository = repository;
         this.contentRepository = contentRepository;
         this.enrichmentService = enrichmentService;
         this.mongoTemplate = mongoTemplate;
+        this.placeRegistry = placeRegistry;
         this.contentConfig = properties.getContent();
         this.translationConfig = properties.getTranslation();
     }
@@ -127,7 +130,8 @@ public class ArticleService {
             LanguageResolver.Resolution language, ContentStatus contentStatus, Instant now) {
 
         ArticleDocument document = ArticleFactory.build(candidate, source, language,
-                contentStatus, translationConfig.getPivotLanguage(), now);
+                contentStatus, translationConfig.getPivotLanguage(),
+                placeRegistry.pathForCountry(source.getCountry()), now);
 
         try {
             return upsert(document, source.getName(), now);
@@ -155,6 +159,12 @@ public class ArticleService {
                 .setOnInsert(F_TEXT_LANGUAGE, document.getTextLanguage())
                 .setOnInsert("languageSource", document.getLanguageSource())
                 .setOnInsert(F_CATEGORIES, document.getCategories())
+                // Origin belongs to the first source that delivered the
+                // article, which is what setOnInsert means here: a second
+                // publisher carrying the same story does not move where it
+                // came from.
+                .setOnInsert("originCountry", document.getOriginCountry())
+                .setOnInsert("originPlaceIds", document.getOriginPlaceIds())
                 .setOnInsert("firstSourceName", document.getFirstSourceName())
                 .setOnInsert("publishedAt", document.getPublishedAt())
                 .setOnInsert(F_FIRST_SEEN_AT, document.getFirstSeenAt())
@@ -467,6 +477,12 @@ public class ArticleService {
         }
         if (StringUtils.isNotBlank(filter.getCategory())) {
             parts.add(Criteria.where(F_CATEGORIES).is(filter.getCategory()));
+        }
+        if (StringUtils.isNotBlank(filter.getOriginPlace())) {
+            // Equality against a multikey array: the stored path holds every
+            // containing place, so one predicate serves continent, region and
+            // country alike.
+            parts.add(Criteria.where("originPlaceIds").is(filter.getOriginPlace().trim()));
         }
         if (filter.getContentStatus() != null) {
             parts.add(Criteria.where(F_CONTENT_STATUS).is(filter.getContentStatus()));

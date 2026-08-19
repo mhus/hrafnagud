@@ -3,10 +3,15 @@
 Where an article comes from, where it was written, and what it is about — three
 different questions that a single `country` field silently answers wrongly.
 
-> **Status: design.** Nothing in this document is built. It exists so that the
-> field names are decided before they are persisted, because renaming a field
-> that is in a multi-million-row collection and in three indexes costs more than
-> thinking about it now.
+> **Status.** §3.1 and §3.3 are built: the containment table ships, and every
+> article carries its publisher's place path, queryable at any level
+> (`GET /articles?originPlace=m49:142`). §3.2's `contentLocation`, §4's `GEO`
+> enrichment and §5's gazetteer are still design — they need extraction, which
+> is the project rather than the model.
+>
+> The field names were written down before anything was persisted on purpose:
+> renaming a field that sits in a multi-million-row collection and an index
+> costs more than deciding early.
 
 ## 1. The two mistakes this avoids
 
@@ -63,8 +68,18 @@ about it are worth knowing before it is used as a signal:
 - **It is weak even when set.** See DW above. It says who published, not what
   about.
 
-Denormalised onto the article it becomes `originCountry` — named for what it
-is, never merged into the subject fields.
+Denormalised onto the article it becomes `originCountry`, with
+`originPlaceIds` holding its containment path — named for what they are, never
+merged into the subject fields. Both are written by `setOnInsert`: origin
+belongs to the source that delivered the article *first*, and a second
+publisher carrying the same story does not move where it came from.
+
+One query parameter covers every rung, because the path holds all of them:
+
+```
+GET /api/v1/articles?originPlace=m49:142   # every Asian publisher
+GET /api/v1/articles?originPlace=iso:SG    # only Singaporean ones
+```
 
 ### 3.2 Article: `contentLocation` as a materialised path
 

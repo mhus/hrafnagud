@@ -163,6 +163,13 @@ dependency on `cdn.jsdelivr.net` being reachable from the browser.
 | `article_contents` | extracted bodies, images and page metadata, separate because bodies are ~50× larger |
 | `enrichments` | results of processing steps over an article — one document per run, append-only |
 
+Every article carries the place path of the publisher it first arrived through
+(`originPlaceIds`, world → region → sub-region → country from UN M.49 and ISO
+3166-1), so `?originPlace=m49:142` finds everything from an Asian publisher and
+`?originPlace=iso:SG` only Singaporean ones. That is **origin, not subject** —
+what an article is *about* is a different field that does not exist yet, and
+conflating the two is the mistake [geo.md](specs/geo.md) exists to prevent.
+
 Body fetching is off by default (`munin.content.enabled`). Turning it on
 works through whatever has accumulated, since ingest queues everything:
 

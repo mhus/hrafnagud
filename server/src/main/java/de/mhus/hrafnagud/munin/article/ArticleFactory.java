@@ -57,7 +57,7 @@ public final class ArticleFactory {
      */
     public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
             LanguageResolver.Resolution language, ContentStatus contentStatus, Instant now) {
-        return build(candidate, source, language, contentStatus, "", now);
+        return build(candidate, source, language, contentStatus, "", List.of(), now);
     }
 
     /**
@@ -69,6 +69,23 @@ public final class ArticleFactory {
     public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
             LanguageResolver.Resolution language, ContentStatus contentStatus,
             String pivotLanguage, Instant now) {
+        return build(candidate, source, language, contentStatus, pivotLanguage, List.of(), now);
+    }
+
+    /**
+     * The same, with the publisher's place path resolved.
+     *
+     * <p>Passed in rather than looked up: this class is static and pure so that
+     * what a stored article looks like can be tested without a Spring context,
+     * and the hierarchy is a bean. The caller holds both.
+     *
+     * @param originPlaceIds the source country and everything containing it,
+     *                       outermost first; empty when the source names no
+     *                       country or names one the table does not know
+     */
+    public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
+            LanguageResolver.Resolution language, ContentStatus contentStatus,
+            String pivotLanguage, List<String> originPlaceIds, Instant now) {
 
         TranslationStatus translationStatus =
                 initialTranslationStatus(pivotLanguage, language.language());
@@ -87,6 +104,8 @@ public final class ArticleFactory {
                 .author(candidate.getAuthor())
                 .imageUrl(candidate.getImageUrl())
                 .guid(candidate.getGuid())
+                .originCountry(source.getCountry())
+                .originPlaceIds(new ArrayList<>(originPlaceIds))
                 .language(language.language())
                 // Derived, never authored: the article's language is the
                 // record, this is only what MongoDB's text index is allowed

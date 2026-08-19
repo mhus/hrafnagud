@@ -158,4 +158,39 @@ class ArticleFactoryTest {
 
         assertThat(merged).containsExactly("News", "Sport");
     }
+
+    // ── origin, never subject ───────────────────────────────────────────
+
+    /**
+     * The publisher's country lands on the article as origin, with the
+     * containment path materialised — and nothing in it claims the article is
+     * <em>about</em> that place. See specs/geo.md §1.
+     */
+    @Test
+    void the_publishers_country_becomes_the_origin_with_its_full_path() {
+        SourceDocument source = source();
+        source.setCountry("SG");
+
+        ArticleDocument article = ArticleFactory.build(candidate(), source,
+                new LanguageResolver.Resolution("en", LanguageSource.SOURCE),
+                ContentStatus.PENDING, "",
+                List.of("m49:001", "m49:142", "m49:035", "iso:SG"), Instant.now());
+
+        assertThat(article.getOriginCountry()).isEqualTo("SG");
+        assertThat(article.getOriginPlaceIds()).containsExactly(
+                "m49:001", "m49:142", "m49:035", "iso:SG");
+    }
+
+    @Test
+    void a_source_without_a_country_leaves_the_origin_empty_rather_than_guessed() {
+        SourceDocument source = source();
+        source.setCountry(null);
+
+        ArticleDocument article = ArticleFactory.build(candidate(), source,
+                new LanguageResolver.Resolution("en", LanguageSource.SOURCE),
+                ContentStatus.PENDING, "", List.of(), Instant.now());
+
+        assertThat(article.getOriginCountry()).isNull();
+        assertThat(article.getOriginPlaceIds()).isEmpty();
+    }
 }

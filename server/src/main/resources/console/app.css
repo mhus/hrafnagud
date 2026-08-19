@@ -30,3 +30,13 @@
 dd {
     word-break: break-word;
 }
+
+/* The origin column carries ISO long names — "United Kingdom of Great Britain
+   and Northern Ireland" is one cell that would otherwise decide the width of
+   the whole table. Truncated here, in full in the tooltip and the dialog. */
+#tbody-articles td.origin {
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

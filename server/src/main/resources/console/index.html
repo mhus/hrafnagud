@@ -153,6 +153,12 @@
                 <input class="form-control form-control-sm" name="language" placeholder="de">
             </div>
             <div class="col-md-2">
+                <label class="form-label small mb-1">Herkunft</label>
+                <select class="form-select form-select-sm" name="originPlace">
+                    <option value="">überall</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label small mb-1">Volltext</label>
                 <select class="form-select form-select-sm" name="contentStatus">
                     <option value="">alle</option>
@@ -176,7 +182,7 @@
         <div class="table-responsive">
             <table class="table table-sm table-hover align-middle">
                 <thead><tr>
-                    <th>Titel</th><th>Quelle</th><th>Sprache</th>
+                    <th>Titel</th><th>Quelle</th><th>Herkunft</th><th>Sprache</th>
                     <th>Volltext</th><th>Übersetzung</th><th>Erfasst</th>
                 </tr></thead>
                 <tbody id="tbody-articles"></tbody>

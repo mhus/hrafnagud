@@ -1,0 +1,288 @@
+# Place hierarchy: UN M.49 containment above the country, ISO 3166-1 alpha-2 at it.
+#
+# Source of the facts: UN Standard country or area codes for statistical use
+# (M49), https://unstats.un.org/unsd/methodology/m49/ , joined to ISO 3166-1.
+# Codes and containment are factual data from those two standards; this file is
+# a generated projection of them, not a copy of anyone's compilation.
+#
+# Columns: id <TAB> parentId <TAB> kind <TAB> name
+# Ids are scheme-prefixed so that a gazetteer added later cannot collide.
+m49:001	-	WORLD	World
+m49:002	m49:001	REGION	Africa
+m49:009	m49:001	REGION	Oceania
+m49:019	m49:001	REGION	Americas
+m49:142	m49:001	REGION	Asia
+m49:150	m49:001	REGION	Europe
+m49:015	m49:002	SUBREGION	Northern Africa
+m49:021	m49:019	SUBREGION	Northern America
+m49:030	m49:142	SUBREGION	Eastern Asia
+m49:034	m49:142	SUBREGION	Southern Asia
+m49:035	m49:142	SUBREGION	South-eastern Asia
+m49:039	m49:150	SUBREGION	Southern Europe
+m49:053	m49:009	SUBREGION	Australia and New Zealand
+m49:054	m49:009	SUBREGION	Melanesia
+m49:057	m49:009	SUBREGION	Micronesia
+m49:061	m49:009	SUBREGION	Polynesia
+m49:143	m49:142	SUBREGION	Central Asia
+m49:145	m49:142	SUBREGION	Western Asia
+m49:151	m49:150	SUBREGION	Eastern Europe
+m49:154	m49:150	SUBREGION	Northern Europe
+m49:155	m49:150	SUBREGION	Western Europe
+m49:202	m49:002	SUBREGION	Sub-Saharan Africa
+m49:419	m49:019	SUBREGION	Latin America and the Caribbean
+m49:005	m49:419	INTERMEDIATE_REGION	South America
+m49:011	m49:202	INTERMEDIATE_REGION	Western Africa
+m49:013	m49:419	INTERMEDIATE_REGION	Central America
+m49:014	m49:202	INTERMEDIATE_REGION	Eastern Africa
+m49:017	m49:202	INTERMEDIATE_REGION	Middle Africa
+m49:018	m49:202	INTERMEDIATE_REGION	Southern Africa
+m49:029	m49:419	INTERMEDIATE_REGION	Caribbean
+iso:AD	m49:039	COUNTRY	Andorra
+iso:AE	m49:145	COUNTRY	United Arab Emirates
+iso:AF	m49:034	COUNTRY	Afghanistan
+iso:AG	m49:029	COUNTRY	Antigua and Barbuda
+iso:AI	m49:029	COUNTRY	Anguilla
+iso:AL	m49:039	COUNTRY	Albania
+iso:AM	m49:145	COUNTRY	Armenia
+iso:AO	m49:017	COUNTRY	Angola
+iso:AQ	m49:001	COUNTRY	Antarctica
+iso:AR	m49:005	COUNTRY	Argentina
+iso:AS	m49:061	COUNTRY	American Samoa
+iso:AT	m49:155	COUNTRY	Austria
+iso:AU	m49:053	COUNTRY	Australia
+iso:AW	m49:029	COUNTRY	Aruba
+iso:AX	m49:154	COUNTRY	Åland Islands
+iso:AZ	m49:145	COUNTRY	Azerbaijan
+iso:BA	m49:039	COUNTRY	Bosnia and Herzegovina
+iso:BB	m49:029	COUNTRY	Barbados
+iso:BD	m49:034	COUNTRY	Bangladesh
+iso:BE	m49:155	COUNTRY	Belgium
+iso:BF	m49:011	COUNTRY	Burkina Faso
+iso:BG	m49:151	COUNTRY	Bulgaria
+iso:BH	m49:145	COUNTRY	Bahrain
+iso:BI	m49:014	COUNTRY	Burundi
+iso:BJ	m49:011	COUNTRY	Benin
+iso:BL	m49:029	COUNTRY	Saint Barthélemy
+iso:BM	m49:021	COUNTRY	Bermuda
+iso:BN	m49:035	COUNTRY	Brunei Darussalam
+iso:BO	m49:005	COUNTRY	Bolivia, Plurinational State of
+iso:BQ	m49:029	COUNTRY	Bonaire, Sint Eustatius and Saba
+iso:BR	m49:005	COUNTRY	Brazil
+iso:BS	m49:029	COUNTRY	Bahamas
+iso:BT	m49:034	COUNTRY	Bhutan
+iso:BV	m49:005	COUNTRY	Bouvet Island
+iso:BW	m49:018	COUNTRY	Botswana
+iso:BY	m49:151	COUNTRY	Belarus
+iso:BZ	m49:013	COUNTRY	Belize
+iso:CA	m49:021	COUNTRY	Canada
+iso:CC	m49:053	COUNTRY	Cocos (Keeling) Islands
+iso:CD	m49:017	COUNTRY	Congo, Democratic Republic of the
+iso:CF	m49:017	COUNTRY	Central African Republic
+iso:CG	m49:017	COUNTRY	Congo
+iso:CH	m49:155	COUNTRY	Switzerland
+iso:CI	m49:011	COUNTRY	Côte d'Ivoire
+iso:CK	m49:061	COUNTRY	Cook Islands
+iso:CL	m49:005	COUNTRY	Chile
+iso:CM	m49:017	COUNTRY	Cameroon
+iso:CN	m49:030	COUNTRY	China
+iso:CO	m49:005	COUNTRY	Colombia
+iso:CR	m49:013	COUNTRY	Costa Rica
+iso:CU	m49:029	COUNTRY	Cuba
+iso:CV	m49:011	COUNTRY	Cabo Verde
+iso:CW	m49:029	COUNTRY	Curaçao
+iso:CX	m49:053	COUNTRY	Christmas Island
+iso:CY	m49:145	COUNTRY	Cyprus
+iso:CZ	m49:151	COUNTRY	Czechia
+iso:DE	m49:155	COUNTRY	Germany
+iso:DJ	m49:014	COUNTRY	Djibouti
+iso:DK	m49:154	COUNTRY	Denmark
+iso:DM	m49:029	COUNTRY	Dominica
+iso:DO	m49:029	COUNTRY	Dominican Republic
+iso:DZ	m49:015	COUNTRY	Algeria
+iso:EC	m49:005	COUNTRY	Ecuador
+iso:EE	m49:154	COUNTRY	Estonia
+iso:EG	m49:015	COUNTRY	Egypt
+iso:EH	m49:015	COUNTRY	Western Sahara
+iso:ER	m49:014	COUNTRY	Eritrea
+iso:ES	m49:039	COUNTRY	Spain
+iso:ET	m49:014	COUNTRY	Ethiopia
+iso:FI	m49:154	COUNTRY	Finland
+iso:FJ	m49:054	COUNTRY	Fiji
+iso:FK	m49:005	COUNTRY	Falkland Islands (Malvinas)
+iso:FM	m49:057	COUNTRY	Micronesia, Federated States of
+iso:FO	m49:154	COUNTRY	Faroe Islands
+iso:FR	m49:155	COUNTRY	France
+iso:GA	m49:017	COUNTRY	Gabon
+iso:GB	m49:154	COUNTRY	United Kingdom of Great Britain and Northern Ireland
+iso:GD	m49:029	COUNTRY	Grenada
+iso:GE	m49:145	COUNTRY	Georgia
+iso:GF	m49:005	COUNTRY	French Guiana
+iso:GG	m49:154	COUNTRY	Guernsey
+iso:GH	m49:011	COUNTRY	Ghana
+iso:GI	m49:039	COUNTRY	Gibraltar
+iso:GL	m49:021	COUNTRY	Greenland
+iso:GM	m49:011	COUNTRY	Gambia
+iso:GN	m49:011	COUNTRY	Guinea
+iso:GP	m49:029	COUNTRY	Guadeloupe
+iso:GQ	m49:017	COUNTRY	Equatorial Guinea
+iso:GR	m49:039	COUNTRY	Greece
+iso:GS	m49:005	COUNTRY	South Georgia and the South Sandwich Islands
+iso:GT	m49:013	COUNTRY	Guatemala
+iso:GU	m49:057	COUNTRY	Guam
+iso:GW	m49:011	COUNTRY	Guinea-Bissau
+iso:GY	m49:005	COUNTRY	Guyana
+iso:HK	m49:030	COUNTRY	Hong Kong
+iso:HM	m49:053	COUNTRY	Heard Island and McDonald Islands
+iso:HN	m49:013	COUNTRY	Honduras
+iso:HR	m49:039	COUNTRY	Croatia
+iso:HT	m49:029	COUNTRY	Haiti
+iso:HU	m49:151	COUNTRY	Hungary
+iso:ID	m49:035	COUNTRY	Indonesia
+iso:IE	m49:154	COUNTRY	Ireland
+iso:IL	m49:145	COUNTRY	Israel
+iso:IM	m49:154	COUNTRY	Isle of Man
+iso:IN	m49:034	COUNTRY	India
+iso:IO	m49:014	COUNTRY	British Indian Ocean Territory
+iso:IQ	m49:145	COUNTRY	Iraq
+iso:IR	m49:034	COUNTRY	Iran, Islamic Republic of
+iso:IS	m49:154	COUNTRY	Iceland
+iso:IT	m49:039	COUNTRY	Italy
+iso:JE	m49:154	COUNTRY	Jersey
+iso:JM	m49:029	COUNTRY	Jamaica
+iso:JO	m49:145	COUNTRY	Jordan
+iso:JP	m49:030	COUNTRY	Japan
+iso:KE	m49:014	COUNTRY	Kenya
+iso:KG	m49:143	COUNTRY	Kyrgyzstan
+iso:KH	m49:035	COUNTRY	Cambodia
+iso:KI	m49:057	COUNTRY	Kiribati
+iso:KM	m49:014	COUNTRY	Comoros
+iso:KN	m49:029	COUNTRY	Saint Kitts and Nevis
+iso:KP	m49:030	COUNTRY	Korea, Democratic People's Republic of
+iso:KR	m49:030	COUNTRY	Korea, Republic of
+iso:KW	m49:145	COUNTRY	Kuwait
+iso:KY	m49:029	COUNTRY	Cayman Islands
+iso:KZ	m49:143	COUNTRY	Kazakhstan
+iso:LA	m49:035	COUNTRY	Lao People's Democratic Republic
+iso:LB	m49:145	COUNTRY	Lebanon
+iso:LC	m49:029	COUNTRY	Saint Lucia
+iso:LI	m49:155	COUNTRY	Liechtenstein
+iso:LK	m49:034	COUNTRY	Sri Lanka
+iso:LR	m49:011	COUNTRY	Liberia
+iso:LS	m49:018	COUNTRY	Lesotho
+iso:LT	m49:154	COUNTRY	Lithuania
+iso:LU	m49:155	COUNTRY	Luxembourg
+iso:LV	m49:154	COUNTRY	Latvia
+iso:LY	m49:015	COUNTRY	Libya
+iso:MA	m49:015	COUNTRY	Morocco
+iso:MC	m49:155	COUNTRY	Monaco
+iso:MD	m49:151	COUNTRY	Moldova, Republic of
+iso:ME	m49:039	COUNTRY	Montenegro
+iso:MF	m49:029	COUNTRY	Saint Martin (French part)
+iso:MG	m49:014	COUNTRY	Madagascar
+iso:MH	m49:057	COUNTRY	Marshall Islands
+iso:MK	m49:039	COUNTRY	North Macedonia
+iso:ML	m49:011	COUNTRY	Mali
+iso:MM	m49:035	COUNTRY	Myanmar
+iso:MN	m49:030	COUNTRY	Mongolia
+iso:MO	m49:030	COUNTRY	Macao
+iso:MP	m49:057	COUNTRY	Northern Mariana Islands
+iso:MQ	m49:029	COUNTRY	Martinique
+iso:MR	m49:011	COUNTRY	Mauritania
+iso:MS	m49:029	COUNTRY	Montserrat
+iso:MT	m49:039	COUNTRY	Malta
+iso:MU	m49:014	COUNTRY	Mauritius
+iso:MV	m49:034	COUNTRY	Maldives
+iso:MW	m49:014	COUNTRY	Malawi
+iso:MX	m49:013	COUNTRY	Mexico
+iso:MY	m49:035	COUNTRY	Malaysia
+iso:MZ	m49:014	COUNTRY	Mozambique
+iso:NA	m49:018	COUNTRY	Namibia
+iso:NC	m49:054	COUNTRY	New Caledonia
+iso:NE	m49:011	COUNTRY	Niger
+iso:NF	m49:053	COUNTRY	Norfolk Island
+iso:NG	m49:011	COUNTRY	Nigeria
+iso:NI	m49:013	COUNTRY	Nicaragua
+iso:NL	m49:155	COUNTRY	Netherlands, Kingdom of the
+iso:NO	m49:154	COUNTRY	Norway
+iso:NP	m49:034	COUNTRY	Nepal
+iso:NR	m49:057	COUNTRY	Nauru
+iso:NU	m49:061	COUNTRY	Niue
+iso:NZ	m49:053	COUNTRY	New Zealand
+iso:OM	m49:145	COUNTRY	Oman
+iso:PA	m49:013	COUNTRY	Panama
+iso:PE	m49:005	COUNTRY	Peru
+iso:PF	m49:061	COUNTRY	French Polynesia
+iso:PG	m49:054	COUNTRY	Papua New Guinea
+iso:PH	m49:035	COUNTRY	Philippines
+iso:PK	m49:034	COUNTRY	Pakistan
+iso:PL	m49:151	COUNTRY	Poland
+iso:PM	m49:021	COUNTRY	Saint Pierre and Miquelon
+iso:PN	m49:061	COUNTRY	Pitcairn
+iso:PR	m49:029	COUNTRY	Puerto Rico
+iso:PS	m49:145	COUNTRY	Palestine, State of
+iso:PT	m49:039	COUNTRY	Portugal
+iso:PW	m49:057	COUNTRY	Palau
+iso:PY	m49:005	COUNTRY	Paraguay
+iso:QA	m49:145	COUNTRY	Qatar
+iso:RE	m49:014	COUNTRY	Réunion
+iso:RO	m49:151	COUNTRY	Romania
+iso:RS	m49:039	COUNTRY	Serbia
+iso:RU	m49:151	COUNTRY	Russian Federation
+iso:RW	m49:014	COUNTRY	Rwanda
+iso:SA	m49:145	COUNTRY	Saudi Arabia
+iso:SB	m49:054	COUNTRY	Solomon Islands
+iso:SC	m49:014	COUNTRY	Seychelles
+iso:SD	m49:015	COUNTRY	Sudan
+iso:SE	m49:154	COUNTRY	Sweden
+iso:SG	m49:035	COUNTRY	Singapore
+iso:SH	m49:011	COUNTRY	Saint Helena, Ascension and Tristan da Cunha
+iso:SI	m49:039	COUNTRY	Slovenia
+iso:SJ	m49:154	COUNTRY	Svalbard and Jan Mayen
+iso:SK	m49:151	COUNTRY	Slovakia
+iso:SL	m49:011	COUNTRY	Sierra Leone
+iso:SM	m49:039	COUNTRY	San Marino
+iso:SN	m49:011	COUNTRY	Senegal
+iso:SO	m49:014	COUNTRY	Somalia
+iso:SR	m49:005	COUNTRY	Suriname
+iso:SS	m49:014	COUNTRY	South Sudan
+iso:ST	m49:017	COUNTRY	Sao Tome and Principe
+iso:SV	m49:013	COUNTRY	El Salvador
+iso:SX	m49:029	COUNTRY	Sint Maarten (Dutch part)
+iso:SY	m49:145	COUNTRY	Syrian Arab Republic
+iso:SZ	m49:018	COUNTRY	Eswatini
+iso:TC	m49:029	COUNTRY	Turks and Caicos Islands
+iso:TD	m49:017	COUNTRY	Chad
+iso:TF	m49:014	COUNTRY	French Southern Territories
+iso:TG	m49:011	COUNTRY	Togo
+iso:TH	m49:035	COUNTRY	Thailand
+iso:TJ	m49:143	COUNTRY	Tajikistan
+iso:TK	m49:061	COUNTRY	Tokelau
+iso:TL	m49:035	COUNTRY	Timor-Leste
+iso:TM	m49:143	COUNTRY	Turkmenistan
+iso:TN	m49:015	COUNTRY	Tunisia
+iso:TO	m49:061	COUNTRY	Tonga
+iso:TR	m49:145	COUNTRY	Türkiye
+iso:TT	m49:029	COUNTRY	Trinidad and Tobago
+iso:TV	m49:061	COUNTRY	Tuvalu
+iso:TW	m49:001	COUNTRY	Taiwan, Province of China
+iso:TZ	m49:014	COUNTRY	Tanzania, United Republic of
+iso:UA	m49:151	COUNTRY	Ukraine
+iso:UG	m49:014	COUNTRY	Uganda
+iso:UM	m49:057	COUNTRY	United States Minor Outlying Islands
+iso:US	m49:021	COUNTRY	United States of America
+iso:UY	m49:005	COUNTRY	Uruguay
+iso:UZ	m49:143	COUNTRY	Uzbekistan
+iso:VA	m49:039	COUNTRY	Holy See
+iso:VC	m49:029	COUNTRY	Saint Vincent and the Grenadines
+iso:VE	m49:005	COUNTRY	Venezuela, Bolivarian Republic of
+iso:VG	m49:029	COUNTRY	Virgin Islands (British)
+iso:VI	m49:029	COUNTRY	Virgin Islands (U.S.)
+iso:VN	m49:035	COUNTRY	Viet Nam
+iso:VU	m49:054	COUNTRY	Vanuatu
+iso:WF	m49:061	COUNTRY	Wallis and Futuna
+iso:WS	m49:061	COUNTRY	Samoa
+iso:YE	m49:145	COUNTRY	Yemen
+iso:YT	m49:014	COUNTRY	Mayotte
+iso:ZA	m49:018	COUNTRY	South Africa
+iso:ZM	m49:014	COUNTRY	Zambia
+iso:ZW	m49:014	COUNTRY	Zimbabwe

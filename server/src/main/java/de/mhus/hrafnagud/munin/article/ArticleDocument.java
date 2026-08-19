@@ -46,6 +46,10 @@ import org.springframework.data.mongodb.core.mapping.Language;
         @CompoundIndex(name = "source_seen_idx", def = "{ 'sourceNames': 1, 'firstSeenAt': -1 }"),
         @CompoundIndex(name = "language_seen_idx", def = "{ 'language': 1, 'firstSeenAt': -1 }"),
         @CompoundIndex(name = "category_seen_idx", def = "{ 'categories': 1, 'firstSeenAt': -1 }"),
+        // Containment queries: one index answers "from Asia" and "from
+        // Singapore" alike, because the path holds every level.
+        @CompoundIndex(name = "origin_place_seen_idx",
+                def = "{ 'originPlaceIds': 1, 'firstSeenAt': -1 }"),
         // Feed ordering. Distinct from the seen_* family above because it
         // answers a different question: those order by when this archive
         // learned of an article, these by when it was published, which is
@@ -164,6 +168,37 @@ public class ArticleDocument {
     /** Feed and source categories, verbatim and un-normalised. */
     @Builder.Default
     private List<String> categories = new ArrayList<>();
+
+    // ─── Origin ───
+
+    /**
+     * Country of the publisher this article first arrived through, denormalised
+     * from the source.
+     *
+     * <p><b>Origin, never subject.</b> Deutsche Welle sits in Germany and
+     * writes in English about the world; a Singapore bureau files about
+     * Ukraine. This says who published, and the article's own places — what it
+     * is <em>about</em> — are a different field that a different step fills.
+     * Merging the two produces a filter that is wrong exactly where it matters
+     * and wrong invisibly, because the value looks plausible. See
+     * specs/geo.md §1.
+     *
+     * <p>Frequently null: a country reaches a source only from a hand-set list
+     * default.
+     */
+    private @Nullable String originCountry;
+
+    /**
+     * {@link #originCountry} and everything containing it, outermost first —
+     * {@code [m49:001, m49:142, m49:035, iso:SG]}.
+     *
+     * <p>Materialised so that "everything from Asian publishers" is an equality
+     * match on a multikey index instead of a hierarchy walk MongoDB cannot do.
+     * Empty when the country is unknown or not in the table; an unknown code
+     * must not silently become "the world".
+     */
+    @Builder.Default
+    private List<String> originPlaceIds = new ArrayList<>();
 
     // ─── Provenance ───
 

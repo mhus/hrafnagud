@@ -58,6 +58,16 @@ public class ArticleDto {
 
     // ─── Provenance ───
 
+    /**
+     * Country of the publisher it first arrived through — origin, never
+     * subject. See specs/geo.md §1.
+     */
+    private @Nullable String originCountry;
+
+    /** {@link #originCountry} and everything containing it, outermost first. */
+    @Builder.Default
+    private List<String> originPlaceIds = new ArrayList<>();
+
     /** Every source that delivered this article, in order of first arrival. */
     private List<String> sources = new ArrayList<>();
 

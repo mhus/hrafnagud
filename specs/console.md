@@ -21,7 +21,7 @@ created anyway. That is the bar an action has to clear to appear here.
 
 Static HTML and plain JavaScript at `classpath:/console/`, served at
 `/console/` with `/` redirecting there. No build step, no bundler, no
-framework: the console reads four endpoints and renders four views, and a
+framework: the console reads five endpoints and renders four views, and a
 framework would be more machinery to install than the code it replaced. It has
 to stay readable to whoever is debugging an ingest problem at the time.
 
@@ -93,8 +93,14 @@ nothing else. Everything the catalogue layer does happens on a schedule
 anyway; the button is for the case where waiting for the next pass is the
 wrong answer. See [catalogs.md](catalogs.md).
 
-**Articles** — what was collected, filtered by source, language, body state,
-text and time window. The detail dialog is where data quality is actually
+**Articles** — what was collected, filtered by source, language, **origin**,
+body state, text and time window. The origin column and filter read the
+publisher's place path: picking *Asia* finds every article from an Asian
+publisher, because the article stores the whole containment chain rather than
+just a country. Names come from `GET /api/v1/places` — the article carries
+ids, since a display name depends on the reader's language and is not a
+property of the article. The dialog spells the chain out and says what it is
+not: the publisher's seat, not the subject. See [geo.md](geo.md). The detail dialog is where data quality is actually
 judged: the extracted body verbatim, its word count, the language and how it
 was determined, the translation if one exists, and the error strings when a
 step failed.

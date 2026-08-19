@@ -226,6 +226,78 @@ function countTable(table, map, empty) {
         + '</td></tr>').join('') + '</tbody>';
 }
 
+// ── places ──────────────────────────────────────────────────────────────
+//
+// The containment table, fetched once. Articles carry ids (m49:142) because a
+// display name depends on the reader's language and does not belong on the
+// article; turning them back into words is the client's job, and 279 rows is
+// cheaper to hold than a lookup per row shown.
+
+const places = new Map();
+
+async function loadPlaces() {
+    if (places.size) {
+        return;
+    }
+    for (const place of await api('/places')) {
+        places.set(place.id, place);
+    }
+}
+
+function placeName(id) {
+    const place = places.get(id);
+    return place ? place.name : id;
+}
+
+/** "World › Asia › South-Eastern Asia › Singapore" — the whole containment. */
+function placePath(ids) {
+    if (!ids || !ids.length) {
+        return '—';
+    }
+    return ids.map(id => esc(placeName(id))).join(' <span class="text-body-secondary">›</span> ');
+}
+
+/** The country at the end of the path — what a table column has room for. */
+function placeLeaf(ids) {
+    return !ids || !ids.length ? '—' : esc(placeName(ids[ids.length - 1]));
+}
+
+/**
+ * The filter's options, ordered as the hierarchy reads rather than
+ * alphabetically: an operator picking "Asia" wants to see its sub-regions
+ * under it, not scattered between Africa and Europe.
+ */
+function fillPlaceFilter(select) {
+    if (!select || select.options.length > 1) {
+        return;
+    }
+    const byParent = new Map();
+    for (const place of places.values()) {
+        const key = place.parentId || '';
+        if (!byParent.has(key)) {
+            byParent.set(key, []);
+        }
+        byParent.get(key).push(place);
+    }
+
+    const add = (place, depth) => {
+        // Countries are the long tail: 249 of them would bury the regions that
+        // make this filter worth having, and the source view is where a single
+        // country is picked anyway.
+        if (place.kind === 'COUNTRY') {
+            return;
+        }
+        const option = document.createElement('option');
+        option.value = place.id;
+        option.textContent = '\u00a0'.repeat(depth * 3) + place.name;
+        select.append(option);
+        (byParent.get(place.id) || [])
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .forEach(child => add(child, depth + 1));
+    };
+    (byParent.get('') || []).forEach(root => add(root, 0));
+}
+
 // ── overview ────────────────────────────────────────────────────────────
 
 let statsTimer = null;
@@ -355,6 +427,7 @@ let sourcesPage = 0;
 
 async function loadSources(page) {
     clearError();
+    await loadPlaces();
     sourcesPage = Math.max(page || 0, 0);
     const form = document.getElementById('form-sources');
     const size = 50;
@@ -412,7 +485,10 @@ async function showSourceDetail(name) {
             ['Typ', esc(source.type)],
             ['Zustand', source.enabled ? 'aktiv' : 'inaktiv'],
             ['Sprache', esc(source.language || '—')],
-            ['Land', esc(source.country || '—')],
+            ['Land', source.country
+                ? esc(placeName('iso:' + source.country)) + ' <span class="text-body-secondary'
+                  + ' small">(' + esc(source.country) + ')</span>'
+                : '—'],
             ['Kategorien', esc((source.categories || []).join(', ') || '—')],
             ['Herkunft', esc(source.origin)
                 + (source.originListName ? ' — ' + esc(source.originListName) : '')],
@@ -447,6 +523,8 @@ let articlesPage = 0;
 
 async function loadArticles(page, withCount) {
     clearError();
+    await loadPlaces();
+    fillPlaceFilter(document.querySelector('#form-articles select[name=originPlace]'));
     articlesPage = Math.max(page || 0, 0);
     const form = document.getElementById('form-articles');
     const size = 50;
@@ -460,6 +538,7 @@ async function loadArticles(page, withCount) {
         q: form.elements.q.value.trim(),
         source: form.elements.source.value.trim(),
         language: form.elements.language.value.trim(),
+        originPlace: form.elements.originPlace.value,
         contentStatus: form.elements.contentStatus.value,
         since: since,
         withTranslation: true,
@@ -473,7 +552,7 @@ async function loadArticles(page, withCount) {
     const now = Date.now();
     const body = document.getElementById('tbody-articles');
     if (!result.items.length) {
-        body.innerHTML = '<tr><td colspan="6" class="text-body-secondary py-4">'
+        body.innerHTML = '<tr><td colspan="7" class="text-body-secondary py-4">'
             + 'Kein Artikel passt zum Filter.</td></tr>';
     } else {
         body.innerHTML = result.items.map(article => '<tr data-article="' + esc(article.id) + '">'
@@ -488,6 +567,11 @@ async function loadArticles(page, withCount) {
                 ? ' <span class="badge text-bg-secondary">+'
                   + (article.sources.length - 1) + '</span>'
                 : '') + '</td>'
+            // Origin, not subject: where the publisher sits. The full
+            // containment is in the dialog; a column has room for the country.
+            + '<td class="small origin" title="' + esc((article.originPlaceIds || [])
+                    .map(placeName).join(' › ')) + '">'
+                + placeLeaf(article.originPlaceIds) + '</td>'
             + '<td>' + esc(article.language || '—') + '</td>'
             + '<td>' + badge(article.contentStatus)
             + (article.contentWordCount
@@ -536,6 +620,13 @@ async function showArticleDetail(id) {
         + defList([
             ['URL', link(article.url)],
             ['Quellen', esc((article.sources || []).join(', '))],
+            ['Herkunft', placePath(article.originPlaceIds)
+                + (article.originCountry
+                    ? ' <span class="text-body-secondary small">('
+                      + esc(article.originCountry) + ')</span>'
+                    : '')
+                + '<div class="text-body-secondary small">Sitz des Verlags — '
+                + 'nicht, worum es geht.</div>'],
             ['Autor', esc(article.author || '—')],
             ['Sprache', esc(article.language || '—')
                 + ' <span class="text-body-secondary small">('

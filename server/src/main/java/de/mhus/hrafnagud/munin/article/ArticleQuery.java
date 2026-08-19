@@ -27,6 +27,17 @@ public class ArticleQuery {
     /** Exact match against one of the article's verbatim categories. */
     @Nullable String category;
 
+    /**
+     * Place the publisher sits in, at any level — {@code m49:142} finds every
+     * article from an Asian publisher, {@code iso:SG} only Singaporean ones.
+     *
+     * <p>One field for every level because the article stores the whole
+     * containment path, so the query does not have to know which rung it was
+     * handed. <b>Origin, not subject:</b> this does not find articles
+     * <em>about</em> Asia.
+     */
+    @Nullable String originPlace;
+
     /** Full-text search over title and teaser. */
     @Nullable String text;
 
