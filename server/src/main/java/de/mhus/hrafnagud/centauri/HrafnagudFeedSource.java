@@ -14,6 +14,7 @@ import de.mhus.hrafnagud.facet.ArchiveFacets;
 import de.mhus.vance.ode.centauri.FeedSource;
 import de.mhus.vance.ode.centauri.OdeCapabilities;
 import de.mhus.vance.ode.centauri.OdeDirection;
+import de.mhus.vance.ode.centauri.OdeExtraField;
 import de.mhus.vance.ode.centauri.OdeItem;
 import de.mhus.vance.ode.centauri.OdeItemPage;
 import de.mhus.vance.ode.centauri.OdeItemQuery;
@@ -143,7 +144,25 @@ public class HrafnagudFeedSource implements FeedSource {
                 // grammar note above stays true: these are not selectors —
                 // a selector says which stream, a facet which subset of it,
                 // and only the second one combines.
-                facets.declare());
+                facets.declare(),
+                // What of `extras` a person should see, and in which order.
+                // Here and not in the reader: these are our keys, and a reader
+                // that hardcoded them would show nothing for the next source
+                // and miss whatever that one carries instead.
+                //
+                // Not listed on purpose: originPlaceIds and topicIds. They are
+                // id paths for a reader that wants to do something with them,
+                // and „m49:142, iso:DE" read out to a person is our storage
+                // format wearing a label.
+                List.of(
+                        OdeExtraField.of("originPlace", "Publisher's place"),
+                        OdeExtraField.of("sources", "Delivered by"),
+                        OdeExtraField.of("categories", "Publisher's categories"),
+                        OdeExtraField.of("originalTitle", "Original title"),
+                        OdeExtraField.of("originalLanguage", "Original language"),
+                        OdeExtraField.of("translationModel", "Translated by"),
+                        OdeExtraField.of("wordCount", "Words"),
+                        OdeExtraField.of("collectedAt", "Collected")));
     }
 
     @Override
