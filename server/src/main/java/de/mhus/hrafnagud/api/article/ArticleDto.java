@@ -1,6 +1,7 @@
 package de.mhus.hrafnagud.api.article;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import de.mhus.hrafnagud.api.filter.FilterDecision;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -117,6 +118,22 @@ public class ArticleDto {
     private TranslationStatus translationStatus = TranslationStatus.PENDING;
 
     private @Nullable String translationError;
+
+    // ─── Filter decisions ───
+    //
+    // Why this article is in, or out of, each of the two expensive queues. Both
+    // are ACCEPT unless a rule said otherwise, so a SKIPPED status with an
+    // ACCEPT policy means "nothing to do" rather than "filtered out" — the
+    // distinction the rule name makes concrete.
+
+    private FilterDecision contentPolicy = FilterDecision.ACCEPT;
+
+    /** Name of the rule that decided; null when the default applied. */
+    private @Nullable String contentPolicyRule;
+
+    private FilterDecision translationPolicy = FilterDecision.ACCEPT;
+
+    private @Nullable String translationPolicyRule;
 
     /**
      * The current translation, when one exists and was asked for.

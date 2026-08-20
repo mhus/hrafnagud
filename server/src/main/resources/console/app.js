@@ -1,10 +1,10 @@
 /*
  * hrafnagud console.
  *
- * Plain fetch and plain DOM, no framework. The console reads four endpoints
- * and renders four views; a framework would be more code to install than the
- * code it replaces, and this file has to stay readable to whoever is
- * debugging an ingest problem at the time.
+ * Plain fetch and plain DOM, no framework. The console reads the operator API
+ * and renders one view per subsystem; a framework would be more code to
+ * install than the code it replaces, and this file has to stay readable to
+ * whoever is debugging an ingest problem at the time.
  *
  * ONE RULE THAT IS NOT STYLE: every string that came out of the API is
  * publisher-controlled. Article titles, teasers, source names, error
@@ -870,6 +870,160 @@ async function confirmCategory(key, topicId) {
 }
 
 
+// ── filter rules ────────────────────────────────────────────────────────
+//
+// Full CRUD, unlike the rest of this console. A rule is cheap to write, cheap
+// to switch off and cheap to delete, so the argument for keeping destructive
+// operations out of reach of a mis-click does not apply — what a mis-click
+// costs here is one crawl decision, not data.
+
+const RULE_TYPE_HINT = {
+    HOST: 'Domain der Artikel-URL, ohne www. Mit „endet mit" greift eine Regel auch '
+        + 'für Subdomains — das ist der richtige Vergleich für Domains.',
+    URL: 'Die ganze URL. Achtung: „enthält youtube.com" trifft auch eine fremde URL, '
+        + 'die youtube.com nur im Query-String nennt. Dafür ist host da.',
+    SOURCE: 'Quellen-Name. Ein Artikel kann aus mehreren Feeds kommen — es genügt, '
+        + 'wenn eine Quelle passt.',
+    LANGUAGE: 'Erkannte Artikelsprache als Zwei-Buchstaben-Code, z.B. de.',
+    REGION: 'Sitz der Quelle, nicht das Thema des Artikels. Ort-Id wie iso:SG oder '
+        + 'm49:142 — eine Region trifft alles darunter.',
+    CATEGORY: 'Die Original-Kategorie des Publishers, unnormiert und in seiner Sprache. '
+        + 'Funktioniert sofort.',
+    TOPIC: 'Normiertes Thema wie medtop:15000000 (trifft auch alles darunter). Steht '
+        + 'beim Einlesen meist noch nicht fest — solche Regeln wirken erst über '
+        + '„Bestand neu bewerten".',
+    PROFILE: 'Taktklasse der Quelle (news, blog) — wie oft gepollt wird, nicht welche '
+        + 'Gattung. Beides fällt derzeit zufällig zusammen.',
+};
+
+async function loadFilterRules() {
+    clearError();
+    const pipeline = document.getElementById('filter-pipeline').value;
+    const rules = await api('/filter/rules', { pipeline: pipeline });
+
+    const body = document.getElementById('tbody-filter');
+    if (!rules.length) {
+        body.innerHTML = '<tr><td colspan="7" class="text-body-secondary py-4">'
+            + 'Keine Regel. Ohne Regeln wird alles akzeptiert.</td></tr>';
+        return;
+    }
+    body.innerHTML = rules.map(rule => '<tr' + (rule.enabled ? '' : ' class="opacity-50"') + '>'
+        + '<td><div>' + esc(rule.name) + '</div>'
+        + (rule.note ? '<div class="small text-body-secondary">' + esc(rule.note) + '</div>' : '')
+        + '</td>'
+        + '<td class="small">' + esc(rule.pipeline) + '</td>'
+        + '<td><span class="badge ' + (rule.decision === 'ACCEPT'
+            ? 'text-bg-success' : 'text-bg-danger') + '">'
+            + esc(rule.decision) + '</span></td>'
+        + '<td class="small">' + esc(rule.type) + '</td>'
+        + '<td class="small"><code>' + esc(rule.matchType) + '</code> '
+            + esc(rule.value) + '</td>'
+        + '<td><div class="form-check form-switch mb-0">'
+        + '<input class="form-check-input" type="checkbox" data-toggle-rule="'
+            + esc(rule.name) + '"' + (rule.enabled ? ' checked' : '') + '>'
+        + '</div></td>'
+        + '<td class="text-end text-nowrap">'
+        + '<button class="btn btn-sm btn-outline-secondary" data-edit-rule="'
+            + esc(rule.name) + '">Ändern</button> '
+        + '<button class="btn btn-sm btn-outline-danger" data-delete-rule="'
+            + esc(rule.name) + '">Löschen</button>'
+        + '</td></tr>').join('');
+
+    body.querySelectorAll('[data-toggle-rule]').forEach(box =>
+        box.addEventListener('change', () => toggleFilterRule(box).catch(showError)));
+    body.querySelectorAll('[data-edit-rule]').forEach(button =>
+        button.addEventListener('click', () =>
+            openFilterRuleDialog(rules.find(r => r.name === button.dataset.editRule))));
+    body.querySelectorAll('[data-delete-rule]').forEach(button =>
+        button.addEventListener('click', () =>
+            deleteFilterRule(button.dataset.deleteRule).catch(showError)));
+}
+
+function openFilterRuleDialog(rule) {
+    const form = document.getElementById('form-filter-rule');
+    document.getElementById('filter-rule-title').textContent =
+        rule ? 'Regel ' + rule.name : 'Neue Filterregel';
+    form.elements.editing.value = rule ? rule.name : '';
+    form.elements.pipeline.value = rule ? rule.pipeline
+        : (document.getElementById('filter-pipeline').value || 'TRANSLATION');
+    form.elements.decision.value = rule ? rule.decision : 'DENY';
+    form.elements.enabled.value = rule ? String(rule.enabled) : 'true';
+    form.elements.type.value = rule ? rule.type : 'HOST';
+    form.elements.matchType.value = rule ? rule.matchType : 'EXACT';
+    form.elements.value.value = rule ? rule.value : '';
+    form.elements.note.value = rule && rule.note ? rule.note : '';
+    updateFilterRuleHint();
+    filterRuleModal.show();
+}
+
+/** What the chosen type actually reads — the part that is easy to get wrong. */
+function updateFilterRuleHint() {
+    const form = document.getElementById('form-filter-rule');
+    document.getElementById('filter-rule-hint').textContent =
+        RULE_TYPE_HINT[form.elements.type.value] || '';
+}
+
+async function saveFilterRule() {
+    const form = document.getElementById('form-filter-rule');
+    const editing = form.elements.editing.value;
+    const body = {
+        pipeline: form.elements.pipeline.value,
+        decision: form.elements.decision.value,
+        type: form.elements.type.value,
+        matchType: form.elements.matchType.value,
+        value: form.elements.value.value.trim(),
+        enabled: form.elements.enabled.value === 'true',
+        note: form.elements.note.value.trim() || null,
+    };
+    // An invalid regex comes back as a 400 with the syntax error in it, which
+    // is the whole reason the pattern is compiled server-side on save.
+    await api(editing ? '/filter/rules/' + encodeURIComponent(editing) : '/filter/rules',
+        null, editing ? 'PUT' : 'POST', body);
+    filterRuleModal.hide();
+    showNote(editing ? 'Regel ' + editing + ' gespeichert.' : 'Regel angelegt.');
+    await loadFilterRules();
+}
+
+async function toggleFilterRule(box) {
+    const name = box.dataset.toggleRule;
+    try {
+        await api('/filter/rules/' + encodeURIComponent(name) + '/enabled',
+            { value: box.checked }, 'POST');
+        showNote('Regel ' + name + (box.checked ? ' aktiv.' : ' abgeschaltet.'));
+    } catch (e) {
+        box.checked = !box.checked;
+        throw e;
+    }
+    await loadFilterRules();
+}
+
+async function deleteFilterRule(name) {
+    if (!window.confirm('Regel ' + name + ' löschen?')) {
+        return;
+    }
+    await api('/filter/rules/' + encodeURIComponent(name), null, 'DELETE');
+    showNote('Regel ' + name + ' gelöscht. Artikel behalten den Namen als Begründung.');
+    await loadFilterRules();
+}
+
+async function reevaluateFilter(button) {
+    const days = document.getElementById('filter-reevaluate-days').value;
+    button.disabled = true;
+    const label = button.textContent;
+    button.textContent = 'läuft …';
+    try {
+        const report = await api('/filter/reevaluate', { days: days }, 'POST');
+        showNote(num(report.examined) + ' Artikel geprüft, ' + num(report.changed)
+            + ' neu entschieden — ' + num(report.denied) + ' aus einer Queue genommen, '
+            + num(report.accepted) + ' wieder aufgenommen'
+            + (report.capped ? '. Obergrenze erreicht, erneut ausführen für den Rest.' : '.'));
+    } finally {
+        button.disabled = false;
+        button.textContent = label;
+    }
+}
+
+
 // ── catalogs ────────────────────────────────────────────────────────────
 //
 // The one subsystem the console operates instead of only showing: switch a
@@ -1079,7 +1233,8 @@ function defList(rows) {
 // ── views ───────────────────────────────────────────────────────────────
 
 function showView(name) {
-    for (const view of ['overview', 'sources', 'articles', 'categories', 'catalogs']) {
+    for (const view of ['overview', 'sources', 'articles', 'categories', 'filter',
+            'catalogs']) {
         document.getElementById('view-' + view).classList.toggle('d-none', view !== name);
     }
     document.querySelectorAll('#tabs .nav-link').forEach(tab =>
@@ -1091,6 +1246,7 @@ function showView(name) {
 
 let tokenModal;
 let detailModal;
+let filterRuleModal;
 
 function openTokenDialog() {
     document.getElementById('input-token').value = tokenStore.get();
@@ -1103,6 +1259,7 @@ function openTokenDialog() {
 document.addEventListener('DOMContentLoaded', () => {
     tokenModal = new bootstrap.Modal(document.getElementById('modal-token'));
     detailModal = new bootstrap.Modal(document.getElementById('modal-detail'));
+    filterRuleModal = new bootstrap.Modal(document.getElementById('modal-filter-rule'));
 
     for (const status of ['PENDING', 'FETCHED', 'PAYWALL', 'BLOCKED', 'FAILED', 'SKIPPED']) {
         const option = document.createElement('option');
@@ -1151,6 +1308,19 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault();
         loadCategories(0).catch(showError);
     });
+
+    document.getElementById('filter-pipeline').addEventListener('change', () =>
+        loadFilterRules().catch(showError));
+    document.getElementById('btn-filter-new').addEventListener('click', () =>
+        openFilterRuleDialog(null));
+    document.getElementById('form-filter-rule').elements.type.addEventListener('change',
+        updateFilterRuleHint);
+    document.getElementById('form-filter-rule').addEventListener('submit', event => {
+        event.preventDefault();
+        saveFilterRule().catch(showError);
+    });
+    document.getElementById('btn-filter-reevaluate').addEventListener('click', event =>
+        reevaluateFilter(event.currentTarget).catch(showError));
     // A reset only clears the inputs; the table would keep showing the old
     // filter's rows until something reloads it.
     for (const id of ['form-sources', 'form-articles', 'form-categories']) {
@@ -1184,7 +1354,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function currentView() {
     const view = location.hash.slice(1);
-    return ['overview', 'sources', 'articles', 'categories', 'catalogs'].includes(view)
+    return ['overview', 'sources', 'articles', 'categories', 'filter', 'catalogs']
+            .includes(view)
             ? view : 'overview';
 }
 
@@ -1193,6 +1364,7 @@ function reloadCurrentView() {
     const load = view === 'sources' ? () => loadSources(sourcesPage)
         : view === 'articles' ? () => loadArticles(articlesPage)
         : view === 'categories' ? () => loadCategories(categoriesPage)
+        : view === 'filter' ? loadFilterRules
         : view === 'catalogs' ? loadCatalogs
         : loadStats;
     load().catch(showError);

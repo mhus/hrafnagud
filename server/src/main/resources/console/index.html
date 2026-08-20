@@ -45,6 +45,7 @@
             <li class="nav-item"><a class="nav-link" href="#" data-view="sources">Quellen</a></li>
             <li class="nav-item"><a class="nav-link" href="#" data-view="articles">Artikel</a></li>
             <li class="nav-item"><a class="nav-link" href="#" data-view="categories">Kategorien</a></li>
+            <li class="nav-item"><a class="nav-link" href="#" data-view="filter">Filter</a></li>
             <li class="nav-item"><a class="nav-link" href="#" data-view="catalogs">Kataloge</a></li>
         </ul>
 
@@ -244,6 +245,60 @@
         <div id="pager-categories"></div>
     </section>
 
+    <!-- ─── Filter ────────────────────────────────────────────────── -->
+    <section id="view-filter" class="d-none">
+        <p class="text-body-secondary small">
+            Volltext holen kostet einen Request, Übersetzen kostet Tokens. Diese
+            Regeln entscheiden, wofür. Auswertung: erst <em>accept</em>, dann
+            <em>deny</em>, was übrig bleibt gilt als akzeptiert — eine
+            accept-Regel ist also eine Ausnahme zu einer deny-Regel. Reihenfolge
+            innerhalb der Listen gibt es nicht, es zählt nur ob irgendeine
+            Regel passt.
+        </p>
+
+        <div class="d-flex flex-wrap align-items-end gap-3 mb-3">
+            <div>
+                <label class="form-label small mb-1">Pipeline</label>
+                <select class="form-select form-select-sm" id="filter-pipeline">
+                    <option value="">beide</option>
+                    <option value="TRANSLATION">Übersetzung</option>
+                    <option value="CONTENT">Volltext</option>
+                </select>
+            </div>
+            <button class="btn btn-sm btn-primary" id="btn-filter-new">Regel anlegen</button>
+            <div class="ms-auto d-flex align-items-end gap-2">
+                <div>
+                    <label class="form-label small mb-1">Erneut anwenden auf</label>
+                    <select class="form-select form-select-sm" id="filter-reevaluate-days">
+                        <option value="10">letzte 10 Tage</option>
+                        <option value="30">letzte 30 Tage</option>
+                        <option value="365">letztes Jahr</option>
+                        <option value="">gesamtes Archiv</option>
+                    </select>
+                </div>
+                <button class="btn btn-sm btn-outline-primary" id="btn-filter-reevaluate">
+                    Bestand neu bewerten
+                </button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+                <thead><tr>
+                    <th>Regel</th><th>Pipeline</th><th>Entscheidung</th>
+                    <th>Prüft</th><th>Wert</th><th>Aktiv</th><th></th>
+                </tr></thead>
+                <tbody id="tbody-filter"></tbody>
+            </table>
+        </div>
+        <p class="text-body-secondary small mb-0">
+            Neue Artikel werden beim Einlesen bewertet. Bereits gespeicherte
+            Artikel behalten ihre Entscheidung, bis sie neu bewertet werden —
+            und dabei wird ein Status nur angefasst, wenn die Entscheidung sich
+            wirklich geändert hat. Fertige Übersetzungen bleiben unberührt.
+        </p>
+    </section>
+
     <!-- ─── Kataloge ──────────────────────────────────────────────── -->
     <section id="view-catalogs" class="d-none">
         <p class="text-body-secondary small">
@@ -283,6 +338,83 @@
                     Vergessen
                 </button>
                 <button type="submit" class="btn btn-primary">Übernehmen</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ─── Filterregel ───────────────────────────────────────────────── -->
+<div class="modal fade" id="modal-filter-rule" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <form class="modal-content" id="form-filter-rule">
+            <div class="modal-header">
+                <h5 class="modal-title" id="filter-rule-title">Filterregel</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" name="editing">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">Pipeline</label>
+                        <select class="form-select form-select-sm" name="pipeline">
+                            <option value="TRANSLATION">Übersetzung</option>
+                            <option value="CONTENT">Volltext</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">Entscheidung</label>
+                        <select class="form-select form-select-sm" name="decision">
+                            <option value="DENY">deny — nicht ausgeben</option>
+                            <option value="ACCEPT">accept — Ausnahme, schlägt deny</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">Aktiv</label>
+                        <select class="form-select form-select-sm" name="enabled">
+                            <option value="true">ja</option>
+                            <option value="false">nein</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">Prüft</label>
+                        <select class="form-select form-select-sm" name="type">
+                            <option value="HOST">host — Domain der Artikel-URL</option>
+                            <option value="URL">url — die ganze URL</option>
+                            <option value="SOURCE">source — Quellen-Name</option>
+                            <option value="LANGUAGE">language — Artikelsprache</option>
+                            <option value="REGION">region — Herkunft der Quelle</option>
+                            <option value="CATEGORY">category — Original-Kategorie</option>
+                            <option value="TOPIC">topic — normiertes Thema</option>
+                            <option value="PROFILE">profile — Taktklasse der Quelle</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">Vergleich</label>
+                        <select class="form-select form-select-sm" name="matchType">
+                            <option value="EXACT">exakt</option>
+                            <option value="SUFFIX">endet mit</option>
+                            <option value="PREFIX">beginnt mit</option>
+                            <option value="CONTAINS">enthält</option>
+                            <option value="REGEX">Regex</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small mb-1">Wert</label>
+                        <input class="form-control form-control-sm" name="value"
+                               placeholder="youtube.com" required>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small mb-1">Notiz</label>
+                        <input class="form-control form-control-sm" name="note"
+                               placeholder="warum diese Regel existiert">
+                    </div>
+                </div>
+                <p class="form-text mb-0" id="filter-rule-hint"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary"
+                        data-bs-dismiss="modal">Abbrechen</button>
+                <button type="submit" class="btn btn-primary">Speichern</button>
             </div>
         </form>
     </div>

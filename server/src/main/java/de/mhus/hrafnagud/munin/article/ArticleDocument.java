@@ -3,6 +3,7 @@ package de.mhus.hrafnagud.munin.article;
 import de.mhus.hrafnagud.api.article.ContentStatus;
 import de.mhus.hrafnagud.api.article.LanguageSource;
 import de.mhus.hrafnagud.api.article.TranslationStatus;
+import de.mhus.hrafnagud.api.filter.FilterDecision;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -78,7 +79,13 @@ import org.springframework.data.mongodb.core.mapping.Language;
         // archive — the same reason the content queue is.
         @CompoundIndex(name = "translation_queue_idx",
                 def = "{ 'translationNextAttemptAt': 1 }",
-                partialFilter = "{ 'translationStatus': 'PENDING' }")
+                partialFilter = "{ 'translationStatus': 'PENDING' }"),
+        // Re-evaluating the filter rules walks the archive oldest-examined
+        // first, using policyAt as its progress marker so a capped run
+        // continues instead of chewing the same head again. Not a hot path —
+        // it runs when somebody presses the button — but without an index the
+        // walk is a collection scan per batch.
+        @CompoundIndex(name = "policy_idx", def = "{ 'policyAt': 1 }")
 })
 @Data
 @Builder
@@ -294,6 +301,34 @@ public class ArticleDocument {
     private int translationAttempts;
 
     private @Nullable String translationError;
+
+    // ─── Filter decisions ───
+    //
+    // Why an article is in, or out of, each of the two expensive queues. The
+    // status field remains the queue; these say how it got its value, which is
+    // what makes "why is this not translated" answerable from the article
+    // instead of by re-deriving it against rules that may have changed since.
+    //
+    // Each pair distinguishes two SKIPPED that mean different things: filtered
+    // out (DENY) and nothing to do — already in the pivot language, or body
+    // fetching switched off — which is ACCEPT. Only the first is undone by
+    // changing a rule, which is what re-evaluation relies on. See
+    // specs/filter.md §6.
+
+    private FilterDecision contentPolicy = FilterDecision.ACCEPT;
+
+    /** Name of the deciding rule; null when the default applied. */
+    private @Nullable String contentPolicyRule;
+
+    private FilterDecision translationPolicy = FilterDecision.ACCEPT;
+
+    private @Nullable String translationPolicyRule;
+
+    /**
+     * When the rules were last applied to this article — ingest, or a
+     * re-evaluation run.
+     */
+    private @Nullable Instant policyAt;
 
     @Version
     private @Nullable Long version;

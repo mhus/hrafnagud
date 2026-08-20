@@ -45,6 +45,7 @@ class ArticleServiceQueryTest {
                 mongoTemplate,
                 new de.mhus.hrafnagud.munin.place.PlaceRegistry(),
                 mock(de.mhus.hrafnagud.munin.category.CategoryMappingService.class),
+                mock(de.mhus.hrafnagud.munin.filter.ArticleFilterService.class),
                 properties);
         when(mongoTemplate.find(any(Query.class), eq(ArticleDocument.class)))
                 .thenReturn(List.of());

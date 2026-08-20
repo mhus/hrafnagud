@@ -30,6 +30,7 @@ public class MuninProperties {
     private final Language language = new Language();
     private final Translation translation = new Translation();
     private final Category category = new Category();
+    private final Filter filter = new Filter();
     private final Api api = new Api();
 
     /** Shared HTTP behaviour for feed, list and article requests. */
@@ -449,6 +450,34 @@ public class MuninProperties {
          * containing that word, which is also how "standard" becomes a topic.
          */
         private double acceptConfidence = 0.9;
+    }
+
+    /**
+     * Filter rules — which articles are worth a body fetch and a translation.
+     *
+     * <p>There is no {@code enabled} here, and that is not an omission. The
+     * engine is a gate rather than a worker: with no rules written every article
+     * is accepted, which is exactly what an off switch would achieve. The two
+     * numbers below bound the only expensive operation, re-evaluating articles
+     * that are already stored.
+     *
+     * <p>Design: specs/filter.md.
+     */
+    @Data
+    public static class Filter {
+
+        /**
+         * Cap on articles examined by one re-evaluation run.
+         *
+         * <p>The archive is millions of rows, so a run is bounded even when the
+         * time window is not. Reaching the cap is reported rather than hidden,
+         * and the next run continues where this one stopped — the progress
+         * marker is {@code policyAt} on the article.
+         */
+        private int maxPerRun = 50_000;
+
+        /** Articles read per batch while walking. */
+        private int batchSize = 500;
     }
 
     /** The operator API and the console served over it. */

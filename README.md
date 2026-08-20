@@ -128,10 +128,10 @@ Details, configuration surface and the reasoning behind the layout:
 
 ## Console
 
-`http://localhost:9800/` opens a small operator console — three views over the
-API and nothing more: an overview that says whether collection is alive,
-the source registry with its failures, and the articles with what was
-extracted from them.
+`http://localhost:9800/` opens a small operator console, one view per
+subsystem: an overview that says whether collection is alive, the source
+registry with its failures, the articles with what was extracted from them, the
+category mappings, the filter rules, and the catalogues.
 
 ```yaml
 munin:
@@ -145,9 +145,14 @@ default, on the device only if you tick the box. The page itself is never
 guarded: it holds no data and no credential, and asking for a token in order
 to reach the page that asks for a token is a loop, not a security measure.
 
-**Read-only, deliberately.** No delete, no re-queue, no source editing. Those
-exist in the API and are one `curl` away; putting them behind a button that a
-mis-click reaches is a different decision from showing what is going on.
+**Mostly read-only, and the exceptions are chosen rather than accumulated.**
+What the console can change is what an operator has to change while looking at
+the data, and what a mis-click cannot destroy: switch a catalogue on or off and
+re-read it, settle a category mapping by hand, write and re-apply filter rules.
+No article deletion, no source editing, no re-queueing a body — those exist in
+the API and are one `curl` away. Putting an operation behind a button is a
+different decision from showing what is going on, and it is made one operation
+at a time.
 
 Bootstrap comes from a CDN, so the console needs internet access even where
 hrafnagud does not. That is the one trade in it: ~60 KB of JAR against a
@@ -163,6 +168,8 @@ dependency on `cdn.jsdelivr.net` being reachable from the browser.
 | `articles` | article metadata, deduplicated across sources |
 | `article_contents` | extracted bodies, images and page metadata, separate because bodies are ~50× larger |
 | `enrichments` | results of processing steps over an article — one document per run, append-only |
+| `category_mappings` | what each publisher category was decided to mean, once for the whole archive |
+| `filter_rules` | accept/deny rules deciding which articles are worth fetching and translating |
 
 Every article carries the place path of the publisher it first arrived through
 (`originPlaceIds`, world → region → sub-region → country from UN M.49 and ISO
@@ -180,6 +187,40 @@ java -jar server/target/hrafnagud.jar --munin.content.enabled=true
 
 `POST /api/v1/articles/{id}/fetch-content` requeues one article with a fresh
 retry budget; `POST .../skip-content` takes one out of the queue for good.
+
+## Filter rules
+
+Fetching a body costs a request and translating costs tokens. Which articles are
+worth either is decided by accept/deny rules in the database, written in the
+console under **Filter**:
+
+```bash
+curl -X POST localhost:9800/api/v1/filter/rules -H 'Content-Type: application/json' -d '{
+  "pipeline": "TRANSLATION", "decision": "DENY",
+  "type": "HOST", "matchType": "SUFFIX", "value": "youtube.com" }'
+```
+
+Evaluation is **accept, then deny, then accept by default** — so an accept rule
+is an exception to a deny rule, and with no rules at all everything is accepted.
+Rules are a set, not a list: no ordering, no priority, only "does any rule
+match". A rule can read the URL or its host, the source, the language, the
+publisher's region, the publisher's own category, the normalised topic, or the
+source's fetch profile; regions and topics match through the materialised
+ancestor path, so `m49:142` covers a Singaporean source and `medtop:15000000`
+covers an article tagged *Cricket*.
+
+The decision lands on the article together with the rule that made it, which is
+what makes "why is this not translated" answerable. New articles are decided at
+ingest; stored ones keep their decision until re-evaluated:
+
+```bash
+curl -X POST 'localhost:9800/api/v1/filter/reevaluate?days=10'
+```
+
+That is also the way back for anything skipped while `pivotLanguage` was unset.
+A queue only moves when the decision actually flips, so a finished translation
+and a body skipped by hand both survive a run. Details and the reasoning:
+[filter.md](specs/filter.md).
 
 ## Translation
 

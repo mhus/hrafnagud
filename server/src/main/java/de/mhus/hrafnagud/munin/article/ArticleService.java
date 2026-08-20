@@ -2,12 +2,16 @@ package de.mhus.hrafnagud.munin.article;
 
 import de.mhus.hrafnagud.api.article.ContentStatus;
 import de.mhus.hrafnagud.api.article.TranslationStatus;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.api.filter.FilterOutcome;
+import de.mhus.hrafnagud.api.filter.FilterOutcomes;
 import de.mhus.hrafnagud.munin.category.CategoryMappingService;
-import de.mhus.hrafnagud.munin.place.PlaceRegistry;
+import de.mhus.hrafnagud.munin.config.MuninProperties;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
+import de.mhus.hrafnagud.munin.filter.ArticleFilterService;
+import de.mhus.hrafnagud.munin.filter.FilterSubject;
 import de.mhus.hrafnagud.munin.lang.LanguageResolver;
+import de.mhus.hrafnagud.munin.place.PlaceRegistry;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -82,6 +86,9 @@ public class ArticleService {
     private static final String F_CONTENT_ATTEMPTS = "contentAttempts";
     private static final String F_TRANSLATION_STATUS = "translationStatus";
     private static final String F_TRANSLATION_NEXT_ATTEMPT_AT = "translationNextAttemptAt";
+    private static final String F_CONTENT_POLICY = "contentPolicy";
+    private static final String F_TRANSLATION_POLICY = "translationPolicy";
+    private static final String F_POLICY_AT = "policyAt";
 
     /** Languages reported by the statistics endpoint. */
     private static final int TOP_LANGUAGES = 20;
@@ -94,17 +101,19 @@ public class ArticleService {
     private final MuninProperties.Translation translationConfig;
     private final PlaceRegistry placeRegistry;
     private final CategoryMappingService categoryMappingService;
+    private final ArticleFilterService articleFilterService;
 
     public ArticleService(ArticleRepository repository, ArticleContentRepository contentRepository,
             EnrichmentService enrichmentService, MongoTemplate mongoTemplate,
             PlaceRegistry placeRegistry, CategoryMappingService categoryMappingService,
-            MuninProperties properties) {
+            ArticleFilterService articleFilterService, MuninProperties properties) {
         this.repository = repository;
         this.contentRepository = contentRepository;
         this.enrichmentService = enrichmentService;
         this.mongoTemplate = mongoTemplate;
         this.placeRegistry = placeRegistry;
         this.categoryMappingService = categoryMappingService;
+        this.articleFilterService = articleFilterService;
         this.contentConfig = properties.getContent();
         this.translationConfig = properties.getTranslation();
     }
@@ -133,15 +142,27 @@ public class ArticleService {
     public IngestOutcome ingest(ArticleCandidate candidate, SourceDocument source,
             LanguageResolver.Resolution language, ContentStatus contentStatus, Instant now) {
 
+        List<String> originPlaceIds = placeRegistry.pathForCountry(source.getCountry());
+        // Records every category as it goes past — that is how the mapping
+        // table learns what exists — and returns the topics already resolved. A
+        // category first seen here contributes nothing to this article and
+        // everything to the next.
+        List<String> topicIds =
+                categoryMappingService.recordAndResolve(candidate.getCategories(), now);
+        List<String> categories =
+                ArticleFactory.mergeCategories(source.getCategories(), candidate.getCategories());
+
+        // Filtered on the merged categories rather than the entry's own,
+        // because that is what the stored article carries: a rule matching a
+        // category the source supplies has to behave the same as one matching a
+        // category the entry brought.
+        FilterOutcomes filters = articleFilterService.evaluate(FilterSubject.of(
+                candidate.getUrl(), List.of(source.getName()), language.language(),
+                originPlaceIds, categories, topicIds, source.getFetchProfile()));
+
         ArticleDocument document = ArticleFactory.build(candidate, source, language,
-                contentStatus, translationConfig.getPivotLanguage(),
-                placeRegistry.pathForCountry(source.getCountry()),
-                // Records every category as it goes past — that is how the
-                // mapping table learns what exists — and returns the topics
-                // already resolved. A category first seen here contributes
-                // nothing to this article and everything to the next.
-                categoryMappingService.recordAndResolve(candidate.getCategories(), now),
-                now);
+                filters.content().denied() ? ContentStatus.SKIPPED : contentStatus,
+                translationConfig.getPivotLanguage(), originPlaceIds, topicIds, filters, now);
 
         try {
             return upsert(document, source.getName(), now);
@@ -187,6 +208,11 @@ public class ArticleService {
                 .setOnInsert(F_TRANSLATION_STATUS, document.getTranslationStatus())
                 .setOnInsert(F_TRANSLATION_NEXT_ATTEMPT_AT, document.getTranslationNextAttemptAt())
                 .setOnInsert("translationAttempts", 0)
+                .setOnInsert(F_CONTENT_POLICY, document.getContentPolicy())
+                .setOnInsert("contentPolicyRule", document.getContentPolicyRule())
+                .setOnInsert(F_TRANSLATION_POLICY, document.getTranslationPolicy())
+                .setOnInsert("translationPolicyRule", document.getTranslationPolicyRule())
+                .setOnInsert(F_POLICY_AT, document.getPolicyAt())
                 // Spring Data treats a null @Version as "not yet persisted"
                 // and would turn a later save() into an insert. An upsert
                 // does not populate it, so it is seeded here.
@@ -645,6 +671,147 @@ public class ArticleService {
      * without it the only options are letting it burn its retry budget every
      * time or disabling the source entirely.
      */
+    // ─── Filter re-evaluation ───
+
+    /**
+     * The next batch of articles whose filter decisions are older than this
+     * run.
+     *
+     * <p>{@code policyAt} is the progress marker, not a cursor: every examined
+     * article gets it stamped, so a run that stops at its cap continues where it
+     * left off instead of examining the same head again. Missing counts as old,
+     * which is how articles stored before the field existed get their turn.
+     */
+    public List<ArticleDocument> nextForPolicy(@Nullable Instant since, Instant runStartedAt,
+            int limit) {
+
+        Criteria stale = new Criteria().orOperator(
+                Criteria.where(F_POLICY_AT).exists(false),
+                Criteria.where(F_POLICY_AT).lt(runStartedAt));
+        Query query = since == null
+                ? Query.query(stale)
+                : Query.query(new Criteria().andOperator(
+                        Criteria.where(F_FIRST_SEEN_AT).gte(since), stale));
+        return mongoTemplate.find(query.with(Sort.by(Sort.Direction.ASC, F_POLICY_AT))
+                .limit(limit), ArticleDocument.class);
+    }
+
+    /**
+     * Writes a re-evaluated decision, and moves the queues only if it changed.
+     *
+     * <p>The condition is the whole design of re-evaluation. A status is only
+     * touched when the <b>decision</b> flipped, which is what protects the two
+     * things that look identical in the database and are not: an article
+     * skipped because it is already in the pivot language, and one taken out of
+     * the content queue by hand. Both carry {@code ACCEPT}, so a run that finds
+     * {@code ACCEPT} again leaves them alone. Only a real flip moves anything.
+     *
+     * <p>A finished article is never re-queued either: {@code DONE} translations
+     * exist, and a rule written today does not make yesterday's translation
+     * wrong — it would just be paid for twice.
+     *
+     * @return what was done, for the run's report
+     */
+    public PolicyUpdate applyPolicy(ArticleDocument article, FilterOutcomes outcomes, Instant now) {
+        // Written every time, not only on a change. Recording the decision only
+        // when it flips loses exactly the information these fields exist for:
+        // an accept rule produces ACCEPT, which equals the default, so an
+        // article rescued by an exception would look identical to one nothing
+        // ever matched. Two extra fields in an update that is already happening.
+        Update update = new Update()
+                .set(F_POLICY_AT, now)
+                .set(F_CONTENT_POLICY, outcomes.content().decision())
+                .set("contentPolicyRule", outcomes.content().rule())
+                .set(F_TRANSLATION_POLICY, outcomes.translation().decision())
+                .set("translationPolicyRule", outcomes.translation().rule());
+
+        boolean decisionChanged = false;
+        QueueMove content = QueueMove.NONE;
+        QueueMove translation = QueueMove.NONE;
+
+        // The queues, in contrast, move only on a real flip — see below.
+        if (outcomes.content().decision() != article.getContentPolicy()) {
+            decisionChanged = true;
+            content = queueMove(outcomes.content().denied(),
+                    article.getContentStatus() == ContentStatus.PENDING,
+                    article.getContentStatus() == ContentStatus.SKIPPED);
+            applyQueueMove(update, content, F_CONTENT_STATUS, F_CONTENT_NEXT_ATTEMPT_AT,
+                    F_CONTENT_ATTEMPTS, ContentStatus.SKIPPED, ContentStatus.PENDING, now);
+        }
+        if (outcomes.translation().decision() != article.getTranslationPolicy()) {
+            decisionChanged = true;
+            translation = translationQueueMove(article, outcomes.translation());
+            applyQueueMove(update, translation, F_TRANSLATION_STATUS,
+                    F_TRANSLATION_NEXT_ATTEMPT_AT, "translationAttempts",
+                    TranslationStatus.SKIPPED, TranslationStatus.PENDING, now);
+        }
+
+        mongoTemplate.updateFirst(Query.query(Criteria.where(F_ID).is(article.getId())), update,
+                ArticleDocument.class);
+        return new PolicyUpdate(decisionChanged,
+                content == QueueMove.OUT || translation == QueueMove.OUT,
+                content == QueueMove.IN || translation == QueueMove.IN);
+    }
+
+    /** What one re-evaluated article cost. */
+    public record PolicyUpdate(boolean decisionChanged, boolean queuedOut, boolean queuedIn) { }
+
+    private enum QueueMove { NONE, OUT, IN }
+
+    /**
+     * Where a re-decided article belongs in the translation queue.
+     *
+     * <p>Asks {@link ArticleFactory#initialTranslationStatus} — the same
+     * function ingest uses — rather than deciding again here. Lifting a deny
+     * rule does not mean an article should be translated: it may already be in
+     * the pivot language, or there may be no pivot language at all, and both of
+     * those are still {@code SKIPPED}. Getting this wrong is not visible in a
+     * status field, which is what makes it worth one shared function: a live run
+     * put four thousand articles into a queue that nothing could ever have
+     * worked, because this branch set {@code PENDING} on its own.
+     */
+    private QueueMove translationQueueMove(ArticleDocument article, FilterOutcome policy) {
+        TranslationStatus target = ArticleFactory.initialTranslationStatus(
+                translationConfig.getPivotLanguage(), article.getLanguage(), policy);
+        TranslationStatus current = article.getTranslationStatus();
+
+        if (target == TranslationStatus.SKIPPED && current == TranslationStatus.PENDING) {
+            return QueueMove.OUT;
+        }
+        return target == TranslationStatus.PENDING && current == TranslationStatus.SKIPPED
+                ? QueueMove.IN
+                : QueueMove.NONE;
+    }
+
+    /**
+     * Newly denied while queued means out; newly accepted while skipped means
+     * back in. Every other combination is deliberately nothing — a finished
+     * article stays finished, and an article skipped for a reason other than a
+     * rule is not a rule's business.
+     */
+    private static QueueMove queueMove(boolean denied, boolean pending, boolean skipped) {
+        if (denied && pending) {
+            return QueueMove.OUT;
+        }
+        return !denied && skipped ? QueueMove.IN : QueueMove.NONE;
+    }
+
+    private static void applyQueueMove(Update update, QueueMove move, String statusField,
+            String attemptField, String attemptsField, Object skippedValue, Object pendingValue,
+            Instant now) {
+
+        switch (move) {
+            // Unsetting the attempt time is what takes it out of the partial
+            // index, not just out of the query.
+            case OUT -> update.set(statusField, skippedValue).unset(attemptField);
+            // A fresh budget: what stopped it before was a rule, not the
+            // article, so it has not used any attempts on its own behalf.
+            case IN -> update.set(statusField, pendingValue).set(attemptField, now)
+                    .set(attemptsField, 0);
+            case NONE -> { /* nothing to move */ }
+        }
+    }
+
     public void skipContent(String articleId, Instant now) {
         mongoTemplate.updateFirst(
                 Query.query(Criteria.where("_id").is(articleId)),

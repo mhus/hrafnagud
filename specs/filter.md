@@ -6,7 +6,7 @@ Two pipelines cost something per article: fetching the page body costs a
 request, and translating costs tokens. Today neither can be steered by anything
 an operator would recognise as a policy. This document is the design for one.
 
-Status: **design**. Nothing here is built yet.
+Status: **v1 built**, verified against a live archive.
 
 ## 1. What decides today
 
@@ -190,18 +190,27 @@ decision after the first one is built, and implementing the same matching twice.
 
 ## 6. What lands on the article
 
-Per pipeline, three fields rather than a flag:
+Per pipeline, a decision plus the rule that made it, rather than a flag:
 
 ```
-translationPolicy         ACCEPTED | DENIED
-translationPolicyRule     <rule id>          # which rule decided
-translationPolicyAt       <timestamp>
+contentPolicy             ACCEPT | DENY
+contentPolicyRule         <rule name>        # null when the default applied
+translationPolicy         ACCEPT | DENY
+translationPolicyRule     <rule name>
+policyAt                  <timestamp>        # shared: one run decides both
 ```
 
-The rule id is the point. A filter whose decisions cannot be explained is a
+The rule name is the point. A filter whose decisions cannot be explained is a
 filter nobody can fix — the same argument as `decidedBy` on a category mapping
 ([categories.md](categories.md) §3). "Why is this article not translated" has
 to be answerable by looking at the article.
+
+Which is why the record is written on **every** evaluation and not only when
+the answer changes. That looks like a saving and is not: an accept rule
+produces `ACCEPT`, which is also the default, so an article rescued by an
+exception would be stored exactly like one that no rule ever touched. Writing
+only on a change lost precisely the case the accept list exists for — measured,
+on a live archive, as one visible rescue out of several thousand decisions.
 
 **The status field stays the queue.** `DENIED` means `translationStatus:
 SKIPPED`; `ACCEPTED` means the language check decides as it does today. No
@@ -213,10 +222,15 @@ the first is reversible by changing a rule.
 
 Ingest and re-evaluation must therefore compute the status the **same way**:
 policy first, then language. That is one function called from both places, not
-two implementations that agree at the time of writing. (It also means the new
-fields join the enumerated `setOnInsert` list in `ArticleService.upsert` — a new
-article field that is not enumerated there is silently never written, which has
-already happened once with the origin place.)
+two implementations that agree at the time of writing — and the first version of
+this did have two. Lifting a deny rule set `PENDING` directly instead of asking,
+which queued four thousand articles for a worker that could never have run them,
+because no pivot language was configured. Accepting an article is not the same
+statement as needing it translated.
+
+(It also means the new fields join the enumerated `setOnInsert` list in
+`ArticleService.upsert` — a new article field that is not enumerated there is
+silently never written, which has already happened once with the origin place.)
 
 ## 7. Re-evaluation
 
@@ -226,10 +240,16 @@ A button, because rules change and articles do not re-arrive.
   last year. The archive is millions of rows and a full pass is not the normal
   operation.
 - **Capped**, and it reports what it did — how many were re-decided, how many
-  changed, per decision.
-- **Only touches `SKIPPED` and `PENDING`.** Never `DONE`: a translation that
-  exists is not made wrong by a rule change, and re-queueing it would pay for
-  it twice.
+  changed, per decision. `policyAt` doubles as the progress marker, so a run
+  that stops at its cap continues where it left off instead of chewing the same
+  head again.
+- **A queue moves only when the decision flips.** Not "when the status is
+  `SKIPPED`", which sounds equivalent and is not: an article skipped because it
+  is already in the pivot language, and one taken out of the body queue by hand,
+  both carry `ACCEPT`. A run that finds `ACCEPT` again therefore leaves them
+  alone, and only a real flip moves anything.
+- **Never `DONE`.** A translation that exists is not made wrong by a rule
+  change, and re-queueing it would pay for it twice.
 
 This also clears a standing backlog. Everything ingested while `pivotLanguage`
 was unset is `SKIPPED` for ever, and there is currently no way to bring it

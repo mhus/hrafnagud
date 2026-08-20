@@ -186,6 +186,15 @@ munin:
     # would let "standard" become a topic.
     acceptConfidence: 0.9
 
+  # Filter rules: which articles are worth a body fetch and worth translating.
+  # No switch here — with no rules written everything is accepted, which is what
+  # an off switch would do anyway. Rules live in the database and are written in
+  # the console; these two numbers only bound re-evaluating stored articles,
+  # which is the one expensive operation. See specs/filter.md.
+  filter:
+    maxPerRun: 50000
+    batchSize: 500
+
   translation:
     # Master switch for the worker. Off by default: a translation spends
     # somebody else's model time and somebody's money, so it is a decision

@@ -2,6 +2,8 @@ package de.mhus.hrafnagud.munin.article;
 
 import de.mhus.hrafnagud.api.article.ContentStatus;
 import de.mhus.hrafnagud.api.article.TranslationStatus;
+import de.mhus.hrafnagud.api.filter.FilterOutcome;
+import de.mhus.hrafnagud.api.filter.FilterOutcomes;
 import de.mhus.hrafnagud.munin.lang.LanguageResolver;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
 import de.mhus.hrafnagud.munin.util.Hashes;
@@ -101,10 +103,37 @@ public final class ArticleFactory {
             String pivotLanguage, List<String> originPlaceIds, List<String> topicIds,
             Instant now) {
 
-        TranslationStatus translationStatus =
-                initialTranslationStatus(pivotLanguage, language.language());
+        return build(candidate, source, language, contentStatus, pivotLanguage, originPlaceIds,
+                topicIds, FilterOutcomes.unfiltered(), now);
+    }
+
+    /**
+     * The same, with what the filter rules concluded.
+     *
+     * <p>A denied article is queued for nothing. Note that the two pipelines
+     * are handled asymmetrically here, and deliberately: the caller already
+     * computes {@code contentStatus}, so it applies the content decision
+     * itself, while the translation status is derived in this class and takes
+     * the decision as input.
+     *
+     * @param filters both decisions plus the rule names, recorded on the
+     *                article; {@link FilterOutcomes#unfiltered()} when no rules
+     *                were applied
+     */
+    public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
+            LanguageResolver.Resolution language, ContentStatus contentStatus,
+            String pivotLanguage, List<String> originPlaceIds, List<String> topicIds,
+            FilterOutcomes filters, Instant now) {
+
+        TranslationStatus translationStatus = initialTranslationStatus(
+                pivotLanguage, language.language(), filters.translation());
         return ArticleDocument.builder()
                 .translationStatus(translationStatus)
+                .contentPolicy(filters.content().decision())
+                .contentPolicyRule(filters.content().rule())
+                .translationPolicy(filters.translation().decision())
+                .translationPolicyRule(filters.translation().rule())
+                .policyAt(now)
                 // Only a queued article belongs in the partial index.
                 .translationNextAttemptAt(
                         translationStatus == TranslationStatus.PENDING ? now : null)
@@ -153,10 +182,20 @@ public final class ArticleFactory {
      * already in the target returns it unchanged; the cost of being wrong
      * that way is one call, while skipping wrongly loses the translation
      * silently.
+     *
+     * <p>A denied article is {@code SKIPPED} whatever its language, and the
+     * order matters: the filter is asked first, so a denied article never
+     * reaches the language check. That is also why this method is the single
+     * place the status is derived — ingest and re-evaluation both call it, and
+     * two implementations that agreed on the day they were written would not
+     * stay agreed.
      */
     static TranslationStatus initialTranslationStatus(String pivotLanguage,
-            @Nullable String articleLanguage) {
+            @Nullable String articleLanguage, FilterOutcome policy) {
 
+        if (policy.denied()) {
+            return TranslationStatus.SKIPPED;
+        }
         String pivot = TextCleaner.normalizeLanguage(pivotLanguage);
         if (pivot == null) {
             return TranslationStatus.SKIPPED;

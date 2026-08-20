@@ -15,8 +15,10 @@ import de.mhus.hrafnagud.munin.util.UrlNormalizer;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import lombok.extern.slf4j.Slf4j;
@@ -86,6 +88,29 @@ public class SourceService {
 
     public Optional<SourceDocument> findByUrl(String normalizedUrl) {
         return repository.findByUrl(normalizedUrl);
+    }
+
+    /**
+     * Every source's fetch profile, by source name.
+     *
+     * <p>For callers that need the profile of many articles' sources at once —
+     * filter re-evaluation walks the archive and would otherwise read one
+     * source per article. Two projected fields per source, so a registry of
+     * tens of thousands is a few megabytes and one query instead of a hundred
+     * thousand. Sources without a profile are absent rather than mapped to
+     * null, which keeps the map usable with {@code get} returning null for both
+     * "no such source" and "no profile" — the two are the same answer here.
+     */
+    public Map<String, String> fetchProfilesByName() {
+        Query query = new Query();
+        query.fields().include("name").include("fetchProfile");
+        Map<String, String> profiles = new HashMap<>();
+        for (SourceDocument source : mongoTemplate.find(query, SourceDocument.class)) {
+            if (source.getFetchProfile() != null) {
+                profiles.put(source.getName(), source.getFetchProfile());
+            }
+        }
+        return profiles;
     }
 
     public List<SourceDocument> findByList(String listName) {

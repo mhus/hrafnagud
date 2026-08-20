@@ -159,6 +159,10 @@ public final class MuninMapper {
                 .contentError(article.getContentError())
                 .translationStatus(article.getTranslationStatus())
                 .translationError(article.getTranslationError())
+                .contentPolicy(article.getContentPolicy())
+                .contentPolicyRule(article.getContentPolicyRule())
+                .translationPolicy(article.getTranslationPolicy())
+                .translationPolicyRule(article.getTranslationPolicyRule())
                 .translation(translation == null ? null : toTranslationDto(translation))
                 .build();
     }
