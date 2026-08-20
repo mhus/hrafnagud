@@ -1,5 +1,6 @@
 package de.mhus.hrafnagud.zarniwoop;
 
+import de.mhus.hrafnagud.facet.ArchiveFacets;
 import de.mhus.hrafnagud.munin.article.ArticleService;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.vance.ode.zarniwoop.SearchSource;
@@ -26,6 +27,7 @@ public class ZarniwoopConfiguration {
 
     @Bean
     public SearchSource hrafnagudSearchSource(
+            ArchiveFacets facets,
             ArticleService articles,
             EnrichmentService enrichments,
             @Value("${vance.ode.zarniwoop.path:/ode/search}") String path,
@@ -34,6 +36,6 @@ public class ZarniwoopConfiguration {
         log.info("Research source enabled at '{}' ({})", path,
                 apiKey.isBlank() ? "NO api key — anyone who reaches the path can read"
                         : "api key required");
-        return new HrafnagudSearchSource(articles, enrichments);
+        return new HrafnagudSearchSource(facets, articles, enrichments);
     }
 }

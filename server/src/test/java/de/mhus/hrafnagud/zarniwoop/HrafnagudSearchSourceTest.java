@@ -13,9 +13,12 @@ import de.mhus.hrafnagud.api.enrichment.EnrichmentType;
 import de.mhus.hrafnagud.munin.article.ArticleContentDocument;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleQuery;
+import de.mhus.hrafnagud.facet.ArchiveFacets;
 import de.mhus.hrafnagud.munin.article.ArticleService;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentDocument;
+import de.mhus.hrafnagud.munin.category.TestTopics;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
+import de.mhus.hrafnagud.munin.place.TestPlaces;
 import de.mhus.vance.ode.zarniwoop.OdeContentInline;
 import de.mhus.vance.ode.zarniwoop.OdeSearchHit;
 import de.mhus.vance.ode.zarniwoop.OdeSearchModality;
@@ -53,7 +56,9 @@ class HrafnagudSearchSourceTest {
         articles = mock(ArticleService.class);
         enrichments = mock(EnrichmentService.class);
         when(enrichments.latestForEach(any(), any())).thenReturn(Map.of());
-        source = new HrafnagudSearchSource(articles, enrichments);
+        source = new HrafnagudSearchSource(
+                facets(),
+                articles, enrichments);
     }
 
     // ──────────────────── capabilities ────────────────────
@@ -293,5 +298,9 @@ class HrafnagudSearchSourceTest {
                 .language(language)
                 .content(Map.of("title", title, "summary", summary))
                 .build();
+    }
+
+    private static ArchiveFacets facets() {
+        return new ArchiveFacets(TestPlaces.loaded(), TestTopics.loaded());
     }
 }

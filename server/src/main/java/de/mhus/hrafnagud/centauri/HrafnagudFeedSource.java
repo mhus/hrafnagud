@@ -9,6 +9,7 @@ import de.mhus.hrafnagud.munin.enrichment.EnrichmentDocument;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
 import de.mhus.hrafnagud.munin.source.SourceService;
+import de.mhus.hrafnagud.facet.ArchiveFacets;
 import de.mhus.vance.ode.centauri.FeedSource;
 import de.mhus.vance.ode.centauri.OdeCapabilities;
 import de.mhus.vance.ode.centauri.OdeDirection;
@@ -19,6 +20,7 @@ import de.mhus.vance.ode.centauri.OdeItemQuery;
 import de.mhus.vance.ode.centauri.OdeSelector;
 import de.mhus.vance.ode.centauri.OdeSelectorKind;
 import de.mhus.vance.ode.centauri.OdeSelectorMode;
+import de.mhus.vance.ode.facet.OdeFacetValue;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -88,6 +90,7 @@ public class HrafnagudFeedSource implements FeedSource {
     /** Upper bound on the source list served as selectors. */
     private static final int MAX_SELECTORS = 500;
 
+    private final ArchiveFacets facets;
     private final ArticleService articles;
     private final EnrichmentService enrichments;
     private final SourceService sources;
@@ -134,7 +137,12 @@ public class HrafnagudFeedSource implements FeedSource {
                 Set.of(),
                 // No control URL: this service has no UI to link into.
                 false,
-                CAPABILITIES_TTL);
+                CAPABILITIES_TTL,
+                // Place and topic, declared once for both contracts. The
+                // grammar note above stays true: these are not selectors —
+                // a selector says which stream, a facet which subset of it,
+                // and only the second one combines.
+                facets.declare());
     }
 
     @Override
@@ -155,6 +163,11 @@ public class HrafnagudFeedSource implements FeedSource {
     }
 
     @Override
+    public List<OdeFacetValue> facetValues(String key, @Nullable String parentId) {
+        return facets.values(key, parentId);
+    }
+
+    @Override
     public OdeItemPage items(OdeItemQuery query) {
         String sourceName = sourceOf(query.selector());
         if (sourceName == null && !isAll(query.selector())) {
@@ -172,10 +185,12 @@ public class HrafnagudFeedSource implements FeedSource {
 
 
         boolean ascending = query.direction() == OdeDirection.NEWER;
-        ArticleQuery filter = ArticleQuery.builder()
-                .sourceName(sourceName)
-                .text(query.text())
-                .publishedSince(query.since())
+        ArticleQuery filter = facets.apply(
+                        ArticleQuery.builder()
+                                .sourceName(sourceName)
+                                .text(query.text())
+                                .publishedSince(query.since()),
+                        query.facets())
                 .build();
 
         // One more than asked for, so hasMore is answered by looking rather

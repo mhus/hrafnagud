@@ -26,6 +26,7 @@ de.mhus.hrafnagud.
   classify/   Decides what a publisher's category means, by calling a brain.
   centauri/   Serves the archive to Vancetope as a Centauri feed source.
   zarniwoop/  Answers Vancetope research queries out of the archive.
+  facet/      What both of those let a reader filter by, declared once.
   server/     Entrypoint plus runtime configuration, nothing else.
 ```
 
@@ -47,7 +48,8 @@ the compiler did, and now the reader does.
 **Munin has no dependency on Vancetope.** The archive must be collectable and
 queryable without a brain anywhere near it.
 
-Four packages face Vancetope. Two call out, two answer:
+Five packages face Vancetope. Two call out, two answer, one is shared by the
+two that answer:
 
 | Package | Direction | Uses |
 |---|---|---|
@@ -55,12 +57,14 @@ Four packages face Vancetope. Two call out, two answer:
 | `classify` | calls a brain | `vance-ode-ursa` |
 | `centauri` | answers a brain | `vance-ode-centauri` |
 | `zarniwoop` | answers a brain | `vance-ode-zarniwoop` |
+| `facet` | neither — declares filter dimensions for both | `vance-ode-core` |
 
-All four import from `munin`; none is imported by it. **Deleting all four
+All five import from `munin`; none is imported by it. **Deleting all five
 packages must leave a compiling collector** — that is the test of whether the
 boundary is real, and it is now a thing to check rather than a thing that
 fails the build. Concretely: no `import de.mhus.hrafnagud.{translate,centauri,
-zarniwoop,classify}` and no `import de.mhus.vance.ode` anywhere under `munin/`.
+zarniwoop,classify,facet}` and no `import de.mhus.vance.ode` anywhere under
+`munin/`.
 
 Each of the three is also runtime-optional and stays that way: `translate` is
 inert until `vance.ode.base-url` is set, the other two until

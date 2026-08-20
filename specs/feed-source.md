@@ -140,6 +140,7 @@ every page turn.
 | `signalsAccepted` | *empty* | see §5.3 |
 | `carriesControlUrl` | false | this service has no UI to link into |
 | `capabilitiesTtl` | 30 min | sources are added by an operator, not by the minute |
+| `facets` | `origin-place`, `subject-topic` | §9 |
 
 Every pushdown left false is a filter Vancetope applies itself after fetching.
 Nothing is lost by declining one; what is lost is efficiency.
@@ -236,8 +237,45 @@ no api key                          → 401
 
 - **No retention.** The archive grows and a reader pages it, so this does not
   bite the contract — it bites the disk.
-- **No `category:` or `country:` selector**, though both dimensions are stored.
-  The grammar has room for them.
+- **No `category:` or `country:` selector.** Both dimensions are answerable,
+  but not as selectors — see §9.
 - **Translations are not searchable** (§5.1).
 - **Signals are refused** (§5.3), and `controlUrl` is absent because there is no
   UI. Both would change if Hrafnagud ever grew one.
+
+## 9. Facets
+
+Place and topic are filters, not streams. The distinction is the whole reason
+they are not selectors: a selector says *which stream*, and one stream carries
+one selector string, so „Asian **and** about sport" would need a conjunction
+inside an opaque value that the reader cannot render. Two configured streams
+would be a union, not an intersection. A facet is a subset of whatever stream
+is selected, and facets combine.
+
+| Key | From | Shape |
+|---|---|---|
+| `origin-place` | `originPlaceIds` | hierarchical, M.49 above the country, ISO at it, whole table inline |
+| `subject-topic` | `topicIds` | hierarchical, IPTC Media Topics, ~1,400 concepts served level by level |
+
+Both are declared to the research contract as well, from the same
+`de.mhus.hrafnagud.facet.ArchiveFacets` — the two surfaces ask the same
+question of the same field, and declaring it twice is how the answers drift
+apart.
+
+**Declaring one is a promise to apply it.** Vancetope does no local facet
+filtering: it neither post-filters nor asks entries to carry facet values, so a
+reader that selects a facet we did not declare skips this source for that
+request. That is why the verbatim publisher categories are *not* offered as a
+facet: 7,365 distinct strings ([categories.md](categories.md) §1), some of them
+places and some a person's name, would make a picker nobody can use and a
+filter that finds a third of what it claims.
+
+**Both are materialised paths already**, so one selected node answers for every
+rung below it — `m49:142` finds a Singaporean publisher, `medtop:15000000`
+finds an article tagged only *Cricket*. Several values of one key are an „or"
+(`$in` over the same multikey index); several keys are an „and".
+
+**`origin-place` is the publisher, not the subject.** [geo.md](geo.md) §1 says
+why that distinction is in the key name rather than in a footnote. A
+`subject-place` facet is the obvious next one and needs `contentLocation`,
+which needs extraction — the same wait as everything else in that document.

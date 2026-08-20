@@ -14,10 +14,13 @@ import de.mhus.hrafnagud.api.enrichment.EnrichmentType;
 import de.mhus.hrafnagud.munin.article.ArticleCursor;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleQuery;
+import de.mhus.hrafnagud.facet.ArchiveFacets;
 import de.mhus.hrafnagud.munin.article.ArticleService;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentDocument;
+import de.mhus.hrafnagud.munin.category.TestTopics;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
+import de.mhus.hrafnagud.munin.place.TestPlaces;
 import de.mhus.hrafnagud.munin.source.SourceService;
 import de.mhus.vance.ode.centauri.OdeDirection;
 import de.mhus.vance.ode.centauri.OdeItem;
@@ -58,7 +61,9 @@ class HrafnagudFeedSourceTest {
         enrichments = mock(EnrichmentService.class);
         sources = mock(SourceService.class);
         when(enrichments.latestForEach(any(), any())).thenReturn(Map.of());
-        feed = new HrafnagudFeedSource(articles, enrichments, sources);
+        feed = new HrafnagudFeedSource(
+                facets(),
+                articles, enrichments, sources);
     }
 
     // ──────────────────── capabilities ────────────────────
@@ -327,5 +332,9 @@ class HrafnagudFeedSourceTest {
                 .language(language)
                 .content(Map.of("title", title, "summary", summary))
                 .build();
+    }
+
+    private static ArchiveFacets facets() {
+        return new ArchiveFacets(TestPlaces.loaded(), TestTopics.loaded());
     }
 }

@@ -1,5 +1,6 @@
 package de.mhus.hrafnagud.centauri;
 
+import de.mhus.hrafnagud.facet.ArchiveFacets;
 import de.mhus.hrafnagud.munin.article.ArticleService;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.hrafnagud.munin.source.SourceService;
@@ -27,6 +28,7 @@ public class CentauriConfiguration {
 
     @Bean
     public FeedSource hrafnagudFeedSource(
+            ArchiveFacets facets,
             ArticleService articles,
             EnrichmentService enrichments,
             SourceService sources,
@@ -36,6 +38,6 @@ public class CentauriConfiguration {
         log.info("Feed source enabled at '{}' ({})", path,
                 apiKey.isBlank() ? "NO api key — anyone who reaches the path can read"
                         : "api key required");
-        return new HrafnagudFeedSource(articles, enrichments, sources);
+        return new HrafnagudFeedSource(facets, articles, enrichments, sources);
     }
 }

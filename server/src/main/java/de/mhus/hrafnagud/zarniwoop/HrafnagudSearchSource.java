@@ -2,6 +2,7 @@ package de.mhus.hrafnagud.zarniwoop;
 
 import de.mhus.hrafnagud.api.enrichment.EnrichmentType;
 import de.mhus.hrafnagud.munin.article.ArticleContentDocument;
+import de.mhus.hrafnagud.facet.ArchiveFacets;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleQuery;
 import de.mhus.hrafnagud.munin.article.ArticleService;
@@ -10,6 +11,7 @@ import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.vance.ode.zarniwoop.OdeContentBody;
 import de.mhus.vance.ode.zarniwoop.OdeContentInline;
 import de.mhus.vance.ode.zarniwoop.OdeHitContent;
+import de.mhus.vance.ode.facet.OdeFacetValue;
 import de.mhus.vance.ode.zarniwoop.OdeSearchCapabilities;
 import de.mhus.vance.ode.zarniwoop.OdeSearchDomain;
 import de.mhus.vance.ode.zarniwoop.OdeSearchHit;
@@ -60,6 +62,7 @@ public class HrafnagudSearchSource implements SearchSource {
     /** Cap on a body handed back through {@link #content}. */
     private static final int MAX_BODY_CHARS = 200_000;
 
+    private final ArchiveFacets facets;
     private final ArticleService articles;
     private final EnrichmentService enrichments;
 
@@ -82,7 +85,16 @@ public class HrafnagudSearchSource implements SearchSource {
                 // collection, so they are served on demand rather than
                 // shipped with every hit.
                 true,
-                CAPABILITIES_TTL);
+                CAPABILITIES_TTL,
+                // Place and topic, the same declaration the feed contract
+                // gets: the two surfaces ask the same question of the same
+                // field, and declaring it twice is how they drift.
+                facets.declare());
+    }
+
+    @Override
+    public List<OdeFacetValue> facetValues(String key, @Nullable String parentId) {
+        return facets.values(key, parentId);
     }
 
     @Override
@@ -96,6 +108,7 @@ public class HrafnagudSearchSource implements SearchSource {
                 // publishedUntil, not until: the caller means "published
                 // before", and `until` bounds when the archive collected it.
                 .publishedUntil(instant(query, ExpertParams.UNTIL));
+        facets.apply(filter, query.facets());
 
         List<ArticleDocument> found;
         try {
