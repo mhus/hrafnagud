@@ -863,10 +863,13 @@ async function confirmCategory(key, topicId) {
     await api('/categories/' + encodeURIComponent(key) + '/confirm', null, 'POST',
         { topicId: topicId });
     detailModal.hide();
+    // Reload first, note second: every load* starts with clearError(), which
+    // hides the alert slot the note shares. Noting before the reload wiped it
+    // before anyone saw it.
+    await loadCategories(categoriesPage);
     showNote(topicId
         ? '„' + key + '" ist jetzt ' + topicName(topicId) + '.'
         : '„' + key + '" gilt als kein Thema.');
-    await loadCategories(categoriesPage);
 }
 
 
@@ -980,8 +983,8 @@ async function saveFilterRule() {
     await api(editing ? '/filter/rules/' + encodeURIComponent(editing) : '/filter/rules',
         null, editing ? 'PUT' : 'POST', body);
     filterRuleModal.hide();
-    showNote(editing ? 'Regel ' + editing + ' gespeichert.' : 'Regel angelegt.');
     await loadFilterRules();
+    showNote(editing ? 'Regel ' + editing + ' gespeichert.' : 'Regel angelegt.');
 }
 
 async function toggleFilterRule(box) {
@@ -989,12 +992,12 @@ async function toggleFilterRule(box) {
     try {
         await api('/filter/rules/' + encodeURIComponent(name) + '/enabled',
             { value: box.checked }, 'POST');
-        showNote('Regel ' + name + (box.checked ? ' aktiv.' : ' abgeschaltet.'));
     } catch (e) {
         box.checked = !box.checked;
         throw e;
     }
     await loadFilterRules();
+    showNote('Regel ' + name + (box.checked ? ' aktiv.' : ' abgeschaltet.'));
 }
 
 async function deleteFilterRule(name) {
@@ -1002,8 +1005,8 @@ async function deleteFilterRule(name) {
         return;
     }
     await api('/filter/rules/' + encodeURIComponent(name), null, 'DELETE');
-    showNote('Regel ' + name + ' gelöscht. Artikel behalten den Namen als Begründung.');
     await loadFilterRules();
+    showNote('Regel ' + name + ' gelöscht. Artikel behalten den Namen als Begründung.');
 }
 
 async function reevaluateFilter(button) {

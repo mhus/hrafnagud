@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 
@@ -49,6 +50,7 @@ import org.springframework.stereotype.Service;
  * same.
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class ArchiveFacets {
 
@@ -122,11 +124,21 @@ public class ArchiveFacets {
         // Two values, so both selected is the same as neither: the reader has
         // asked for everything, which is what the archive serves by default.
         // Only a one-sided selection narrows anything.
+        //
+        // A value that is neither is ignored, for the same reason an unknown
+        // key is: it comes from the other end and may be newer than this one.
+        // Treating "anything but no" as "yes" made a typo silently narrow the
+        // archive — the reader would see a filtered result and no filter.
         List<String> accepted = facets.get(ACCEPTED);
         if (accepted != null && accepted.size() == 1) {
-            builder.translationPolicy(ACCEPTED_NO.equals(accepted.getFirst())
-                    ? FilterDecision.DENY
-                    : FilterDecision.ACCEPT);
+            String value = accepted.getFirst();
+            if (ACCEPTED_NO.equals(value)) {
+                builder.translationPolicy(FilterDecision.DENY);
+            } else if (ACCEPTED_YES.equals(value)) {
+                builder.translationPolicy(FilterDecision.ACCEPT);
+            } else {
+                log.debug("Ignoring unknown '{}' facet value '{}'", ACCEPTED, value);
+            }
         }
         return builder;
     }

@@ -123,6 +123,19 @@ class ArchiveFacetsTest {
         assertThat(query.getTranslationPolicy()).isNull();
     }
 
+    /**
+     * Same reasoning as for an unknown key: it comes from the other end. The
+     * ternary this replaced read anything-but-"no" as "yes", so a typo silently
+     * narrowed the archive and the reader saw a filtered result with no filter.
+     */
+    @Test
+    void anUnknownAcceptedValueIsIgnoredRatherThanReadAsYes() {
+        ArticleQuery query = facets.apply(ArticleQuery.builder(),
+                Map.of(ArchiveFacets.ACCEPTED, List.of("maybe"))).build();
+
+        assertThat(query.getTranslationPolicy()).isNull();
+    }
+
     private OdeFacet declared(String key) {
         return facets.declare().stream()
                 .filter(f -> f.key().equals(key))

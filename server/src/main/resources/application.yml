@@ -18,13 +18,19 @@ spring:
       # make a request-per-thread model cheap enough that no pool tuning is
       # needed for it.
       enabled: true
+  web:
+    error:
+      # Let the message through so a 400 is diagnosable with curl — an
+      # unknown ?pipeline= or a missing ?value= is raised by the framework,
+      # not by MuninExceptionHandler, and without this it arrives as a bare
+      # status the console renders as "HTTP 400". Stack traces stay off.
+      #
+      # Boot 4 moved this from server.error.* and ignores the old path
+      # without a word, so it sat here dead.
+      include-message: always
 
 server:
   port: ${HRAFNAGUD_PORT:9800}
-  error:
-    # Let the message through so a 400 from validation is diagnosable with
-    # curl. Stack traces stay off.
-    include-message: always
 
 management:
   endpoints:

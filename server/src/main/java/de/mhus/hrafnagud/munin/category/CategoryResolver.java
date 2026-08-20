@@ -58,9 +58,4 @@ public interface CategoryResolver {
             return new Decision(CategoryMappingStatus.IS_PLACE, null, note);
         }
     }
-
-    /** Every topic the vocabulary offers, as a resolver may need to name them. */
-    interface Vocabulary {
-        List<Topic> topics();
-    }
 }

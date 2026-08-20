@@ -93,42 +93,68 @@ public class CategoryMappingService {
     // ─── Ingest ───
 
     /**
-     * Records the categories of one article and answers with the topic path
-     * everything already resolved implies.
+     * What one article's categories mean, and which mapping rows they are.
      *
-     * <p>Called once per stored article, so it must stay cheap: one upsert per
-     * category, no reads of the vocabulary beyond the in-memory indexes, and
-     * stage one only for categories that are new.
+     * @param topicIds the topic path everything already resolved implies
+     * @param keys     the normalised mapping keys, for {@link #countUsage}
      */
-    public List<String> recordAndResolve(Collection<String> categories, Instant now) {
+    public record CategoryResolution(List<String> topicIds, List<String> keys) {
+
+        static final CategoryResolution EMPTY = new CategoryResolution(List.of(), List.of());
+    }
+
+    /**
+     * Answers what the categories of one <em>candidate</em> mean, creating a
+     * mapping row for any category seen for the first time.
+     *
+     * <p>Read-mostly on purpose. This runs for every candidate in every feed
+     * window on every poll — most of which are entries already stored — so it
+     * must not write per call. Creating a row for an unknown category is the
+     * exception, and it happens once per category in the archive's lifetime.
+     *
+     * <p>Counting is <b>not</b> done here. See {@link #countUsage}.
+     */
+    public CategoryResolution resolve(Collection<String> categories, Instant now) {
+        if (categories.isEmpty()) {
+            return CategoryResolution.EMPTY;
+        }
         Set<String> topicIds = new LinkedHashSet<>();
+        Set<String> keys = new LinkedHashSet<>();
         for (String raw : categories) {
-            CategoryMappingDocument mapping = record(raw, now);
-            if (mapping != null && mapping.getStatus().resolved()) {
+            String key = CategoryKeys.normalise(raw);
+            if (key.isEmpty()) {
+                continue;
+            }
+            keys.add(key);
+            CategoryMappingDocument mapping =
+                    repository.findByKey(key).orElseGet(() -> create(key, raw, now));
+            if (mapping.getStatus().resolved()) {
                 topicIds.addAll(mapping.getTopicPath());
             }
         }
-        return new ArrayList<>(topicIds);
+        return new CategoryResolution(new ArrayList<>(topicIds), new ArrayList<>(keys));
     }
 
-    /** Creates or counts one category. Returns null for a string that normalises to nothing. */
-    private @Nullable CategoryMappingDocument record(String raw, Instant now) {
-        String key = CategoryKeys.normalise(raw);
-        if (key.isEmpty()) {
-            return null;
-        }
-
-        Optional<CategoryMappingDocument> existing = repository.findByKey(key);
-        if (existing.isPresent()) {
-            // A conditional update rather than a save: this runs on every
-            // article of every source, and two workers counting the same
-            // category must not overwrite each other's totals.
+    /**
+     * Counts one article against its categories.
+     *
+     * <p>Called only when an article was actually stored — {@code useCount} is
+     * documented as "how many articles carry this category", and it is what
+     * orders both the console list and {@link #claimDue}, which decides where
+     * model spend goes. Counting every re-delivery instead measured poll
+     * frequency: a five-minute news feed contributed some 288 counts a day per
+     * entry while a weekly blog contributed one, so the ordering followed
+     * whoever polled fastest rather than whichever category is common.
+     *
+     * <p>A conditional update rather than a save: two workers counting the same
+     * category must not overwrite each other's totals.
+     */
+    public void countUsage(Collection<String> keys, Instant now) {
+        for (String key : keys) {
             mongoTemplate.updateFirst(Query.query(Criteria.where(F_KEY).is(key)),
                     new Update().inc("useCount", 1).set("lastSeenAt", now),
                     CategoryMappingDocument.class);
-            return existing.get();
         }
-        return create(key, raw, now);
     }
 
     private CategoryMappingDocument create(String key, String raw, Instant now) {
@@ -215,7 +241,6 @@ public class CategoryMappingService {
     public void applyResolution(String key, CategoryMappingStatus status,
             @Nullable String topicId, @Nullable String note, Instant now) {
 
-        CategoryMappingStatus effective = status;
         List<String> path = List.of();
         if (status.resolved()) {
             Optional<Topic> topic = topics.find(topicId);
@@ -231,10 +256,10 @@ public class CategoryMappingService {
         }
 
         Update update = new Update()
-                .set(F_STATUS, effective)
+                .set(F_STATUS, status)
                 .set("topicId", topicId)
                 .set("topicPath", path)
-                .set("confidence", effective.resolved() ? 1.0 : 0)
+                .set("confidence", status.resolved() ? 1.0 : 0)
                 .set("decidedBy", "LLM")
                 .set("note", note)
                 .set("updatedAt", now)
@@ -281,13 +306,5 @@ public class CategoryMappingService {
         mongoTemplate.updateFirst(Query.query(Criteria.where(F_KEY).is(mapping.getKey())),
                 new Update().set("decidedBy", "HUMAN"), CategoryMappingDocument.class);
         return requireByKey(mapping.getKey());
-    }
-
-    /** Topic path for one raw category, empty when unresolved. */
-    public List<String> topicPathFor(String raw) {
-        return findByKey(raw)
-                .filter(mapping -> mapping.getStatus().resolved())
-                .map(CategoryMappingDocument::getTopicPath)
-                .orElseGet(List::of);
     }
 }

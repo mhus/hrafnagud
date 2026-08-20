@@ -570,12 +570,6 @@ public class SourceListService {
                 update, SourceListDocument.class);
     }
 
-    /** Makes a list due immediately — used by the manual refresh endpoint. */
-    public void markDue(String name, Instant now) {
-        mongoTemplate.updateFirst(Query.query(Criteria.where(F_NAME).is(name)),
-                new Update().set(F_NEXT_REFRESH_AT, now), SourceListDocument.class);
-    }
-
     private static @Nullable String upperOrNull(@Nullable String value) {
         String trimmed = StringUtils.trimToNull(value);
         return trimmed == null ? null : trimmed.toUpperCase(java.util.Locale.ROOT);

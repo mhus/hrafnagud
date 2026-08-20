@@ -16,11 +16,15 @@ import org.springframework.context.annotation.Configuration;
  * Publishes the {@link FeedSource} bean, which is what makes the Ode module
  * serve its endpoints — it is conditional on the bean existing.
  *
- * <p>Off by default. The endpoints are unauthenticated unless
- * {@code vance.ode.centauri.apiKey} is set, and a module that starts
- * exposing the archive over HTTP merely by being on the classpath would
- * make that somebody else's surprise. Serving to a reader is a decision an
- * operator makes; collecting is not.
+ * <p><b>On by default</b> ({@code munin.centauri.enabled}, since the archive is
+ * of little use to anyone if serving it takes a second decision). What that
+ * makes the operator's job: the endpoints are <b>unauthenticated</b> unless
+ * {@code vance.ode.centauri.apiKey} is set, so a bare {@code java -jar} serves
+ * {@code /ode/feed} to whoever reaches the port. The bundled deployments pin
+ * the switch off and set a key; anything else is announced at WARN on startup
+ * rather than left to be discovered.
+ *
+ * <p>Off is announced too — see {@link CentauriDisabledNotice}.
  */
 @Slf4j
 @Configuration
@@ -37,9 +41,16 @@ public class CentauriConfiguration {
             @Value("${vance.ode.centauri.path:/ode/feed}") String path,
             @Value("${vance.ode.centauri.apiKey:}") String apiKey) {
 
-        log.info("Feed source enabled at '{}' ({})", path,
-                apiKey.isBlank() ? "NO api key — anyone who reaches the path can read"
-                        : "api key required");
+        if (apiKey.isBlank()) {
+            // WARN, not INFO: this module is on by default, so the open case is
+            // reached by doing nothing at all. An operator scanning for
+            // problems must find it without knowing to look for it.
+            log.warn("Feed source enabled at '{}' with NO api key — anyone who reaches "
+                    + "the path can read the archive. Set vance.ode.centauri.apiKey, "
+                    + "or munin.centauri.enabled=false to stop serving it.", path);
+        } else {
+            log.info("Feed source enabled at '{}' (api key required)", path);
+        }
         return new HrafnagudFeedSource(facets, places, articles, enrichments, sources);
     }
 }

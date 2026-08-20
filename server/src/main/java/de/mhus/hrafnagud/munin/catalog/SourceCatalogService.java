@@ -369,12 +369,6 @@ public class SourceCatalogService {
         return report;
     }
 
-    /** Makes a catalogue due immediately — used by the manual refresh endpoint. */
-    public void markDue(String name, Instant now) {
-        mongoTemplate.updateFirst(Query.query(Criteria.where(F_NAME).is(name)),
-                new Update().set(F_NEXT_REFRESH_AT, now), SourceCatalogDocument.class);
-    }
-
     private CatalogRefreshReport fail(SourceCatalogDocument catalog, FetchOutcome outcome,
             @Nullable String error, Instant now) {
         CatalogRefreshReport report = CatalogRefreshReport.builder()

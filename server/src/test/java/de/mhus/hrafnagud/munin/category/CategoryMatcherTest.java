@@ -134,6 +134,22 @@ class CategoryMatcherTest {
     }
 
     @Test
+    void a_word_repeated_across_languages_of_one_concept_still_matches() {
+        // The ambiguity index counts concepts, not label occurrences. Counting
+        // occurrences dropped every word that two translations of the *same*
+        // topic happen to share — 487 unambiguous words against the bundled
+        // vocabulary, so a publisher category "AIDS" resolved to nothing.
+        CategoryMatcher.Match match = matcher.match("antidoping").orElseThrow();
+
+        assertThat(match.rule()).isEqualTo(MatchRule.LABEL_WORD);
+        assertThat(match.topic().path()).startsWith("medtop:15000000");   // sport
+
+        // A second, from a different branch — one recovered word could be luck.
+        assertThat(matcher.match("agnosticism").orElseThrow().rule())
+                .isEqualTo(MatchRule.LABEL_WORD);
+    }
+
+    @Test
     void nonsense_and_empty_input_resolve_to_nothing() {
         assertThat(matcher.match("René Habermann")).isEmpty();
         assertThat(matcher.match("SASSA Old Age Grant")).isEmpty();

@@ -144,12 +144,14 @@ public class ArticleService {
             LanguageResolver.Resolution language, ContentStatus contentStatus, Instant now) {
 
         List<String> originPlaceIds = placeRegistry.pathForCountry(source.getCountry());
-        // Records every category as it goes past — that is how the mapping
-        // table learns what exists — and returns the topics already resolved. A
+        // Learns every category as it goes past — that is how the mapping table
+        // finds out what exists — and returns the topics already resolved. A
         // category first seen here contributes nothing to this article and
-        // everything to the next.
-        List<String> topicIds =
-                categoryMappingService.recordAndResolve(candidate.getCategories(), now);
+        // everything to the next. Counting happens further down, once we know
+        // whether an article was actually stored.
+        CategoryMappingService.CategoryResolution categoryResolution =
+                categoryMappingService.resolve(candidate.getCategories(), now);
+        List<String> topicIds = categoryResolution.topicIds();
         List<String> categories =
                 ArticleFactory.mergeCategories(source.getCategories(), candidate.getCategories());
 
@@ -165,16 +167,26 @@ public class ArticleService {
                 filters.content().denied() ? ContentStatus.SKIPPED : contentStatus,
                 translationConfig.getPivotLanguage(), originPlaceIds, topicIds, filters, now);
 
+        IngestOutcome outcome;
         try {
-            return upsert(document, source.getName(), now);
+            outcome = upsert(document, source.getName(), now);
         } catch (DuplicateKeyException e) {
             // Another worker inserted the same article between our upsert's
             // match and its insert. The article now exists, so the retry is
             // a plain update and cannot hit the same race again.
             log.trace("Article {} was inserted concurrently — retrying as update",
                     document.getUrl());
-            return upsert(document, source.getName(), now);
+            outcome = upsert(document, source.getName(), now);
         }
+
+        // Counted only when something was written. The same candidate comes
+        // past on every poll for as long as it stays in the feed window, and
+        // counting those turned useCount — "how many articles carry this
+        // category" — into a measure of how often a feed is polled.
+        if (outcome != IngestOutcome.DUPLICATE_SAME_SOURCE) {
+            categoryMappingService.countUsage(categoryResolution.keys(), now);
+        }
+        return outcome;
     }
 
     private IngestOutcome upsert(ArticleDocument document, String sourceName, Instant now) {

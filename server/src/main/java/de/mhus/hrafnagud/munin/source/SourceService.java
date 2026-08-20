@@ -611,14 +611,6 @@ public class SourceService {
                 SourceDocument.class);
     }
 
-    /** Makes a source due immediately — used by the manual fetch endpoint. */
-    public void markDue(String name, Instant now) {
-        mongoTemplate.updateFirst(
-                Query.query(Criteria.where(F_NAME).is(name)),
-                new Update().set(F_NEXT_FETCH_AT, now),
-                SourceDocument.class);
-    }
-
     // ─── Statistics ───
 
     public long countAll() {

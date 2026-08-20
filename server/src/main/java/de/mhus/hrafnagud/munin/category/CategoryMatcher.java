@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -57,7 +58,13 @@ public class CategoryMatcher {
 
     @PostConstruct
     void index() {
-        Map<String, Integer> wordCounts = new HashMap<>();
+        // Concepts per word, not occurrences. A topic carries up to thirteen
+        // labels — one per language — so counting occurrences dropped every
+        // word that appears in two translations of the *same* concept.
+        // Measured against the bundled vocabulary that was 487 unambiguous
+        // words, "aids" and "antidoping" among them: a publisher category
+        // "AIDS" resolved to nothing.
+        Map<String, Set<String>> conceptsPerWord = new HashMap<>();
 
         // Sorted, and shallowest wins on a tie. Both matter: the label index is
         // a HashMap, so without an order the winner of a collision changed
@@ -75,7 +82,7 @@ public class CategoryMatcher {
                     byTokens.putIfAbsent(tokens, topic.id());
                 }
                 for (String word : tokens) {
-                    wordCounts.merge(word, 1, Integer::sum);
+                    conceptsPerWord.computeIfAbsent(word, w -> new HashSet<>()).add(topic.id());
                     byWord.putIfAbsent(word, topic.id());
                 }
             }
@@ -83,8 +90,8 @@ public class CategoryMatcher {
         // A word appearing in labels of several concepts says nothing —
         // "development" is in a dozen. Keeping it would make the weakest rule
         // also the most confident-looking.
-        wordCounts.forEach((word, count) -> {
-            if (count > 1) {
+        conceptsPerWord.forEach((word, concepts) -> {
+            if (concepts.size() > 1) {
                 byWord.remove(word);
             }
         });

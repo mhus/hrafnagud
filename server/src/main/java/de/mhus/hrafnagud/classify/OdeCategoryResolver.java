@@ -86,12 +86,4 @@ public class OdeCategoryResolver implements CategoryResolver {
         Object value = output.get(key);
         return value == null ? "" : String.valueOf(value).trim();
     }
-
-    /** Only for the log line at startup. */
-    static CategoryMappingStatus[] answers() {
-        return new CategoryMappingStatus[] {
-                CategoryMappingStatus.RESOLVED,
-                CategoryMappingStatus.NOT_A_TOPIC,
-                CategoryMappingStatus.IS_PLACE};
-    }
 }
