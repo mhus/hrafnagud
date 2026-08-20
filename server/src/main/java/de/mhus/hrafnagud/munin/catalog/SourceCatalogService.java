@@ -128,7 +128,12 @@ public class SourceCatalogService {
                 .type(type)
                 .url(url)
                 .params(clean(request.getParams()))
-                .enabled(request.getEnabled() == null || request.getEnabled())
+                // Off unless asked for. A catalogue is a standing instruction
+                // to crawl somebody else's list of publishers, and several
+                // ship with the application: a fresh installation that starts
+                // all of them at once is a surprise, not a feature. Turning
+                // one on is a click in the console.
+                .enabled(request.getEnabled() != null && request.getEnabled())
                 .include(cleanList(request.getInclude()))
                 .exclude(cleanList(request.getExclude()))
                 .listRefreshIntervalSeconds(request.getListRefreshIntervalSeconds())

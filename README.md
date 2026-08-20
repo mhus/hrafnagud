@@ -68,19 +68,21 @@ fails at startup rather than quietly going direct — in an environment that
 requires the proxy that would break every fetch, and the reason would be
 nowhere near the mistake.
 
-It starts collecting by itself. A fresh database gets one **catalogue** —
-`awesome-rss-feeds` (CC0): 66 OPML lists, about 840 feeds — and the three
-layers pull each other along without anyone pressing anything:
+A fresh database gets one **catalogue** — `awesome-rss-feeds` (CC0): 66 OPML
+lists, about 840 feeds — **switched off**. Turn it on at
+`http://localhost:9800/#catalogs` and the three layers pull each other along
+without anyone pressing anything again:
 
 ```
 catalogue ──daily──▶ source lists ──daily──▶ sources ──adaptive──▶ articles
 ```
 
-On an empty database the catalogue is read within the first minute; the lists
-it delivers are then drained by the list tick, which runs every five minutes
-and works through the whole backlog in one round. It also means roughly 1,700
-outbound requests an hour once the registry is full. To start smaller, or not
-at all:
+Once enabled, the catalogue is read within the next quarter hour (or
+immediately, via *Jetzt lesen*); the lists it delivers are then drained by the
+list tick, which runs every five minutes and works through the whole backlog in
+one round. It also means roughly 1,700 outbound requests an hour once the
+registry is full — which is why it does not start on its own. To start smaller,
+or with nothing at all:
 
 ```yaml
 munin:

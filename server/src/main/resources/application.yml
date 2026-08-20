@@ -45,9 +45,10 @@ munin:
     defaultInterval: PT24H
     claimLease: PT30M
     # A fresh database gets awesome-rss-feeds (CC0): 66 OPML files, ~840
-    # feeds. That is roughly 1,700 outbound requests an hour at the default
-    # poll interval — narrow it with bundledInclude, or switch it off and
-    # register your own catalogue.
+    # feeds — installed DISABLED. Those feeds are roughly 1,700 outbound
+    # requests an hour, more catalogues will ship beside it, and an
+    # installation that starts them all on first boot is a surprise. Switch
+    # one on in the console; narrow it with bundledInclude below.
     installBundled: ${HRAFNAGUD_INSTALL_BUNDLED_CATALOG:true}
     # Globs over the entry path, e.g. ["countries/**"] for the 25 country
     # lists only. Empty means everything it offers.

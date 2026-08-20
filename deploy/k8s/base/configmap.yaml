@@ -50,10 +50,10 @@ data:
   VANCE_PROJECT: "_tenant"
 
   # ── Catalogues ───────────────────────────────────────────────────────
-  # The layer that discovers source lists. On a fresh database the bundled
-  # awesome-rss-feeds catalogue registers ~840 feeds and the collector starts
-  # working on its own — which is the intent, and worth knowing before the
-  # first deploy because it is also ~1,700 outbound requests an hour.
+  # The layer that discovers source lists. The bundled awesome-rss-feeds
+  # catalogue is installed DISABLED: ~840 feeds are ~1,700 outbound requests
+  # an hour, and a deploy should not start crawling by itself. Enable it in
+  # the console once the pod is up.
   HRAFNAGUD_CATALOG_ENABLED: "true"
   HRAFNAGUD_INSTALL_BUNDLED_CATALOG: "true"
 

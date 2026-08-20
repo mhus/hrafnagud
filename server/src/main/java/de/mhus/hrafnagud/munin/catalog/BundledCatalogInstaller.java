@@ -14,24 +14,24 @@ import org.springframework.stereotype.Component;
 /**
  * Installs the catalogue a fresh instance starts with.
  *
- * <p>An empty hrafnagud collects nothing, and a collector that needs a
- * curated list of feeds pasted into it before it does anything is not
- * autonomous. So one catalogue ships: {@code awesome-rss-feeds}, a CC0
- * collection of 66 OPML files — 25 by country, 41 by topic, together about
- * 840 feeds.
+ * <p>An empty hrafnagud has nothing to collect from, and pasting OPML URLs in
+ * by hand is not a starting point. So one catalogue ships:
+ * {@code awesome-rss-feeds}, a CC0 collection of 66 OPML files — 25 by country,
+ * 41 by topic, together about 840 feeds.
  *
- * <p><b>Enabled, and therefore actually running.</b> The alternative — install
- * it dormant and wait for a button — would make the first run of every new
- * instance a manual step, which is the opposite of the point. What it costs is
- * real and worth knowing: at the default poll interval those feeds are roughly
- * 1,700 requests an hour leaving this machine. Narrow it with the catalogue's
- * {@code include} filter, or set {@code munin.catalog.installBundled=false} and
- * bring your own.
+ * <p><b>Installed disabled.</b> A catalogue is a standing instruction to crawl
+ * somebody else's list of publishers — those 840 feeds are roughly 1,700
+ * requests an hour leaving this machine — and more catalogues will ship beside
+ * this one. An installation that starts all of them the moment it boots is a
+ * surprise for whoever runs it and for everyone being crawled. So the
+ * catalogue is present, visible in the console, and one click from running;
+ * choosing which of them to switch on is the operator's, and it needs no
+ * configuration file.
  *
  * <p>Installed <b>once</b>, keyed by name. A catalogue an operator then
- * disabled, filtered or deleted stays that way across restarts: re-asserting
+ * enabled, filtered or deleted stays that way across restarts: re-asserting
  * bundled configuration on every boot would make local decisions impossible to
- * keep.
+ * keep — and would switch a catalogue somebody turned off back on.
  */
 @Component
 @ConditionalOnProperty(name = "munin.catalog.installBundled", havingValue = "true",
@@ -65,16 +65,19 @@ public class BundledCatalogInstaller {
                 .type(GithubOpmlReader.TYPE)
                 .url(URL)
                 .params(params())
-                .enabled(true)
+                // Not enabled: see the class comment. The console turns it on.
+                .enabled(false)
                 .include(properties.getCatalog().getBundledInclude())
                 .build();
         try {
             catalogService.create(request, Instant.now());
-            log.info("Installed the bundled catalog '{}' ({}){}", NAME, URL,
+            log.info("Installed the bundled catalog '{}' ({}), disabled — enable it in the "
+                            + "console at /console/#catalogs to start collecting{}",
+                    NAME, URL,
                     properties.getCatalog().getBundledInclude().isEmpty()
-                            ? " — every list it offers"
-                            : " — filtered to "
-                                    + properties.getCatalog().getBundledInclude());
+                            ? ""
+                            : " (filtered to "
+                                    + properties.getCatalog().getBundledInclude() + ")");
         } catch (RuntimeException e) {
             // Never fatal: a collector that will not start because a
             // convenience catalogue could not be written is worse than one

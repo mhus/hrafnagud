@@ -12,10 +12,13 @@ putting them behind a button that a mis-click reaches is a different decision
 from showing what is going on. Should they ever be wanted here, they arrive
 with a confirmation step and a reason, not as a convenience.
 
-**One exception**, written down rather than quietly taken: a catalogue can be
-re-read from the Kataloge view (§4). It is idempotent, it is what the schedule
-does by itself every day, and it creates nothing that was not going to be
-created anyway. That is the bar an action has to clear to appear here.
+**One subsystem is an exception**, written down rather than quietly taken: the
+Kataloge view (§4) can switch a catalogue on or off and re-read it now. The
+line is not "no writes" but *which* subsystem the console operates — both
+actions are reversible with the same click and neither destroys anything,
+whereas deleting an article or editing a source costs data. Switching a
+catalogue on is also the point: catalogues ship disabled, so this is where a
+fresh installation is told what to collect.
 
 ## 2. Shape
 
@@ -87,11 +90,12 @@ straight into this view with `failing=true` set, because a number an operator
 cannot resolve into rows is a number that only creates work.
 
 **Catalogues** — where the source lists come from, what each catalogue last
-did, and the one button in the console: re-read this catalogue now. It is a
-deliberate exception to §1, kept as narrow as the rule allows — re-read, and
-nothing else. Everything the catalogue layer does happens on a schedule
-anyway; the button is for the case where waiting for the next pass is the
-wrong answer. See [catalogs.md](catalogs.md).
+did, and the two controls the console has: a switch per catalogue, and
+"re-read now". Catalogues ship **disabled** ([catalogs.md](catalogs.md) §7),
+so the switch is how a fresh installation starts collecting at all; the button
+is for when waiting for the next scheduled pass is the wrong answer. The card
+says what "off" means, because a switch alone does not: no automatic reads, no
+new source lists, and everything already imported stays.
 
 **Articles** — what was collected, filtered by source, language, **origin**,
 body state, text and time window. The origin column and filter read the
@@ -138,17 +142,18 @@ whoever wrote it.
 
 ## 7. Where it stops
 
-- **Read-only apart from re-reading a catalogue** (§1).
+- **Read-only apart from the catalogue switch and re-read** (§1).
 - **No charts.** A time series of ingest volume would answer "how much" better
   than a 24-hour figure does, and it needs a metrics store; the actuator
   already exposes Prometheus.
 - **No source-list view.** Catalogues are visible and sources are visible; the
   lists between them are managed by the catalogue layer and by the API, and
   nothing about them was needed to answer the three questions.
-- **No catalogue editing.** The filter that decides how much of a directory
-  this installation pulls in is a `PUT` away in the API, and it belongs where
-  it survives — on the catalogue, not in a view (see
-  [catalogs.md](catalogs.md) §4).
+- **No catalogue editing beyond the switch.** The filter that decides how much
+  of a directory this installation pulls in is a `PUT` away in the API, and it
+  belongs where it survives — on the catalogue, not in a view (see
+  [catalogs.md](catalogs.md) §4). Registering and deleting catalogues stays in
+  the API too.
 - **No pagination beyond next/previous.** Jump-to-page needs a total, and the
   article endpoint deliberately does not have one.
 - **One token, no accounts.** Everyone who has it can do everything.

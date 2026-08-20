@@ -44,7 +44,7 @@ const tokenStore = {
 
 const API = '../api/v1';
 
-async function api(path, params, method) {
+async function api(path, params, method, body) {
     const url = new URL(API + path, window.location.href);
     for (const [key, value] of Object.entries(params || {})) {
         if (value !== null && value !== undefined && value !== '') {
@@ -57,10 +57,17 @@ async function api(path, params, method) {
     if (token) {
         headers.Authorization = 'Bearer ' + token;
     }
+    if (body !== undefined) {
+        headers['Content-Type'] = 'application/json';
+    }
 
     let response;
     try {
-        response = await fetch(url, { method: method || 'GET', headers });
+        response = await fetch(url, {
+            method: method || 'GET',
+            headers,
+            body: body === undefined ? undefined : JSON.stringify(body),
+        });
     } catch (e) {
         // A network-level failure is not the same problem as a 4xx and must
         // not be reported as one: the service being down and the token being
@@ -661,10 +668,14 @@ async function showArticleDetail(id) {
 
 // ── catalogs ────────────────────────────────────────────────────────────
 //
-// The one place the console acts instead of only showing. It is a deliberate
-// exception to the read-only rule and kept as narrow as the rule allows:
-// re-read a catalogue now, nothing else. No create, no edit, no delete —
-// those stay in the API, where a mis-click cannot reach them.
+// The one subsystem the console operates instead of only showing: switch a
+// catalogue on or off, and re-read it now. Both are reversible with the same
+// click, and neither destroys anything. Everything else stays in the API —
+// no create, no delete, no editing the filter, and nothing at all on sources
+// or articles, where a mis-click would cost data rather than a crawl.
+//
+// Switching one on is the point: catalogues ship disabled, so this view is
+// where a fresh installation is told what to start collecting.
 
 async function loadCatalogs() {
     clearError();
@@ -684,9 +695,13 @@ async function loadCatalogs() {
         return '<div class="col-lg-6"><div class="card h-100">'
             + '<div class="card-header d-flex align-items-center gap-2">'
             + '<span>' + esc(catalog.title || catalog.name) + '</span>'
-            + (catalog.enabled
-                ? '<span class="badge text-bg-success">automatisch</span>'
-                : '<span class="badge text-bg-secondary">nur manuell</span>')
+            + '<div class="form-check form-switch mb-0 ms-2">'
+                + '<input class="form-check-input" type="checkbox" role="switch"'
+                + ' id="on-' + esc(catalog.name) + '" data-toggle="' + esc(catalog.name) + '"'
+                + (catalog.enabled ? ' checked' : '') + '>'
+                + '<label class="form-check-label small" for="on-' + esc(catalog.name) + '">'
+                + (catalog.enabled ? 'aktiv' : 'inaktiv') + '</label>'
+            + '</div>'
             + '<button class="btn btn-sm btn-outline-primary ms-auto" data-refresh="'
                 + esc(catalog.name) + '">Jetzt lesen</button>'
             + '</div>'
@@ -694,6 +709,10 @@ async function loadCatalogs() {
             + (catalog.lastError
                 ? '<div class="alert alert-danger py-2">' + esc(catalog.lastError) + '</div>'
                 : '')
+            + (catalog.enabled ? '' :
+                '<div class="alert alert-secondary py-2">Inaktiv — dieser Katalog wird '
+                + 'nicht von selbst gelesen und liefert keine neuen Quellenlisten. '
+                + 'Einschalten startet ihn beim nächsten Lauf.</div>')
             + defList([
                 ['Typ', esc(catalog.type)],
                 ['Quelle', link(catalog.url)],
@@ -717,6 +736,38 @@ async function loadCatalogs() {
 
     container.querySelectorAll('[data-refresh]').forEach(button =>
         button.addEventListener('click', () => refreshCatalog(button)));
+    container.querySelectorAll('[data-toggle]').forEach(box =>
+        box.addEventListener('change', () => toggleCatalog(box)));
+}
+
+/**
+ * Switches a catalogue on or off.
+ *
+ * <p>Enabling only says "keep this in step by itself" — the first pass happens
+ * on the next tick, which is why this reports what will happen rather than
+ * pretending something already did.
+ */
+async function toggleCatalog(box) {
+    const name = box.dataset.toggle;
+    const enabled = box.checked;
+    box.disabled = true;
+    try {
+        await api('/catalogs/' + encodeURIComponent(name), null, 'PUT', { enabled });
+        await loadCatalogs();
+        showNote(enabled
+            ? name + ' ist aktiv — wird beim nächsten Lauf gelesen. "Jetzt lesen" '
+              + 'startet ihn sofort.'
+            : name + ' ist inaktiv — wird nicht mehr von selbst gelesen. Bereits '
+              + 'importierte Listen und Quellen bleiben.');
+    } catch (e) {
+        // Put the switch back where it was: the server did not accept the
+        // change, and a switch showing the opposite of the truth is worse than
+        // an error message.
+        box.checked = !enabled;
+        showError(e);
+    } finally {
+        box.disabled = false;
+    }
 }
 
 async function refreshCatalog(button) {

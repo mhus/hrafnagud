@@ -136,21 +136,39 @@ Names come from the catalogue's label for the entry:
 (`tagesschau-de-042f5a`) would make sixty lists served from one CDN sixty
 variations of `raw-githubusercontent-com-<hash>`.
 
-## 7. The bundled catalogue
+## 7. The bundled catalogue, and why it is off
 
-A fresh database gets `awesome-rss-feeds` (CC0, 66 OPML files, ~840 feeds),
-**enabled**. An empty collector that needs a curated list pasted into it
-before it does anything is not autonomous, and installing it dormant would
-make the first run of every instance a manual step.
+A fresh database gets `awesome-rss-feeds` (CC0, 66 OPML files, ~840 feeds) —
+**installed disabled**.
 
-The cost is real and stated rather than discovered: at the default poll
-interval those feeds are roughly 1,700 outbound requests an hour. Narrow it
-with `munin.catalog.bundledInclude` (e.g. `["countries/**"]`) or switch the
-installation off with `munin.catalog.installBundled=false`.
+A catalogue is a standing instruction to crawl somebody else's list of
+publishers, and more will ship beside this one. An installation that starts
+all of them the moment it boots is a surprise for whoever runs it and for
+everyone being crawled: those 840 feeds alone are roughly 1,700 outbound
+requests an hour. So the catalogue is present, visible, and one switch away —
+and which of them to run is decided by the person who runs it, in the console,
+without editing a configuration file.
 
-Installed **once**, keyed by name. A catalogue that was then disabled,
-filtered or deleted stays that way across restarts — re-asserting bundled
-configuration on every boot would make a local decision impossible to keep.
+That inverts an earlier decision here, which argued that installing it dormant
+makes the first run a manual step. It does. The counterweight is that "several
+bundled catalogues, all live on first boot" is worse, and the manual step is
+one click on a page that already exists.
+
+Narrow the selection with `munin.catalog.bundledInclude` (e.g.
+`["countries/**"]`), or skip the installation entirely with
+`munin.catalog.installBundled=false`.
+
+**Disabled governs the schedule, not the data.** The catalogue is created due,
+so switching it on starts it at the next tick; a manual refresh works while it
+is off, because an explicit request has already decided.
+
+Installed **once**, keyed by name. A catalogue that was then enabled, filtered
+or deleted stays that way across restarts — re-asserting bundled configuration
+on every boot would make a local decision impossible to keep, and would switch
+something back on that somebody turned off.
+
+New catalogues registered through the API are disabled by default for the same
+reason; `enabled: true` in the request is honoured.
 
 ## 8. Pacing
 
