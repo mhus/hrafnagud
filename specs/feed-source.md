@@ -155,6 +155,7 @@ every page turn.
 | `carriesControlUrl` | false | this service has no UI to link into |
 | `capabilitiesTtl` | 30 min | sources are added by an operator, not by the minute |
 | `facets` | `origin-place`, `subject-topic` | §9 |
+| `extraFields` | acht Schlüssel mit Labels | §10 |
 
 Every pushdown left false is a filter Vancetope applies itself after fetching.
 Nothing is lost by declining one; what is lost is efficiency.
@@ -310,3 +311,27 @@ finds an article tagged only *Cricket*. Several values of one key are an „or"
 why that distinction is in the key name rather than in a footnote. A
 `subject-place` facet is the obvious next one and needs `contentLocation`,
 which needs extraction — the same wait as everything else in that document.
+
+## 10. Declared extras
+
+`extras` is free-form by contract, which is exactly why a reader cannot know
+what of it is worth showing or what to call it. So the source says:
+
+| key | label |
+|---|---|
+| `originPlace` | Publisher's place |
+| `sources` | Delivered by |
+| `categories` | Publisher's categories |
+| `originalTitle` / `originalLanguage` / `translationModel` | the translation's provenance |
+| `wordCount` | Words |
+| `collectedAt` | Collected |
+
+Order is display order; a reader renders these and nothing else. The
+alternative — a list in the reader — does not survive the second source: a
+card looking for `originPlace` finds nothing at a Mastodon instance and misses
+its `boosts` entirely.
+
+**`originPlaceIds` and `topicIds` are deliberately not declared.** They travel
+on the detail and a reader is welcome to use them, but they are id paths:
+reading „m49:142, iso:DE" out to a person is this archive's storage format
+wearing a label. The human-readable name is `originPlace`.
