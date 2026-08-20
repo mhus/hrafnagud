@@ -66,11 +66,15 @@ fails the build. Concretely: no `import de.mhus.hrafnagud.{translate,centauri,
 zarniwoop,classify,facet}` and no `import de.mhus.vance.ode` anywhere under
 `munin/`.
 
-Each of the three is also runtime-optional and stays that way: `translate` is
-inert until `vance.ode.base-url` is set, the other two until
-`munin.centauri.enabled` / `munin.zarniwoop.enabled` are true. An installation
-that wants none of them ships them dormant rather than not at all, which is
-the one thing the merge actually gave up.
+Each of them is also runtime-switchable and stays that way: `translate` and
+`classify` are inert until `vance.ode.base-url` is set — they call out, and
+without an address there is nowhere to call — while `centauri` and `zarniwoop`
+answer and are therefore **on unless switched off**
+(`munin.centauri.enabled` / `munin.zarniwoop.enabled`). The asymmetry is the
+point: a missing address is a configuration that does not exist yet, a serving
+surface is what these packages are for. An installation that wants none of them
+ships them dormant rather than not at all, which is the one thing the merge
+actually gave up.
 
 ### 2.2 Where the REST surface comes from
 

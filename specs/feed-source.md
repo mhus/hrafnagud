@@ -14,12 +14,12 @@ Collection, deduplication, body fetching and translation all run on their own
 schedules whether anybody reads or not, which is why a reader can be added and
 removed without the archive noticing.
 
-## 2. Off by default
+## 2. On by default, and switchable
 
 ```yaml
 munin:
   centauri:
-    enabled: true              # HRAFNAGUD_CENTAURI_ENABLED
+    enabled: true              # HRAFNAGUD_CENTAURI_ENABLED, default true
 vance:
   ode:
     centauri:
@@ -28,11 +28,25 @@ vance:
       maxLimit: 200
 ```
 
-Collecting news should not imply publishing it. And the endpoint is
-**unauthenticated until a key is set** — Ode's `apiKey` default is empty by
-design, so that a host with its own security in front of the path is not forced
-into a second scheme. A module that started exposing the archive over HTTP
-merely by being on the classpath would make that somebody else's surprise.
+**The default belongs here, not in the library.** `vance-ode-centauri` cannot
+know whether its host wants to serve, so there it is opt-in — the module stays
+dormant until a `FeedSource` bean exists. Hrafnagud does want to serve: that is
+what the package is for, and a collector that has to be told to hand anything
+out has the switch on the wrong side.
+
+It stays a switch for the deployment that only collects. What it is **not** is
+a security boundary. The endpoint is unauthenticated until `apiKey` is set —
+and so is the operator API, which also deletes. Both assume a loopback binding
+or a proxy in front; making this one endpoint the exception would have bought
+nothing while looking like it bought something.
+
+**Off is announced.** `@ConditionalOnProperty` skips the configuration class
+entirely, so a disabled surface publishes no bean, gets no controller, and
+answers 404 with nothing in the log — a healthy service and a dead path,
+indistinguishable from a broken deployment and diagnosable only from the
+process environment. `CentauriDisabledNotice` logs one line instead. The switch
+was defensible; its silence was not, and it cost two debugging rounds before
+anyone suspected a flag.
 
 The startup log states which of the two auth situations you are in.
 

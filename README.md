@@ -246,9 +246,11 @@ article; `GET /api/v1/articles/{id}/enrichments` lists all of them, and
 
 ## Serving the archive to Vancetope
 
-Off by default. The archive collects whether anybody reads it or not; handing
-it out is a separate decision, and the endpoint is unauthenticated until a key
-is set.
+On by default — serving a reader is what these packages are for, and the
+optionality belongs to the library (`vance-ode-centauri` cannot know whether
+its host wants to serve), not here. Switch it off with `enabled: false` for a
+deployment that only collects. Note that the endpoint is unauthenticated until
+a key is set, exactly like the operator API above.
 
 ```yaml
 munin:

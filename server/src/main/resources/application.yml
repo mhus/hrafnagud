@@ -229,18 +229,27 @@ munin:
   # munin.feed above is the opposite direction: that one pulls feeds in,
   # this one hands the archive out.
   centauri:
-    # Serve the archive to Vancetope as a Centauri feed source. Off by
-    # default — the endpoint is unauthenticated unless an api key is set
-    # (see vance.ode.centauri below), and collecting news should not imply
-    # publishing it.
-    enabled: ${HRAFNAGUD_CENTAURI_ENABLED:false}
+    # Serve the archive to Vancetope as a Centauri feed source.
+    #
+    # On by default, and the default sits here rather than in the library
+    # for a reason: `vance-ode-centauri` cannot know whether its host wants
+    # to serve, so there it is opt-in. Hrafnagud does — answering a reader
+    # is what these packages are for, and a collector that has to be told
+    # to hand anything out has the switch on the wrong side.
+    #
+    # It stays a switch, for the deployment that only collects. What it is
+    # not is a security boundary: the endpoint is unauthenticated until
+    # `vance.ode.centauri.apiKey` is set, but so is the operator API above
+    # — and that one deletes. Both assume a loopback binding or a proxy in
+    # front (see README, "Known gaps").
+    enabled: ${HRAFNAGUD_CENTAURI_ENABLED:true}
 
   # The other Vancetope-facing read surface: a research provider. Same
   # archive, opposite question — Centauri hands out a timeline, this one
   # answers a query. Independently switchable because serving one is not a
   # reason to serve the other.
   zarniwoop:
-    enabled: ${HRAFNAGUD_ZARNIWOOP_ENABLED:false}
+    enabled: ${HRAFNAGUD_ZARNIWOOP_ENABLED:true}
 
 # Vancetope binding (vance-ode). Everything here is inert until base-url
 # is set — no client, no translation provider, no outbound traffic. The

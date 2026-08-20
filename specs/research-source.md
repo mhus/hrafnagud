@@ -21,7 +21,7 @@ Same archive, opposite question:
 Both read-only. Serving both is not duplication — a chronological page and a
 ranked answer are different products of the same data.
 
-Off by default, same reasoning and same shape as the feed:
+On by default, same reasoning and same shape as the feed (§2 there):
 
 ```yaml
 munin:
