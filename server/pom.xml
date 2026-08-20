@@ -31,7 +31,7 @@
         <spring.boot.version>4.1.0</spring.boot.version>
         <lombok.version>1.18.46</lombok.version>
         <jspecify.version>1.0.1</jspecify.version>
-        <vance.ode.version>0.1.0-SNAPSHOT</vance.ode.version>
+        <vance.ode.version>0.1.0</vance.ode.version>
         <!-- Rome: RSS 0.9x/1.0/2.0 + Atom 0.3/1.0 parsing. The feed zoo in the
              wild is broken in every way imaginable; Rome's XmlReader does
              encoding sniffing (XML decl vs. HTTP charset vs. BOM) which a
