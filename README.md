@@ -222,6 +222,20 @@ A queue only moves when the decision actually flips, so a finished translation
 and a body skipped by hand both survive a run. Details and the reasoning:
 [filter.md](specs/filter.md).
 
+**The rules decide what is paid for, not what is served.** Everything collected
+stays readable through the API, the feed and the research source — a denied
+article still has a title, a place and a URL, and a spending decision made today
+must not silently rewrite what a reader can see. Narrowing is the reader's
+request, as an `accepted` facet on both Vancetope-facing surfaces:
+
+```bash
+curl 'localhost:9800/ode/feed/items?selector=all&facet=accepted:yes'   # in scope
+curl 'localhost:9800/ode/feed/items?selector=all&facet=accepted:no'    # the discards
+```
+
+The `no` side is the useful half: it shows what the rules are throwing away,
+which a list of rules cannot.
+
 ## Translation
 
 Off by default, and it takes two switches — `enabled` runs the worker,

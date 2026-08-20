@@ -2,6 +2,7 @@ package de.mhus.hrafnagud.facet;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import de.mhus.hrafnagud.api.filter.FilterDecision;
 import de.mhus.hrafnagud.munin.article.ArticleQuery;
 import de.mhus.hrafnagud.munin.category.TestTopics;
 import de.mhus.hrafnagud.munin.place.TestPlaces;
@@ -79,6 +80,47 @@ class ArchiveFacetsTest {
 
         assertThat(query.getOriginPlaces()).isNull();
         assertThat(query.getTopics()).isNull();
+    }
+
+    // ─── accepted ───
+
+    @Test
+    void acceptedIsFlatAndTwoValuedSoTheAuditDirectionExistsToo() {
+        OdeFacet accepted = declared(ArchiveFacets.ACCEPTED);
+
+        assertThat(accepted.hierarchical()).isFalse();
+        assertThat(accepted.values()).extracting(OdeFacetValue::id)
+                .containsExactly("yes", "no");
+    }
+
+    @Test
+    void selectingAcceptedNarrowsToTheTranslationDecision() {
+        ArticleQuery inScope = facets.apply(ArticleQuery.builder(),
+                Map.of(ArchiveFacets.ACCEPTED, List.of("yes"))).build();
+        ArticleQuery filteredOut = facets.apply(ArticleQuery.builder(),
+                Map.of(ArchiveFacets.ACCEPTED, List.of("no"))).build();
+
+        assertThat(inScope.getTranslationPolicy()).isEqualTo(FilterDecision.ACCEPT);
+        assertThat(filteredOut.getTranslationPolicy()).isEqualTo(FilterDecision.DENY);
+    }
+
+    /**
+     * Both values is the same request as neither. Treating it as a filter would
+     * make the reader's "I want everything" narrower than not asking.
+     */
+    @Test
+    void selectingBothValuesFiltersNothing() {
+        ArticleQuery query = facets.apply(ArticleQuery.builder(),
+                Map.of(ArchiveFacets.ACCEPTED, List.of("yes", "no"))).build();
+
+        assertThat(query.getTranslationPolicy()).isNull();
+    }
+
+    @Test
+    void notAskingServesEverything() {
+        ArticleQuery query = facets.apply(ArticleQuery.builder(), Map.of()).build();
+
+        assertThat(query.getTranslationPolicy()).isNull();
     }
 
     private OdeFacet declared(String key) {

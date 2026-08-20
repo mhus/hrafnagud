@@ -288,8 +288,9 @@ is selected, and facets combine.
 |---|---|---|
 | `origin-place` | `originPlaceIds` | hierarchical, M.49 above the country, ISO at it, whole table inline |
 | `subject-topic` | `topicIds` | hierarchical, IPTC Media Topics, ~1,400 concepts served level by level |
+| `accepted` | `translationPolicy` | flat, `yes` / `no` (§9.1) |
 
-Both are declared to the research contract as well, from the same
+All three are declared to the research contract as well, from the same
 `de.mhus.hrafnagud.facet.ArchiveFacets` — the two surfaces ask the same
 question of the same field, and declaring it twice is how the answers drift
 apart.
@@ -311,6 +312,42 @@ finds an article tagged only *Cricket*. Several values of one key are an „or"
 why that distinction is in the key name rather than in a footnote. A
 `subject-place` facet is the obvious next one and needs `contentLocation`,
 which needs extraction — the same wait as everything else in that document.
+
+### 9.1 `accepted`: the archive serves everything, the reader may narrow
+
+The filter rules ([filter.md](filter.md)) decide what this archive spends a
+request or a model call on. They do **not** decide what it serves. A denied
+article still has a title, a teaser, a place and a URL, and withholding it would
+be the same mistake as withholding an untranslated one (§6): the archive is
+what was collected, and the rule set is only what we are currently paying for.
+
+There is a sharper reason than symmetry. A rule is a spending decision *of
+today*. If it governed visibility, the contents of somebody else's stream would
+change because an operator edited a budget, and afterwards nothing could tell
+"never collected" from "filtered out later". So the default is everything, and
+narrowing is the reader's request.
+
+Two values rather than a flag, and the `no` side is the point: it shows what the
+rules are throwing away, which is the one review a list of rules cannot give.
+Selecting both is the same request as selecting neither — a reader asking for
+everything must not end up with less than one who asked for nothing.
+
+**`yes` includes an article that was never evaluated.** No decision is the same
+statement as no rule denying it, so the predicate is an `$in` over `ACCEPT` and
+a missing field rather than an equality. The alternative would silently hide
+every article stored before the rules existed until somebody pressed
+re-evaluate.
+
+It reads the **translation** ruleset, not the content one, because this filters
+*articles* and the text an item carries is what the translation rules govern. A
+denied body needs no facet: it simply has no body.
+
+The facet is a source-specific key by contract — it says something about this
+archive's curation and nothing that another source could answer under the same
+name. It also comes with its own index (`translationPolicy`, `publishedAt`,
+`_id`), because the rule sets worth writing are exactly the ones where the
+facet removes most of the archive, and filtering that after the timeline index
+has already fetched the page means reading ten pages to serve one.
 
 ## 10. Declared extras
 

@@ -2,6 +2,7 @@ package de.mhus.hrafnagud.munin.article;
 
 import de.mhus.hrafnagud.api.article.ContentStatus;
 import de.mhus.hrafnagud.api.article.TranslationStatus;
+import de.mhus.hrafnagud.api.filter.FilterDecision;
 import de.mhus.hrafnagud.api.filter.FilterOutcome;
 import de.mhus.hrafnagud.api.filter.FilterOutcomes;
 import de.mhus.hrafnagud.munin.category.CategoryMappingService;
@@ -545,6 +546,16 @@ public class ArticleService {
         }
         if (filter.getContentStatus() != null) {
             parts.add(Criteria.where(F_CONTENT_STATUS).is(filter.getContentStatus()));
+        }
+        if (filter.getTranslationPolicy() != null) {
+            // ACCEPT has to match a missing field as well: an article stored
+            // before the filter existed, or never re-evaluated, has no decision
+            // — and no decision means no rule denied it. Written as an $in over
+            // two equality points rather than a $ne, because $ne cannot use the
+            // index and this predicate exists to be paged over.
+            parts.add(filter.getTranslationPolicy() == FilterDecision.DENY
+                    ? Criteria.where(F_TRANSLATION_POLICY).is(FilterDecision.DENY)
+                    : Criteria.where(F_TRANSLATION_POLICY).in(FilterDecision.ACCEPT, null));
         }
         if (filter.getPublishedSince() != null || filter.getPublishedUntil() != null) {
             Criteria window = Criteria.where(F_PUBLISHED_AT);

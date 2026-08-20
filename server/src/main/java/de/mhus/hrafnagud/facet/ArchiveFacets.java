@@ -1,5 +1,6 @@
 package de.mhus.hrafnagud.facet;
 
+import de.mhus.hrafnagud.api.filter.FilterDecision;
 import de.mhus.hrafnagud.munin.article.ArticleQuery;
 import de.mhus.hrafnagud.munin.category.Topic;
 import de.mhus.hrafnagud.munin.category.TopicRegistry;
@@ -18,8 +19,8 @@ import org.springframework.stereotype.Service;
  * What a reader may filter the archive by, and how a selection becomes a
  * query.
  *
- * <p>Two dimensions, both already stored as materialised paths, so a reader
- * asks for one node and the query answers for every rung below it:
+ * <p>Two of the three are stored as materialised paths, so a reader asks for
+ * one node and the query answers for every rung below it:
  *
  * <ul>
  *   <li><b>{@code origin-place}</b> — where the publisher sits, from
@@ -34,9 +35,18 @@ import org.springframework.stereotype.Service;
  *       finds a third of what it claims.
  * </ul>
  *
- * <p>Both are declared to both contracts. A feed reader filtering a timeline
- * and a research query filtering a ranked answer ask the same question of the
- * same field; declaring it once here is what keeps the two answers the same.
+ * <p>The third, <b>{@code accepted}</b>, is of a different kind: not a property
+ * of the news but of <em>our</em> decision about it — whether the translation
+ * rules put the article in scope ({@code specs/filter.md}). The archive serves
+ * everything by default and this narrows it on request, which is the only way
+ * round that works: a filter rule is a spending decision of today, and letting
+ * it govern visibility would change what a reader sees because somebody edited
+ * a budget.
+ *
+ * <p>All three are declared to both contracts. A feed reader filtering a
+ * timeline and a research query filtering a ranked answer ask the same question
+ * of the same field; declaring it once here is what keeps the two answers the
+ * same.
  */
 @Service
 @RequiredArgsConstructor
@@ -44,6 +54,15 @@ public class ArchiveFacets {
 
     public static final String ORIGIN_PLACE = "origin-place";
     public static final String SUBJECT_TOPIC = "subject-topic";
+
+    /**
+     * Our own key, not a reserved one: it answers a question about
+     * <em>this</em> archive's curation and means nothing across sources.
+     */
+    public static final String ACCEPTED = "accepted";
+
+    private static final String ACCEPTED_YES = "yes";
+    private static final String ACCEPTED_NO = "no";
 
     private final PlaceRegistry places;
     private final TopicRegistry topics;
@@ -60,7 +79,8 @@ public class ArchiveFacets {
     public List<OdeFacet> declare() {
         return List.of(
                 OdeFacet.tree(ORIGIN_PLACE, "Publisher's place", placeValues()),
-                new OdeFacet(SUBJECT_TOPIC, "Topic", true, topicRoots(), true));
+                new OdeFacet(SUBJECT_TOPIC, "Topic", true, topicRoots(), true),
+                OdeFacet.flat(ACCEPTED, "In scope for translation", acceptedValues()));
     }
 
     /**
@@ -72,6 +92,7 @@ public class ArchiveFacets {
      */
     public List<OdeFacetValue> values(String key, @Nullable String parentId) {
         return switch (key) {
+            case ACCEPTED -> acceptedValues();
             case ORIGIN_PLACE -> parentId == null
                     ? placeValues()
                     : placeValues().stream().filter(v -> parentId.equals(v.parentId())).toList();
@@ -98,7 +119,29 @@ public class ArchiveFacets {
         if (selectedTopics != null && !selectedTopics.isEmpty()) {
             builder.topics(selectedTopics);
         }
+        // Two values, so both selected is the same as neither: the reader has
+        // asked for everything, which is what the archive serves by default.
+        // Only a one-sided selection narrows anything.
+        List<String> accepted = facets.get(ACCEPTED);
+        if (accepted != null && accepted.size() == 1) {
+            builder.translationPolicy(ACCEPTED_NO.equals(accepted.getFirst())
+                    ? FilterDecision.DENY
+                    : FilterDecision.ACCEPT);
+        }
         return builder;
+    }
+
+    /**
+     * Flat and two-valued, rather than a flag.
+     *
+     * <p>The {@code no} side is the reason: it shows what the rules are
+     * throwing away, and that is the one review a list of rules cannot give
+     * you. A boolean facet would only ever answer the reassuring direction.
+     */
+    private static List<OdeFacetValue> acceptedValues() {
+        return List.of(
+                new OdeFacetValue(ACCEPTED_YES, "Accepted", null),
+                new OdeFacetValue(ACCEPTED_NO, "Filtered out", null));
     }
 
     private List<OdeFacetValue> placeValues() {

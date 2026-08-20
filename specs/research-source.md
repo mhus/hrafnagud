@@ -153,11 +153,26 @@ wrongly.
 | `expertParams` | `source`, `originalLanguage`, `category`, `since`, `until` | Munin stores all five |
 | `maxResults` | 25 | these go into a model's context, where the twentieth hit costs tokens and adds little |
 | `servesContent` | true | bodies exist, on demand |
+| `facets` | `origin-place`, `subject-topic`, `accepted` | the same three the feed declares, from the same class |
 | `cacheTtl` | 1 h | the answer is a constant |
 
 `since` and `until` map to `publishedSince` / `publishedUntil`, not to the
 `firstSeenAt` window: a caller asking for "published after" means the
 article's date, not ours.
+
+**Facets are declared once, for both surfaces.** They live in
+`de.mhus.hrafnagud.facet.ArchiveFacets` and are documented in
+[feed-source.md](feed-source.md) §9 — a ranked answer and a timeline ask the
+same question of the same field, and declaring them separately is how the two
+answers drift apart. That includes `accepted`, the opt-in narrowing to what the
+filter rules put in scope (§9.1 there): a research query gets the whole archive
+unless it asks otherwise, for the same reason the feed does.
+
+Note the one asymmetry worth knowing: `expertParams` and facets overlap in
+spirit and not in mechanism. Expert params are this source's own vocabulary in a
+free-form map; facets are declared dimensions a reader can render as a picker.
+Where both could serve, the facet is the better place, because it is the one a
+reader can discover.
 
 `originalLanguage` is named for the field it filters, and the name is the point.
 A hit is *presented* in the pivot language and labelled with it (§6), so a filter

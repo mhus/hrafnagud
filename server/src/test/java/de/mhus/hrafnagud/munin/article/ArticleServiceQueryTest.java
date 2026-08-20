@@ -7,6 +7,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import de.mhus.hrafnagud.api.filter.FilterDecision;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import java.time.Instant;
@@ -98,6 +99,43 @@ class ArticleServiceQueryTest {
                 ArticleQuery.builder().sourceName("tagesschau").build(), null, false, 20);
 
         assertThat(andParts(capturedQuery())).hasSize(2);
+    }
+
+    /**
+     * The subtle half of the {@code accepted} facet: "in scope" has to include
+     * an article that was never evaluated, because no decision is the same
+     * statement as no rule denying it. Written as an {@code $in} over two
+     * equality points — {@code $ne} would be correct too and cannot use the
+     * index this predicate exists to be paged over.
+     */
+    @Test
+    void acceptedMatchesArticlesThatWereNeverEvaluated() {
+        service.pageByPublished(ArticleQuery.builder()
+                .translationPolicy(FilterDecision.ACCEPT).build(), null, false, 20);
+
+        Object policy = andParts(capturedQuery()).stream()
+                .map(part -> ((org.bson.Document) part).get("translationPolicy"))
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(((org.bson.Document) policy).get("$in"))
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.LIST)
+                .containsExactly(FilterDecision.ACCEPT, null);
+    }
+
+    @Test
+    void filteredOutIsAPlainEquality() {
+        service.pageByPublished(ArticleQuery.builder()
+                .translationPolicy(FilterDecision.DENY).build(), null, false, 20);
+
+        Object policy = andParts(capturedQuery()).stream()
+                .map(part -> ((org.bson.Document) part).get("translationPolicy"))
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(policy).isEqualTo(FilterDecision.DENY);
     }
 
     /**

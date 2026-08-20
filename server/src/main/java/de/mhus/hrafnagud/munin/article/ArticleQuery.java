@@ -1,6 +1,7 @@
 package de.mhus.hrafnagud.munin.article;
 
 import de.mhus.hrafnagud.api.article.ContentStatus;
+import de.mhus.hrafnagud.api.filter.FilterDecision;
 import java.time.Instant;
 import java.util.List;
 import lombok.Builder;
@@ -58,6 +59,22 @@ public class ArticleQuery {
     @Nullable String text;
 
     @Nullable ContentStatus contentStatus;
+
+    /**
+     * Which side of the translation filter an article is on.
+     *
+     * <p>{@code ACCEPT} means "in scope" and deliberately also matches an
+     * article that was never evaluated, because no decision is the same
+     * statement as no rule denying it. {@code DENY} is the audit direction:
+     * what the rules are throwing away, which is the one review a rule list
+     * cannot give you.
+     *
+     * <p>The translation ruleset and not the content one, because this filters
+     * <em>articles</em>, and the text an article is served with is what the
+     * translation rules govern. A denied body needs no filter: it simply has no
+     * body.
+     */
+    @Nullable FilterDecision translationPolicy;
 
     /** Lower bound on {@code firstSeenAt}, inclusive. */
     @Nullable Instant since;

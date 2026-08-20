@@ -85,7 +85,15 @@ import org.springframework.data.mongodb.core.mapping.Language;
         // continues instead of chewing the same head again. Not a hot path —
         // it runs when somebody presses the button — but without an index the
         // walk is a collection scan per batch.
-        @CompoundIndex(name = "policy_idx", def = "{ 'policyAt': 1 }")
+        @CompoundIndex(name = "policy_idx", def = "{ 'policyAt': 1 }"),
+        // The `accepted` facet on a timeline. Without it the filter is applied
+        // to documents the published index already fetched, which is cheap only
+        // while the facet removes a minority — and the interesting rule sets are
+        // exactly the ones where it removes most of the archive. The sort keys
+        // follow the policy so an $in over two equality points can still walk
+        // the index in order.
+        @CompoundIndex(name = "translation_policy_published_idx",
+                def = "{ 'translationPolicy': 1, 'publishedAt': -1, '_id': -1 }")
 })
 @Data
 @Builder

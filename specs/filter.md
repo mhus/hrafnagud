@@ -265,8 +265,14 @@ back; re-evaluation is that way.
   an explicit act on one article. A rule that names one article is a rule that
   will be forgotten.
 - **This is not a query filter.** It decides what to *spend money on*, not what
-  a client is shown. The article API keeps its own filters, and none of them
-  read these rules.
+  a client is shown. The archive serves a denied article like any other, to the
+  API, to the Centauri feed and to the research source alike — see
+  [feed-source.md](feed-source.md) §9.1, which also explains why the reverse
+  would make somebody else's stream change when an operator edits a budget.
+
+  What *is* offered is the reader's own narrowing: an `accepted` facet on both
+  Vancetope-facing surfaces, with a `no` side so the rules' discards can be
+  reviewed. A facet, because the decision belongs to whoever is asking.
 - **No automatic learning.** Unlike the category table, nothing here proposes
   rules from observed data. What that would even optimise for is not clear
   enough to design against.

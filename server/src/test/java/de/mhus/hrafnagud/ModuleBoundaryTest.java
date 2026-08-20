@@ -37,16 +37,21 @@ class ModuleBoundaryTest {
     private static final List<String> INDEPENDENT = List.of("munin", "api");
 
     /**
-     * What they must not reach for: the Ode libraries, and the four packages
-     * that use them. The direction is the point — those four import Munin,
-     * never the other way round.
+     * What they must not reach for: the Ode libraries, and the packages that
+     * use them. The direction is the point — those import Munin, never the
+     * other way round.
      */
     private static final List<String> FORBIDDEN = List.of(
             "de.mhus.vance",
             "de.mhus.hrafnagud.translate",
             "de.mhus.hrafnagud.classify",
             "de.mhus.hrafnagud.centauri",
-            "de.mhus.hrafnagud.zarniwoop");
+            "de.mhus.hrafnagud.zarniwoop",
+            // Not one of the four, and still outward-facing: it declares
+            // Munin's fields as Ode facets and therefore imports vance-ode. An
+            // import of it from munin would smuggle the whole contract in
+            // through a package whose name does not say so.
+            "de.mhus.hrafnagud.facet");
 
     private static final Path SOURCE_ROOT =
             Path.of("src", "main", "java", "de", "mhus", "hrafnagud");
