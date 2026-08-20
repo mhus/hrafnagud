@@ -31,7 +31,14 @@ import org.springframework.data.mongodb.core.mapping.Document;
  */
 @Document(collection = "source_catalogs")
 @CompoundIndexes({
-        @CompoundIndex(name = "catalog_url_idx", def = "{ 'url': 1 }", unique = true),
+        // Not unique, unlike the same index one layer down. For a source list
+        // the URL *is* the identity — the same document is the same list. For a
+        // catalogue the identity is the selection: two catalogues over one
+        // repository with disjoint filters are two different things, and
+        // splitting a mixed collection into a news half and a blog half is the
+        // normal case rather than an accident. The name is what must stay
+        // unique.
+        @CompoundIndex(name = "catalog_url_idx", def = "{ 'url': 1 }"),
         @CompoundIndex(name = "catalog_name_idx", def = "{ 'name': 1 }", unique = true),
         @CompoundIndex(name = "catalog_due_idx", def = "{ 'nextRefreshAt': 1 }",
                 partialFilter = "{ 'enabled': true }")

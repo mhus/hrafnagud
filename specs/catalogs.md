@@ -136,10 +136,41 @@ Names come from the catalogue's label for the entry:
 (`tagesschau-de-042f5a`) would make sixty lists served from one CDN sixty
 variations of `raw-githubusercontent-com-<hash>`.
 
-## 7. The bundled catalogue, and why it is off
+## 6a. One catalogue, one interval class
 
-A fresh database gets `awesome-rss-feeds` (CC0, 66 OPML files, ~840 feeds) —
-**installed disabled**.
+A catalogue carries `fetchProfile` and hands it to its lists and their sources
+([collection.md](collection.md) §6.1a). One name per catalogue, and that is the
+constraint that makes the assignment worth having: the catalogue is where
+somebody already knows what kind of publishers these are, so it is said once
+instead of re-derived per list.
+
+The consequence is that **a collection mixing kinds needs one catalogue per
+kind** — which is why a catalogue's URL is not unique. Two catalogues over the
+same repository with disjoint `include` filters are two different things:
+
+```
+awesome-rss-feeds-news   countries/**     profile news   (30 min – 12 h)
+awesome-rss-feeds-blogs  recommended/**   profile blog   (1 d – 7 d)
+```
+
+Registering a second catalogue for a URL that already has one logs a line
+rather than refusing, so an accidental duplicate is still visible while the
+deliberate split works. Overlapping filters are not prevented: the layer below
+resolves it — the first catalogue to claim a list keeps it, and the second
+records it as `skipped` (§6).
+
+Changing the profile affects what is imported **from now on**. Lists and
+sources already in the registry keep the class they were created with; the
+console says so where the profile is set, because a dropdown that silently
+did not apply to existing rows would be worse than one that explains itself.
+
+## 7. The bundled catalogues, and why they are off
+
+A fresh database gets `awesome-rss-feeds` (CC0, 66 OPML files) as **two
+catalogues, both disabled** — its `countries/` half as news, its
+`recommended/` half as blogs. That collection genuinely mixes kinds:
+*Programming*, *Personal finance* and *Chess* are blog lists, and polling them
+on the news schedule would mean about sixty requests per published article.
 
 A catalogue is a standing instruction to crawl somebody else's list of
 publishers, and more will ship beside this one. An installation that starts
@@ -154,18 +185,21 @@ makes the first run a manual step. It does. The counterweight is that "several
 bundled catalogues, all live on first boot" is worse, and the manual step is
 one click on a page that already exists.
 
-Narrow the selection with `munin.catalog.bundledInclude` (e.g.
-`["countries/**"]`), or skip the installation entirely with
+Running less means enabling one of the two rather than both; there is
+deliberately no property that re-filters them, because it would fight the
+split. Skip the installation entirely with
 `munin.catalog.installBundled=false`.
 
 **Disabled governs the schedule, not the data.** The catalogue is created due,
 so switching it on starts it at the next tick; a manual refresh works while it
 is off, because an explicit request has already decided.
 
-Installed **once**, keyed by name. A catalogue that was then enabled, filtered
-or deleted stays that way across restarts — re-asserting bundled configuration
-on every boot would make a local decision impossible to keep, and would switch
-something back on that somebody turned off.
+Installed **once**, keyed by name, and skipped entirely when a catalogue for
+this repository already exists under any name — including `awesome-rss-feeds`,
+the single-catalogue name used before the split. An instance set up earlier
+keeps what it has: re-asserting bundled configuration would undo local
+decisions, and would quietly add a second catalogue over lists somebody is
+already collecting.
 
 New catalogues registered through the API are disabled by default for the same
 reason; `enabled: true` in the request is honoured.

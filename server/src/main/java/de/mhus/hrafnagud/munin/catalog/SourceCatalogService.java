@@ -110,10 +110,15 @@ public class SourceCatalogService {
                 .orElseThrow(() -> new BadRequestException(
                         "not a usable http(s) url: " + request.getUrl()));
 
-        repository.findByUrl(url).ifPresent(existing -> {
-            throw new ConflictException(
-                    "catalog already registered as '" + existing.getName() + "'");
-        });
+        // A warning, not a refusal: registering the same directory twice with
+        // different filters is how a collection that mixes kinds — news lists
+        // and blog lists in one repository — gets one catalogue per kind, each
+        // with its own fetch profile. An accidental duplicate still shows up
+        // in the log.
+        repository.findByUrl(url).ifPresent(existing -> log.info(
+                "Catalog url {} is already registered as '{}'; registering a second one — "
+                        + "check the include filters do not overlap",
+                url, existing.getName()));
 
         String name = StringUtils.isBlank(request.getName())
                 ? Slugs.sourceName(url)
@@ -171,10 +176,8 @@ public class SourceCatalogService {
                             "not a usable http(s) url: " + request.getUrl()));
             repository.findByUrl(url)
                     .filter(other -> !other.getName().equals(name))
-                    .ifPresent(other -> {
-                        throw new ConflictException(
-                                "catalog already registered as '" + other.getName() + "'");
-                    });
+                    .ifPresent(other -> log.info(
+                            "Catalog url {} is also registered as '{}'", url, other.getName()));
             catalog.setUrl(url);
             catalog.setFingerprint(null);
         }

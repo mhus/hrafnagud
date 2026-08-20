@@ -68,10 +68,10 @@ fails at startup rather than quietly going direct — in an environment that
 requires the proxy that would break every fetch, and the reason would be
 nowhere near the mistake.
 
-A fresh database gets one **catalogue** — `awesome-rss-feeds` (CC0): 66 OPML
-lists, about 840 feeds — **switched off**. Turn it on at
-`http://localhost:9800/#catalogs` and the three layers pull each other along
-without anyone pressing anything again:
+A fresh database gets **two catalogues** from `awesome-rss-feeds` (CC0) — its
+news half and its blog half, each with its own poll interval class — both
+**switched off**. Turn one on at `http://localhost:9800/#catalogs` and the
+three layers pull each other along without anyone pressing anything again:
 
 ```
 catalogue ──daily──▶ source lists ──daily──▶ sources ──adaptive──▶ articles
@@ -81,14 +81,13 @@ Once enabled, the catalogue is read within the next quarter hour (or
 immediately, via *Jetzt lesen*); the lists it delivers are then drained by the
 list tick, which runs every five minutes and works through the whole backlog in
 one round. It also means roughly 1,700 outbound requests an hour once the
-registry is full — which is why it does not start on its own. To start smaller,
-or with nothing at all:
+registry is full — which is why nothing starts on its own. Enable only the news
+half to start smaller, or skip the bundled catalogues entirely:
 
 ```yaml
 munin:
   catalog:
-    bundledInclude: ["countries/**"]   # 25 country lists instead of all 66
-    installBundled: false              # or bring your own catalogue
+    installBundled: false              # bring your own catalogue
 ```
 
 Catalogues are readers per *publication shape*, not per publisher:

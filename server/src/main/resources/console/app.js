@@ -241,6 +241,44 @@ function countTable(table, map, empty) {
 // cheaper to hold than a lookup per row shown.
 
 const places = new Map();
+const fetchProfiles = new Map();
+
+async function loadFetchProfiles() {
+    if (fetchProfiles.size) {
+        return;
+    }
+    const byName = await api('/sources/fetch-profiles');
+    for (const [name, profile] of Object.entries(byName)) {
+        fetchProfiles.set(name, profile);
+    }
+}
+
+/** "30 min – 12 h", so a name is not the only thing a profile says. */
+function profileRange(name) {
+    const profile = fetchProfiles.get(name || 'default');
+    return profile ? isoDuration(profile.minInterval) + ' – '
+            + isoDuration(profile.maxInterval) : '';
+}
+
+/** PT30M → "30 min". Enough of ISO-8601 for the two units these use. */
+function isoDuration(iso) {
+    if (!iso) {
+        return '';
+    }
+    const match = /^PT?(?:(\d+)H)?(?:(\d+)M)?$/.exec(iso);
+    if (!match) {
+        return iso;
+    }
+    const hours = Number(match[1] || 0);
+    const minutes = Number(match[2] || 0);
+    if (hours >= 24 && hours % 24 === 0 && !minutes) {
+        return (hours / 24) + ' d';
+    }
+    if (hours && minutes) {
+        return hours + ' h ' + minutes + ' min';
+    }
+    return hours ? hours + ' h' : minutes + ' min';
+}
 
 async function loadPlaces() {
     if (places.size) {
@@ -679,6 +717,7 @@ async function showArticleDetail(id) {
 
 async function loadCatalogs() {
     clearError();
+    await loadFetchProfiles();
     const catalogs = await api('/catalogs');
     const now = Date.now();
     const container = document.getElementById('catalog-cards');
@@ -716,6 +755,7 @@ async function loadCatalogs() {
             + defList([
                 ['Typ', esc(catalog.type)],
                 ['Quelle', link(catalog.url)],
+                ['Profil', profileSelect(catalog)],
                 ['Auswahl', esc((catalog.include || []).join(', ') || 'alles')
                     + ((catalog.exclude || []).length
                         ? ' <span class="text-body-secondary">ohne '
@@ -738,6 +778,44 @@ async function loadCatalogs() {
         button.addEventListener('click', () => refreshCatalog(button)));
     container.querySelectorAll('[data-toggle]').forEach(box =>
         box.addEventListener('change', () => toggleCatalog(box)));
+    container.querySelectorAll('[data-profile]').forEach(select =>
+        select.addEventListener('change', () => setCatalogProfile(select)));
+}
+
+/**
+ * The interval class this catalogue's sources belong to.
+ *
+ * <p>A select rather than a text box: the name is the one field that cannot be
+ * guessed, and the classes are configured server-side. Changing it affects the
+ * lists and sources imported from now on — what is already in the registry
+ * keeps the class it was created with, which is why the card says so.
+ */
+function profileSelect(catalog) {
+    const current = catalog.fetchProfile || 'default';
+    const options = [...fetchProfiles.keys()].map(name =>
+        '<option value="' + esc(name) + '"' + (name === current ? ' selected' : '') + '>'
+        + esc(name) + ' (' + esc(profileRange(name)) + ')</option>').join('');
+    return '<select class="form-select form-select-sm d-inline-block w-auto"'
+        + ' data-profile="' + esc(catalog.name) + '">' + options + '</select>'
+        + '<div class="text-body-secondary small">Gilt für neu importierte Quellen; '
+        + 'bereits importierte behalten ihre Einstufung.</div>';
+}
+
+async function setCatalogProfile(select) {
+    const name = select.dataset.profile;
+    const profile = select.value;
+    select.disabled = true;
+    try {
+        await api('/catalogs/' + encodeURIComponent(name), null, 'PUT',
+            { fetchProfile: profile === 'default' ? '' : profile });
+        await loadCatalogs();
+        showNote(name + ': Profil ' + profile + ' (' + profileRange(profile) + ').');
+    } catch (e) {
+        showError(e);
+        await loadCatalogs();
+    } finally {
+        select.disabled = false;
+    }
 }
 
 /**

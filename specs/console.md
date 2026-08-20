@@ -90,12 +90,20 @@ straight into this view with `failing=true` set, because a number an operator
 cannot resolve into rows is a number that only creates work.
 
 **Catalogues** — where the source lists come from, what each catalogue last
-did, and the two controls the console has: a switch per catalogue, and
-"re-read now". Catalogues ship **disabled** ([catalogs.md](catalogs.md) §7),
+did, and the three controls the console has: a switch per catalogue, its
+interval class, and "re-read now". Catalogues ship **disabled** ([catalogs.md](catalogs.md) §7),
 so the switch is how a fresh installation starts collecting at all; the button
 is for when waiting for the next scheduled pass is the wrong answer. The card
 says what "off" means, because a switch alone does not: no automatic reads, no
 new source lists, and everything already imported stays.
+
+The interval class is a select rather than a text box — the profile name is the
+one field nobody can guess, and the classes are configured server-side
+([collection.md](collection.md) §6.1a). Each option shows its window (`news
+(5 min – 12 h)`), and the card states that a change applies to what is
+imported from now on: rows already in the registry keep the class they were
+created with, and a dropdown that silently did not apply to them would be
+worse than one that explains itself.
 
 **Articles** — what was collected, filtered by source, language, **origin**,
 body state, text and time window. The origin column and filter read the
@@ -142,7 +150,8 @@ whoever wrote it.
 
 ## 7. Where it stops
 
-- **Read-only apart from the catalogue switch and re-read** (§1).
+- **Read-only apart from a catalogue's switch, its interval class and
+  re-read** (§1).
 - **No charts.** A time series of ingest volume would answer "how much" better
   than a 24-hour figure does, and it needs a metrics store; the actuator
   already exposes Prometheus.

@@ -44,15 +44,15 @@ munin:
     tickInterval: PT15M
     defaultInterval: PT24H
     claimLease: PT30M
-    # A fresh database gets awesome-rss-feeds (CC0): 66 OPML files, ~840
-    # feeds — installed DISABLED. Those feeds are roughly 1,700 outbound
-    # requests an hour, more catalogues will ship beside it, and an
-    # installation that starts them all on first boot is a surprise. Switch
-    # one on in the console; narrow it with bundledInclude below.
+    # A fresh database gets awesome-rss-feeds (CC0) as TWO catalogues, both
+    # installed DISABLED: one for its news half (countries/, profile news)
+    # and one for its blog half (recommended/, profile blog). They want poll
+    # intervals two orders of magnitude apart, and a catalogue carries one
+    # profile — so one catalogue could not describe both honestly.
+    #
+    # Enable what you want in the console. Running only news means switching
+    # on one of the two.
     installBundled: ${HRAFNAGUD_INSTALL_BUNDLED_CATALOG:true}
-    # Globs over the entry path, e.g. ["countries/**"] for the 25 country
-    # lists only. Empty means everything it offers.
-    bundledInclude: []
 
   # The operator API and the console at /console/ (redirected to from /).
   api:

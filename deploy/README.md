@@ -153,8 +153,21 @@ when the declaration no longer matches what is stored it answers
 with a stale index, it does not start at all. Against an empty database nothing
 happens; against a database that has been collecting, the deploy crash-loops.
 
-The text index is the one that moves, because both its fields and its options
-have changed once already (`pivotTitle`/`pivotSummary` were added, and the
+`source_catalogs.catalog_url_idx` also moved once: it was unique, and is not
+any more, because two catalogues over one repository with different filters are
+two legitimate things (see `specs/catalogs.md` §6a). An instance that ran the
+earlier version has to drop it —
+
+```
+db.source_catalogs.dropIndex("catalog_url_idx")
+```
+
+— or the pod fails to start with `IndexOptionsConflict`, which is the intended
+outcome: loud rather than silently keeping a constraint the code no longer
+believes in.
+
+The text index is the one that moves most, because both its fields and its
+options have changed once already (`pivotTitle`/`pivotSummary` were added, and the
 language override was pointed at `textLanguage` — see `specs/collection.md`
 §4.1). Its generated name stays `ArticleDocument_TextIndex` throughout, which is
 exactly why the conflict is possible.

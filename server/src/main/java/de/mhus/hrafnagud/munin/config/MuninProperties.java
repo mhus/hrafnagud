@@ -293,17 +293,17 @@ public class MuninProperties {
 
         /**
          * Whether a fresh database gets the bundled {@code awesome-rss-feeds}
-         * catalogue. Once installed it is an ordinary catalogue; switching
-         * this off later changes nothing.
+         * catalogues — one for news, one for blogs, both disabled. Once
+         * installed they are ordinary catalogues; switching this off later
+         * changes nothing.
+         *
+         * <p>There is deliberately no "narrow the bundled selection" property
+         * any more. Running less now means enabling one of the two rather than
+         * both, and a property that re-filtered them would fight the split it
+         * is meant to complement.
          */
         private boolean installBundled = true;
 
-        /**
-         * Include globs the bundled catalogue starts with. Empty means every
-         * list it offers — about 840 feeds. Narrow it to
-         * {@code countries/**} for a smaller start.
-         */
-        private List<String> bundledInclude = new ArrayList<>();
     }
 
     /**
