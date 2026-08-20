@@ -59,6 +59,39 @@ Being hierarchical, it gets the same treatment as places: the **ancestor path
 is materialised**, so "everything about sport" finds an article tagged
 *Cricket* with one equality match instead of a tree walk.
 
+### 2.1 The key function must not fold to ASCII
+
+A category and a label are compared as *keys*: NFKD, combining marks dropped,
+lowercased, everything that is not a letter or digit collapsed to single spaces.
+Punctuation and case are not distinctions a publisher makes on purpose, so
+`Personal finance`, `personal-finance` and `Personal  Finance` are one entry.
+
+The first implementation did that by folding to ASCII, which sounds like the
+same thing and is not. It reduced `Політика`, `اقتصاد` and `经济` — and every
+other non-Latin string — to the **empty string**. The damage ran both ways:
+
+- 125 categories in the archive (916 uses) got no key at all, so they were not
+  merely unmatched, they were never *recorded*. Invisible to the table, to the
+  LLM stage and to anyone reading the list of what is unresolved.
+- The vocabulary's own Arabic and Chinese labels — 2,802 of 12,798, better than
+  a fifth — were dropped when the bundled table was generated. Of the 13
+  languages advertised above, only the Latin-script ones actually worked.
+- Where it did not delete everything it deleted single letters, because `æ`,
+  `ß` and `ø` have no ASCII decomposition. Norwegian `vær` (weather) folded to
+  `vr`, so a category named **VR** resolved to *weather*.
+
+Keeping the combining-mark strip and widening only the final character class to
+letters and digits in any script fixes all three: Latin accents still fold
+(`Économie` → `economie`), other scripts survive. The Cyrillic and Persian
+categories still do not *match* anything, because IPTC's 13 languages do not
+include Russian, Ukrainian or Persian — but they now exist as entries the LLM
+stage can resolve and a person can see.
+
+The generator is committed (`scripts/generate-mediatopics-tsv.py`) and states
+this requirement at the top. The two normalisations, Java at runtime and Python
+at build time, have to agree; when they drift nothing fails, the matcher just
+quietly stops resolving things.
+
 ## 3. The mapping table
 
 A collection keyed by the raw string, `category_mappings`:
@@ -70,7 +103,8 @@ status      RESOLVED
 topicId     medtop:20001279
 topicPath   [medtop:13000000, medtop:20001279]
 confidence  1.0
-source      LABEL_EXACT             # which stage decided
+decidedBy   LABEL_EXACT             # which stage or rule decided
+useCount    412                     # how many articles carry it
 attempts    1
 ```
 
@@ -100,6 +134,38 @@ The two terminal non-topic states are the point of §1. Without them the job
 asks about *René Habermann* forever, and every run costs the same tokens to
 learn the same nothing.
 
+### 3.2 It has to be visible
+
+A table that learns is a table that is sometimes wrong, and both stages fail in
+ways a query cannot see: stage 1 matches on string similarity, stage 2 believes
+a model. `GUESSED` exists precisely because something looked decided and was
+not. So the table is served and shown:
+
+| | |
+|---|---|
+| `GET /api/v1/categories?status=&page=&size=` | most-used first, not alphabetical |
+| `GET /api/v1/categories/summary` | how many sit in each state |
+| `GET /api/v1/categories/{key}` | one entry, with the rule that decided it |
+| `POST /api/v1/categories/{key}/confirm` | `{"topicId": …}`, or null for *not a topic* |
+| `GET /api/v1/categories/topics` | the vocabulary as a tree, names only |
+
+Most-used-first is the ordering that matters and the only one offered here:
+"what is unresolved and appears on a lot of articles" is the question, and
+alphabetical order buries it under one-off tags. The console gets a
+**Kategorien** view on the same shape, where the one write is settling an entry
+by hand.
+
+Correction is the *only* write. There is deliberately no endpoint that re-runs
+stage 2 on demand — the input has not changed, so neither would the answer —
+and none that sets a topic path directly, which would let a path into the table
+that the vocabulary does not agree with.
+
+**The table fills from new articles.** Nothing walks the existing archive to
+record the categories already stored, for the same reason nothing backfills
+`topicIds` (§6). For an active collector this converges within a day; for a
+frozen archive it stays empty, and that is worth knowing before concluding the
+matcher is broken.
+
 ## 4. Two stages, and what each is worth
 
 **Stage 1 — string matching against the vocabulary's own labels.** No model, no
@@ -107,9 +173,9 @@ network, runs at ingest. Measured against the real 7,365:
 
 | | Categories | Uses |
 |---|---|---|
-| Exact label match, all 13 languages | 476 (6.5 %) | 9,326 (20.9 %) |
-| plus token-set and singular equality | 540 (7.3 %) | 10,142 (22.8 %) |
-| plus single-word subset match | 844 (11.5 %) | 14,686 (33.0 %) |
+| Exact label match, all 13 languages | 349 (4.7 %) | 8,401 (18.9 %) |
+| plus token-set and singular equality | 365 (5.0 %) | 9,049 (20.3 %) |
+| plus single-word subset match | 528 (7.2 %) | 10,356 (23.2 %) |
 
 So stage 1 is worth building and nowhere near sufficient. It is cheap and it
 clears the frequent, unambiguous head — *Cryptocurrency*, *Cricket*, *Chess*,
@@ -119,9 +185,25 @@ obvious near-misses to stage 2, which is the honest reading of the misses:
 *technology*), *Science*, *News*.
 
 The single-word subset row is included because it is tempting and should be
-treated with suspicion: it reaches 33 % of uses by mapping any category whose
-one word appears in any label, which is how *standard* becomes a topic. If used
-at all, its results belong in `GUESSED`, not `RESOLVED`.
+treated with suspicion: it reaches a fifth of all uses by mapping any category
+whose one word appears in any label, which is how *standard* becomes a topic. Its
+results therefore belong in `GUESSED`, not `RESOLVED`, and that is where they go.
+
+> **These numbers are lower than the first draft of this document claimed**
+> (6.5 % / 20.9 % exact, 33 % with single words), and the difference is worth
+> recording because two of the three causes were bugs in the measurement rather
+> than changes to the rules.
+>
+> 1. The exploratory script indexed the *empty* key, so all 126 categories that
+>    normalised to nothing — every Cyrillic, Persian and Chinese one — counted as
+>    exact matches. That alone was 476 against 350.
+> 2. Single-token matches were being scored as confidently as multi-token ones,
+>    which put *standard* → *scientific standards* in `RESOLVED`. Only a match on
+>    one of the seventeen roots is now worth 0.9.
+> 3. A single-letter joiner (`e`, from Portuguese *e sport*) was being dropped
+>    from token sets, which is how *Sports* resolved to **eSports**.
+>
+> Cause 1 also pointed at a real defect in the key function; see §2.1.
 
 **Stage 2 — one LLM call per unresolved category**, over the Ursa event path
 the translation provider already uses (`OdeTranslationProvider` as the

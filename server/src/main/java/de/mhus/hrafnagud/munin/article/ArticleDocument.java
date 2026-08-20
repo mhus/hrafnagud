@@ -50,6 +50,10 @@ import org.springframework.data.mongodb.core.mapping.Language;
         // Singapore" alike, because the path holds every level.
         @CompoundIndex(name = "origin_place_seen_idx",
                 def = "{ 'originPlaceIds': 1, 'firstSeenAt': -1 }"),
+        // Same trick as places: the stored path holds every containing topic,
+        // so "about sport" and "about cricket" are one index apart.
+        @CompoundIndex(name = "topic_seen_idx",
+                def = "{ 'topicIds': 1, 'firstSeenAt': -1 }"),
         // Feed ordering. Distinct from the seen_* family above because it
         // answers a different question: those order by when this archive
         // learned of an article, these by when it was published, which is
@@ -168,6 +172,22 @@ public class ArticleDocument {
     /** Feed and source categories, verbatim and un-normalised. */
     @Builder.Default
     private List<String> categories = new ArrayList<>();
+
+    /**
+     * Normalised topics, with their containing topics — the IPTC Media Topics
+     * behind {@link #categories}, outermost first.
+     *
+     * <p>A <b>derived read model</b>: the mapping table is the record of what a
+     * category was decided to mean, and this is the part an index can use. So
+     * an article keeps the topics it was written with until something
+     * backfills it — a mapping that learns later does not rewrite history by
+     * itself, which is worth knowing before assuming otherwise.
+     *
+     * <p>Empty for an article whose categories are all unresolved, and for one
+     * with no categories at all. Both are ordinary.
+     */
+    @Builder.Default
+    private List<String> topicIds = new ArrayList<>();
 
     // ─── Origin ───
 

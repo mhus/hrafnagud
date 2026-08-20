@@ -2,6 +2,7 @@ package de.mhus.hrafnagud.munin.article;
 
 import de.mhus.hrafnagud.api.article.ContentStatus;
 import java.time.Instant;
+import java.util.List;
 import lombok.Builder;
 import lombok.Value;
 import org.jspecify.annotations.Nullable;
@@ -28,15 +29,30 @@ public class ArticleQuery {
     @Nullable String category;
 
     /**
-     * Place the publisher sits in, at any level — {@code m49:142} finds every
-     * article from an Asian publisher, {@code iso:SG} only Singaporean ones.
+     * Normalised topics at any level — {@code medtop:15000000} finds everything
+     * about sport including an article tagged only {@code Cricket}.
+     *
+     * <p>A list because the question is routinely a disjunction: „sport or
+     * culture" is one filter, not two queries whose results have to be merged
+     * and re-sorted afterwards.
+     *
+     * <p>Distinct from {@link #category}, which matches the publisher's own
+     * string verbatim. Both exist because both questions are asked: "what did
+     * this publisher call it" and "what is it about".
+     */
+    @Nullable List<String> topics;
+
+    /**
+     * Places the publisher may sit in, at any level — {@code m49:142} finds
+     * every article from an Asian publisher, {@code iso:SG} only Singaporean
+     * ones. Several values are an „or".
      *
      * <p>One field for every level because the article stores the whole
      * containment path, so the query does not have to know which rung it was
      * handed. <b>Origin, not subject:</b> this does not find articles
      * <em>about</em> Asia.
      */
-    @Nullable String originPlace;
+    @Nullable List<String> originPlaces;
 
     /** Full-text search over title and teaser. */
     @Nullable String text;

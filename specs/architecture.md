@@ -23,6 +23,7 @@ de.mhus.hrafnagud.
   munin/      Source registry, feed ingest, deduplication, full-text fetch,
               enrichment storage, persistence, the operator REST surface.
   translate/  Works Munin's translation backlog by calling a Vancetope brain.
+  classify/   Decides what a publisher's category means, by calling a brain.
   centauri/   Serves the archive to Vancetope as a Centauri feed source.
   zarniwoop/  Answers Vancetope research queries out of the archive.
   server/     Entrypoint plus runtime configuration, nothing else.
@@ -46,19 +47,20 @@ the compiler did, and now the reader does.
 **Munin has no dependency on Vancetope.** The archive must be collectable and
 queryable without a brain anywhere near it.
 
-Three packages face Vancetope. One calls out, two answer:
+Four packages face Vancetope. Two call out, two answer:
 
 | Package | Direction | Uses |
 |---|---|---|
 | `translate` | calls a brain | `vance-ode-ursa` |
+| `classify` | calls a brain | `vance-ode-ursa` |
 | `centauri` | answers a brain | `vance-ode-centauri` |
 | `zarniwoop` | answers a brain | `vance-ode-zarniwoop` |
 
-All three import from `munin`; none is imported by it. **Deleting all three
+All four import from `munin`; none is imported by it. **Deleting all four
 packages must leave a compiling collector** — that is the test of whether the
 boundary is real, and it is now a thing to check rather than a thing that
 fails the build. Concretely: no `import de.mhus.hrafnagud.{translate,centauri,
-zarniwoop}` and no `import de.mhus.vance.ode` anywhere under `munin/`.
+zarniwoop,classify}` and no `import de.mhus.vance.ode` anywhere under `munin/`.
 
 Each of the three is also runtime-optional and stays that way: `translate` is
 inert until `vance.ode.base-url` is set, the other two until
@@ -90,6 +92,7 @@ head across both repositories.
 | Collection | Holds | Why separate |
 |---|---|---|
 | `sources` | one feed each: URL, poll schedule, failure history, statistics | — |
+| `category_mappings` | one publisher category each: what it was decided to mean, and by what | see [categories.md](categories.md) |
 | `source_catalogs` | directories of source lists — where lists come from, so the registry fills itself | see [catalogs.md](catalogs.md) |
 | `source_lists` | directories that populate `sources` | — |
 | `articles` | article metadata, deduplicated across sources | — |

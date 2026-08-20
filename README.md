@@ -400,3 +400,18 @@ Named rather than left to be discovered:
 ## Licence
 
 GPLv3 — see `LICENSE`.
+
+Third-party data ships with the service; the notices are in `NOTICE` and, so
+that they also reach somebody who only ever runs the container, at
+`/actuator/info`.
+
+**IPTC Media Topics** — the vocabulary article categories are normalised
+against ([categories.md](specs/categories.md)). Licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); *"you can use them
+for free in any way, but we request that you give IPTC credit"*. Modified:
+projected to id, parent, name and normalised labels, other metadata dropped.
+Regenerate with `scripts/generate-mediatopics-tsv.py`.
+
+**Place hierarchy** — UN M49 containment joined to ISO 3166-1 alpha-2
+([geo.md](specs/geo.md)). Factual codes from those standards, not a copy of a
+compilation.

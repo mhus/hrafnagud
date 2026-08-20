@@ -212,6 +212,11 @@ const BADGE = {
     PENDING: 'text-bg-secondary', SKIPPED: 'text-bg-secondary',
     PAYWALL: 'text-bg-warning', BLOCKED: 'text-bg-warning',
     FAILED: 'text-bg-danger',
+    // Category mappings. GUESSED is deliberately a warning: it looks decided
+    // and is not, which is the one state a reader must not skim past.
+    NEW: 'text-bg-secondary', GUESSED: 'text-bg-warning',
+    RESOLVED: 'text-bg-success', CONFIRMED: 'text-bg-primary',
+    NOT_A_TOPIC: 'text-bg-secondary', IS_PLACE: 'text-bg-info',
 };
 
 function badge(value) {
@@ -704,6 +709,167 @@ async function showArticleDetail(id) {
 }
 
 
+// ── categories ──────────────────────────────────────────────────────────
+//
+// The mapping table. Read-mostly, with one write: settling an entry by hand.
+// That write is the reason this view exists — stage 1 guesses from string
+// similarity and stage 2 asks a model, and both are wrong in ways that are
+// obvious to a person and invisible to a query. Ordered by how many articles
+// carry the category, because fixing the one used two thousand times is worth
+// more than fixing the one used once.
+
+const topics = new Map();
+let categoriesPage = 0;
+
+async function loadTopics() {
+    if (topics.size) {
+        return;
+    }
+    for (const topic of await api('/categories/topics')) {
+        topics.set(topic.id, topic);
+    }
+}
+
+function topicName(id) {
+    const topic = topics.get(id);
+    return topic ? topic.name : id;
+}
+
+/** "sport › competition discipline › cricket" — the whole containment. */
+function topicTrail(ids) {
+    if (!ids || !ids.length) {
+        return '<span class="text-body-secondary">—</span>';
+    }
+    return ids.map(id => esc(topicName(id)))
+        .join(' <span class="text-body-secondary">›</span> ');
+}
+
+async function loadCategories(page) {
+    clearError();
+    await loadTopics();
+    categoriesPage = Math.max(page || 0, 0);
+    const size = 50;
+    const status = document.querySelector('#form-categories select[name=status]').value;
+
+    const [result, summary] = await Promise.all([
+        api('/categories', { status: status, page: categoriesPage, size: size }),
+        api('/categories/summary'),
+    ]);
+
+    document.getElementById('category-summary').innerHTML =
+        Object.entries(summary)
+            .filter(([name, count]) => count > 0 || name === 'TOTAL')
+            .map(([name, count]) => '<span class="badge '
+                + (name === 'TOTAL' ? 'text-bg-dark' : (BADGE[name] || 'text-bg-secondary'))
+                + '">' + esc(name) + ' ' + esc(num(count)) + '</span>')
+            .join('');
+
+    const now = Date.now();
+    const body = document.getElementById('tbody-categories');
+    if (!result.items.length) {
+        body.innerHTML = '<tr><td colspan="6" class="text-body-secondary py-4">'
+            + 'Noch keine Kategorie erfasst. Die Tabelle füllt sich beim Einlesen '
+            + 'neuer Artikel — Bestandsartikel werden nicht nachgetragen.</td></tr>';
+    } else {
+        body.innerHTML = result.items.map(mapping =>
+            '<tr data-category="' + esc(mapping.key) + '">'
+            + '<td><div>' + esc(mapping.raw) + '</div>'
+            + (mapping.raw.toLowerCase() !== mapping.key
+                ? '<div class="small text-body-secondary">' + esc(mapping.key) + '</div>'
+                : '')
+            + '</td>'
+            + '<td>' + badge(mapping.status)
+            // The confidence belongs next to the status, not in a column of its
+            // own: it only means anything for the two guessing states.
+            + (mapping.confidence && mapping.confidence < 1
+                ? ' <span class="small text-body-secondary">'
+                  + mapping.confidence.toFixed(1) + '</span>'
+                : '')
+            + '</td>'
+            + '<td class="small">' + (mapping.topicId
+                ? esc(mapping.topicName || mapping.topicId)
+                  + ' <span class="text-body-secondary">' + esc(mapping.topicId) + '</span>'
+                : '<span class="text-body-secondary">—</span>') + '</td>'
+            + '<td class="text-end">' + esc(num(mapping.useCount)) + '</td>'
+            + '<td class="small">' + esc(mapping.decidedBy || '—') + '</td>'
+            + '<td>' + ago(mapping.lastSeenAt, now) + '</td>'
+            + '</tr>').join('');
+
+        body.querySelectorAll('tr[data-category]').forEach(row =>
+            row.addEventListener('click', () =>
+                showCategoryDetail(row.dataset.category).catch(showError)));
+    }
+
+    renderPager('pager-categories', categoriesPage, size, result.total, result.items.length,
+        p => loadCategories(p).catch(showError));
+}
+
+async function showCategoryDetail(key) {
+    const mapping = await api('/categories/' + encodeURIComponent(key));
+
+    // One datalist for 1,393 topics rather than a select per row: a browser
+    // filters it as you type, and the alternative is a megabyte of DOM.
+    const options = [...topics.values()]
+        .map(topic => '<option value="' + esc(topic.id) + '">'
+            + esc(topic.name) + '</option>')
+        .join('');
+
+    document.getElementById('detail-title').textContent = mapping.raw;
+    document.getElementById('detail-body').innerHTML = defList([
+        ['Original', '<code>' + esc(mapping.raw) + '</code>'],
+        ['Schlüssel', '<code>' + esc(mapping.key) + '</code>'],
+        ['Status', badge(mapping.status)],
+        ['Thema', mapping.topicId
+            ? esc(mapping.topicName || '') + ' <code>' + esc(mapping.topicId) + '</code>'
+            : '—'],
+        ['Themenpfad', topicTrail(mapping.topicPath)],
+        ['Sicherheit', mapping.confidence ? mapping.confidence.toFixed(2) : '—'],
+        ['Entschieden von', esc(mapping.decidedBy || '—')],
+        ['Begründung', esc(mapping.note || '—')],
+        ['Artikel', esc(num(mapping.useCount))],
+        ['Versuche', esc(String(mapping.attempts || 0))],
+        ['Letzter Fehler', esc(mapping.lastError || '—')],
+    ])
+        + '<hr>'
+        + '<form id="form-confirm-category" class="row g-2 align-items-end">'
+        + '<input type="hidden" name="key" value="' + esc(mapping.key) + '">'
+        + '<div class="col-md-7"><label class="form-label small mb-1">'
+        + 'Thema von Hand setzen</label>'
+        + '<input class="form-control form-control-sm" name="topicId" list="topic-options" '
+        + 'placeholder="medtop:… oder Name tippen" value="'
+        + esc(mapping.topicId || '') + '">'
+        + '<datalist id="topic-options">' + options + '</datalist></div>'
+        + '<div class="col-md-5 d-flex gap-2">'
+        + '<button class="btn btn-sm btn-primary" type="submit">Bestätigen</button>'
+        + '<button class="btn btn-sm btn-outline-secondary" type="button" '
+        + 'id="btn-not-a-topic">Kein Thema</button></div>'
+        + '<div class="form-text">Beides ist endgültig: eine bestätigte Zuordnung '
+        + 'wird nie wieder gefragt. Bereits gespeicherte Artikel behalten die '
+        + 'Themen, mit denen sie geschrieben wurden.</div>'
+        + '</form>';
+
+    const form = document.getElementById('form-confirm-category');
+    form.addEventListener('submit', event => {
+        event.preventDefault();
+        confirmCategory(mapping.key, form.elements.topicId.value.trim()).catch(showError);
+    });
+    document.getElementById('btn-not-a-topic').addEventListener('click', () =>
+        confirmCategory(mapping.key, null).catch(showError));
+
+    detailModal.show();
+}
+
+async function confirmCategory(key, topicId) {
+    await api('/categories/' + encodeURIComponent(key) + '/confirm', null, 'POST',
+        { topicId: topicId });
+    detailModal.hide();
+    showNote(topicId
+        ? '„' + key + '" ist jetzt ' + topicName(topicId) + '.'
+        : '„' + key + '" gilt als kein Thema.');
+    await loadCategories(categoriesPage);
+}
+
+
 // ── catalogs ────────────────────────────────────────────────────────────
 //
 // The one subsystem the console operates instead of only showing: switch a
@@ -913,7 +1079,7 @@ function defList(rows) {
 // ── views ───────────────────────────────────────────────────────────────
 
 function showView(name) {
-    for (const view of ['overview', 'sources', 'articles', 'catalogs']) {
+    for (const view of ['overview', 'sources', 'articles', 'categories', 'catalogs']) {
         document.getElementById('view-' + view).classList.toggle('d-none', view !== name);
     }
     document.querySelectorAll('#tabs .nav-link').forEach(tab =>
@@ -981,9 +1147,13 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault();
         loadArticles(0).catch(showError);
     });
+    document.getElementById('form-categories').addEventListener('submit', event => {
+        event.preventDefault();
+        loadCategories(0).catch(showError);
+    });
     // A reset only clears the inputs; the table would keep showing the old
     // filter's rows until something reloads it.
-    for (const id of ['form-sources', 'form-articles']) {
+    for (const id of ['form-sources', 'form-articles', 'form-categories']) {
         document.getElementById(id).addEventListener('reset', () =>
             setTimeout(() => reloadCurrentView(), 0));
     }
@@ -1014,7 +1184,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function currentView() {
     const view = location.hash.slice(1);
-    return ['overview', 'sources', 'articles', 'catalogs'].includes(view)
+    return ['overview', 'sources', 'articles', 'categories', 'catalogs'].includes(view)
             ? view : 'overview';
 }
 
@@ -1022,6 +1192,7 @@ function reloadCurrentView() {
     const view = currentView();
     const load = view === 'sources' ? () => loadSources(sourcesPage)
         : view === 'articles' ? () => loadArticles(articlesPage)
+        : view === 'categories' ? () => loadCategories(categoriesPage)
         : view === 'catalogs' ? loadCatalogs
         : loadStats;
     load().catch(showError);

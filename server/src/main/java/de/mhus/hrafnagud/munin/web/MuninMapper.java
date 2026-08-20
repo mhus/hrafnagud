@@ -145,6 +145,7 @@ public final class MuninMapper {
                 .language(article.getLanguage())
                 .languageSource(article.getLanguageSource())
                 .categories(new ArrayList<>(article.getCategories()))
+                .topicIds(new ArrayList<>(article.getTopicIds()))
                 .originCountry(article.getOriginCountry())
                 .originPlaceIds(new ArrayList<>(article.getOriginPlaceIds()))
                 .sources(new ArrayList<>(article.getSourceNames()))

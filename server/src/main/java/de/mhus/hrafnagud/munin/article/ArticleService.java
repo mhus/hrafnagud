@@ -3,6 +3,7 @@ package de.mhus.hrafnagud.munin.article;
 import de.mhus.hrafnagud.api.article.ContentStatus;
 import de.mhus.hrafnagud.api.article.TranslationStatus;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.category.CategoryMappingService;
 import de.mhus.hrafnagud.munin.place.PlaceRegistry;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
@@ -92,15 +93,18 @@ public class ArticleService {
     private final MuninProperties.Content contentConfig;
     private final MuninProperties.Translation translationConfig;
     private final PlaceRegistry placeRegistry;
+    private final CategoryMappingService categoryMappingService;
 
     public ArticleService(ArticleRepository repository, ArticleContentRepository contentRepository,
             EnrichmentService enrichmentService, MongoTemplate mongoTemplate,
-            PlaceRegistry placeRegistry, MuninProperties properties) {
+            PlaceRegistry placeRegistry, CategoryMappingService categoryMappingService,
+            MuninProperties properties) {
         this.repository = repository;
         this.contentRepository = contentRepository;
         this.enrichmentService = enrichmentService;
         this.mongoTemplate = mongoTemplate;
         this.placeRegistry = placeRegistry;
+        this.categoryMappingService = categoryMappingService;
         this.contentConfig = properties.getContent();
         this.translationConfig = properties.getTranslation();
     }
@@ -131,7 +135,13 @@ public class ArticleService {
 
         ArticleDocument document = ArticleFactory.build(candidate, source, language,
                 contentStatus, translationConfig.getPivotLanguage(),
-                placeRegistry.pathForCountry(source.getCountry()), now);
+                placeRegistry.pathForCountry(source.getCountry()),
+                // Records every category as it goes past — that is how the
+                // mapping table learns what exists — and returns the topics
+                // already resolved. A category first seen here contributes
+                // nothing to this article and everything to the next.
+                categoryMappingService.recordAndResolve(candidate.getCategories(), now),
+                now);
 
         try {
             return upsert(document, source.getName(), now);
@@ -159,6 +169,7 @@ public class ArticleService {
                 .setOnInsert(F_TEXT_LANGUAGE, document.getTextLanguage())
                 .setOnInsert("languageSource", document.getLanguageSource())
                 .setOnInsert(F_CATEGORIES, document.getCategories())
+                .setOnInsert("topicIds", document.getTopicIds())
                 // Origin belongs to the first source that delivered the
                 // article, which is what setOnInsert means here: a second
                 // publisher carrying the same story does not move where it
@@ -467,6 +478,20 @@ public class ArticleService {
      * match. Shared, because a relevance search applies the same filters as
      * a browse and only differs in how it sorts.
      */
+    /** Non-blank, trimmed values of an optional filter list. */
+    private static List<String> trimmed(@Nullable List<String> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>(raw.size());
+        for (String v : raw) {
+            if (StringUtils.isNotBlank(v)) {
+                out.add(v.trim());
+            }
+        }
+        return List.copyOf(out);
+    }
+
     private List<Criteria> filterCriteria(ArticleQuery filter) {
         List<Criteria> parts = new ArrayList<>();
         if (StringUtils.isNotBlank(filter.getSourceName())) {
@@ -478,11 +503,19 @@ public class ArticleService {
         if (StringUtils.isNotBlank(filter.getCategory())) {
             parts.add(Criteria.where(F_CATEGORIES).is(filter.getCategory()));
         }
-        if (StringUtils.isNotBlank(filter.getOriginPlace())) {
-            // Equality against a multikey array: the stored path holds every
-            // containing place, so one predicate serves continent, region and
-            // country alike.
-            parts.add(Criteria.where("originPlaceIds").is(filter.getOriginPlace().trim()));
+        List<String> topics = trimmed(filter.getTopics());
+        if (!topics.isEmpty()) {
+            // Match against the materialised path, as with places: one
+            // predicate serves a root topic and a leaf alike. Several values
+            // are an "or" — $in over the same multikey index.
+            parts.add(Criteria.where("topicIds").in(topics));
+        }
+        List<String> originPlaces = trimmed(filter.getOriginPlaces());
+        if (!originPlaces.isEmpty()) {
+            // Against a multikey array: the stored path holds every containing
+            // place, so one predicate serves continent, region and country
+            // alike, and several values are an "or".
+            parts.add(Criteria.where("originPlaceIds").in(originPlaces));
         }
         if (filter.getContentStatus() != null) {
             parts.add(Criteria.where(F_CONTENT_STATUS).is(filter.getContentStatus()));

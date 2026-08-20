@@ -59,6 +59,13 @@ public class ArticleDto {
     // ─── Provenance ───
 
     /**
+     * Normalised topics with their ancestors, derived from {@link #categories}.
+     * Empty while nothing is resolved. See specs/categories.md.
+     */
+    @Builder.Default
+    private List<String> topicIds = new ArrayList<>();
+
+    /**
      * Country of the publisher it first arrived through — origin, never
      * subject. See specs/geo.md §1.
      */

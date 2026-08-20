@@ -29,6 +29,7 @@ public class MuninProperties {
     private final Catalog catalog = new Catalog();
     private final Language language = new Language();
     private final Translation translation = new Translation();
+    private final Category category = new Category();
     private final Api api = new Api();
 
     /** Shared HTTP behaviour for feed, list and article requests. */
@@ -406,6 +407,48 @@ public class MuninProperties {
          * accurate when the registry is regional.
          */
         private List<String> languages = new ArrayList<>();
+    }
+
+    /**
+     * Category normalisation: mapping what publishers call their sections onto
+     * IPTC Media Topics.
+     */
+    @Data
+    public static class Category {
+
+        /**
+         * Whether anything works the mapping backlog.
+         *
+         * <p>Off by default, like the body fetch and the translation worker,
+         * and for the same reason: stage two spends somebody else's model time.
+         * Stage one runs regardless — it is string comparison against a
+         * bundled table and costs nothing.
+         */
+        private boolean enabled = false;
+
+        private Duration tickInterval = Duration.ofSeconds(30);
+
+        /** Mappings resolved per round. */
+        private int batchSize = 10;
+
+        /** Attempts before a mapping is left as {@code FAILED} for a person. */
+        private int maxAttempts = 3;
+
+        private Duration retryDelay = Duration.ofMinutes(10);
+
+        private Duration claimLease = Duration.ofMinutes(5);
+
+        /**
+         * Confidence at which stage one's answer counts as resolved rather
+         * than as a guess.
+         *
+         * <p>0.9 by design: an exact label match in any of thirteen languages
+         * scores 1.0 and a token-set match 0.9, while the single-word rule
+         * scores 0.4 and therefore never resolves on its own — it reaches a
+         * third of all uses by mapping any one-word category to any label
+         * containing that word, which is also how "standard" becomes a topic.
+         */
+        private double acceptConfidence = 0.9;
     }
 
     /** The operator API and the console served over it. */

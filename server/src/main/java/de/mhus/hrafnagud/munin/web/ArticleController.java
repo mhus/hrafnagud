@@ -53,6 +53,7 @@ public class ArticleController {
             @RequestParam(value = "source", required = false) @Nullable String source,
             @RequestParam(value = "language", required = false) @Nullable String language,
             @RequestParam(value = "category", required = false) @Nullable String category,
+            @RequestParam(value = "topic", required = false) @Nullable String topic,
             @RequestParam(value = "originPlace", required = false) @Nullable String originPlace,
             @RequestParam(value = "q", required = false) @Nullable String text,
             @RequestParam(value = "contentStatus", required = false)
@@ -73,7 +74,8 @@ public class ArticleController {
                 .sourceName(source)
                 .language(language)
                 .category(category)
-                .originPlace(originPlace)
+                .topics(topic == null ? null : java.util.List.of(topic))
+                .originPlaces(originPlace == null ? null : java.util.List.of(originPlace))
                 .text(text)
                 .contentStatus(contentStatus)
                 .since(since)

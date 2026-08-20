@@ -44,6 +44,7 @@
             <li class="nav-item"><a class="nav-link active" href="#" data-view="overview">Übersicht</a></li>
             <li class="nav-item"><a class="nav-link" href="#" data-view="sources">Quellen</a></li>
             <li class="nav-item"><a class="nav-link" href="#" data-view="articles">Artikel</a></li>
+            <li class="nav-item"><a class="nav-link" href="#" data-view="categories">Kategorien</a></li>
             <li class="nav-item"><a class="nav-link" href="#" data-view="catalogs">Kataloge</a></li>
         </ul>
 
@@ -189,6 +190,58 @@
             </table>
         </div>
         <div id="pager-articles"></div>
+    </section>
+
+    <!-- ─── Kategorien ────────────────────────────────────────────── -->
+    <section id="view-categories" class="d-none">
+        <p class="text-body-secondary small">
+            Jede Quelle erfindet ihre eigenen Kategorien, in ihrer eigenen
+            Sprache. Diese Tabelle bildet sie auf ein Standard-Vokabular ab
+            (IPTC Media Topics) — Stufe 1 vergleicht Zeichenketten, Stufe 2
+            fragt ein Modell, und was hier steht, gilt für das ganze Archiv.
+            Die Originalkategorie bleibt am Artikel unangetastet.
+        </p>
+        <p class="text-body-secondary small">
+            Themen-Vokabular:
+            <a href="https://iptc.org/standards/newscodes/" target="_blank"
+               rel="noopener noreferrer">IPTC Media Topics</a>,
+            <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank"
+               rel="noopener noreferrer">CC BY 4.0</a> — verändert: auf Id, Elternteil,
+            Namen und normalisierte Labels reduziert.
+        </p>
+
+        <div id="category-summary" class="d-flex flex-wrap gap-2 mb-3"></div>
+
+        <form class="row g-2 align-items-end mb-3" id="form-categories">
+            <div class="col-md-3">
+                <label class="form-label small mb-1">Status</label>
+                <select class="form-select form-select-sm" name="status">
+                    <option value="">alle</option>
+                    <option value="NEW">NEW — nichts versucht</option>
+                    <option value="GUESSED">GUESSED — geraten, ungeprüft</option>
+                    <option value="RESOLVED">RESOLVED — entschieden</option>
+                    <option value="CONFIRMED">CONFIRMED — von Hand</option>
+                    <option value="NOT_A_TOPIC">NOT_A_TOPIC</option>
+                    <option value="IS_PLACE">IS_PLACE</option>
+                    <option value="FAILED">FAILED</option>
+                </select>
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button class="btn btn-sm btn-primary" type="submit">Filtern</button>
+                <button class="btn btn-sm btn-outline-secondary" type="reset">Zurücksetzen</button>
+            </div>
+        </form>
+
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+                <thead><tr>
+                    <th>Kategorie</th><th>Status</th><th>Thema</th>
+                    <th class="text-end">Artikel</th><th>Entschieden von</th><th>Zuletzt</th>
+                </tr></thead>
+                <tbody id="tbody-categories"></tbody>
+            </table>
+        </div>
+        <div id="pager-categories"></div>
     </section>
 
     <!-- ─── Kataloge ──────────────────────────────────────────────── -->

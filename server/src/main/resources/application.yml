@@ -34,6 +34,23 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+  info:
+    env:
+      # Off by default since Boot 2.6, and without it the info.* keys below are
+      # silently absent. They carry the CC BY notice for the bundled data, and
+      # this is the one place it reaches somebody who only ever runs the
+      # container — see NOTICE.
+      enabled: true
+
+info:
+  data:
+    iptc-media-topics: >-
+      Category vocabulary from IPTC Media Topics (https://iptc.org/standards/newscodes/),
+      licensed CC BY 4.0. Modified: projected to id, parent, name and normalised
+      labels; other metadata dropped.
+    places: >-
+      Place hierarchy derived from UN M49 (https://unstats.un.org/unsd/methodology/m49/)
+      joined to ISO 3166-1 alpha-2.
 
 munin:
   # Catalogues — the layer that discovers source lists, so the archive fills
@@ -147,6 +164,27 @@ munin:
     batchSize: 5
     maxPerRound: 200
     claimLease: PT15M
+
+  # Category normalisation: what publishers call their sections, mapped onto
+  # IPTC Media Topics. Stage one is string matching against the bundled
+  # vocabulary and always runs — it costs nothing and clears the frequent,
+  # unambiguous head (about a fifth of all category uses). Stage two asks a
+  # brain about the rest and is off by default, because it spends model time.
+  #
+  # Cost note worth keeping in view: a category is resolved ONCE for the whole
+  # archive, so this follows the size of the vocabulary (~7k) and not the
+  # number of articles.
+  category:
+    enabled: ${HRAFNAGUD_CATEGORY_ENABLED:false}
+    tickInterval: PT30S
+    batchSize: 10
+    maxAttempts: 3
+    retryDelay: PT10M
+    claimLease: PT5M
+    # Exact label match scores 1.0, token-set match 0.9, single-word match
+    # 0.4 — so the last never resolves on its own. Lowering this below 0.4
+    # would let "standard" become a topic.
+    acceptConfidence: 0.9
 
   translation:
     # Master switch for the worker. Off by default: a translation spends

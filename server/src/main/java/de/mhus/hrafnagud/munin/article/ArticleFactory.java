@@ -86,6 +86,20 @@ public final class ArticleFactory {
     public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
             LanguageResolver.Resolution language, ContentStatus contentStatus,
             String pivotLanguage, List<String> originPlaceIds, Instant now) {
+        return build(candidate, source, language, contentStatus, pivotLanguage,
+                originPlaceIds, List.of(), now);
+    }
+
+    /**
+     * The same, with the normalised topics of the article's categories.
+     *
+     * @param topicIds Media Topics implied by the categories, with their
+     *                 ancestors; empty when none is resolved yet
+     */
+    public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
+            LanguageResolver.Resolution language, ContentStatus contentStatus,
+            String pivotLanguage, List<String> originPlaceIds, List<String> topicIds,
+            Instant now) {
 
         TranslationStatus translationStatus =
                 initialTranslationStatus(pivotLanguage, language.language());
@@ -104,6 +118,7 @@ public final class ArticleFactory {
                 .author(candidate.getAuthor())
                 .imageUrl(candidate.getImageUrl())
                 .guid(candidate.getGuid())
+                .topicIds(new ArrayList<>(topicIds))
                 .originCountry(source.getCountry())
                 .originPlaceIds(new ArrayList<>(originPlaceIds))
                 .language(language.language())

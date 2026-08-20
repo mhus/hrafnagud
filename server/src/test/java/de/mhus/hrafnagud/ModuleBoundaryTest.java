@@ -37,13 +37,14 @@ class ModuleBoundaryTest {
     private static final List<String> INDEPENDENT = List.of("munin", "api");
 
     /**
-     * What they must not reach for: the Ode libraries, and the three packages
-     * that use them. The direction is the point — those three import Munin,
+     * What they must not reach for: the Ode libraries, and the four packages
+     * that use them. The direction is the point — those four import Munin,
      * never the other way round.
      */
     private static final List<String> FORBIDDEN = List.of(
             "de.mhus.vance",
             "de.mhus.hrafnagud.translate",
+            "de.mhus.hrafnagud.classify",
             "de.mhus.hrafnagud.centauri",
             "de.mhus.hrafnagud.zarniwoop");
 
@@ -99,10 +100,11 @@ class ModuleBoundaryTest {
 
         assertThat(violations)
                 .as("""
-                        Munin reaches outward. Deleting translate/, centauri/ and \
-                        zarniwoop/ has to leave a collector that still compiles — \
-                        see specs/architecture.md §2.1. Move whatever needs the \
-                        brain into one of those three packages instead.""")
+                        Munin reaches outward. Deleting translate/, classify/, \
+                        centauri/ and zarniwoop/ has to leave a collector that \
+                        still compiles — see specs/architecture.md §2.1. Move \
+                        whatever needs the brain into one of those four \
+                        packages instead.""")
                 .isEmpty();
     }
 }
