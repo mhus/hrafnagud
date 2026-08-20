@@ -15,6 +15,7 @@ decisions that were not obvious, and where it stops.
 | [architecture.md](architecture.md) | Modules, boundaries, collections, the rules that keep Munin free of Vancetope |
 | [catalogs.md](catalogs.md) | Where source lists come from, the OPML directory standard, and the readers for publishers who ignore it |
 | [collection.md](collection.md) | Sources, source lists, feed ingest, deduplication, adaptive polling, language |
+| [categories.md](categories.md) | Normalising publishers' section names against IPTC Media Topics — a mapping table that learns, and what it must not throw away (design) |
 | [content-extraction.md](content-extraction.md) | Fetching article pages and separating content from furniture |
 | [enrichments.md](enrichments.md) | Where the record of a processing step goes, and why it is not a field on the article |
 | [geo.md](geo.md) | Three kinds of location, the containment hierarchy, and why a source's country is not an article's subject (design) |
