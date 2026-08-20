@@ -62,7 +62,7 @@ class HrafnagudFeedSourceTest {
         sources = mock(SourceService.class);
         when(enrichments.latestForEach(any(), any())).thenReturn(Map.of());
         feed = new HrafnagudFeedSource(
-                facets(),
+                facets(), TestPlaces.loaded(),
                 articles, enrichments, sources);
     }
 
@@ -283,15 +283,47 @@ class HrafnagudFeedSourceTest {
         assertThat(item.extras()).doesNotContainKey("originalTitle");
     }
 
-    // ──────────────────── body ────────────────────
+    // ──────────────────── one entry in full ────────────────────
 
     @Test
-    void a_body_that_has_not_been_fetched_is_absent() {
+    void an_unknown_id_has_no_entry() {
+        when(articles.findById("gone")).thenReturn(Optional.empty());
+
+        assertThat(feed.item("gone", null)).isEmpty();
+    }
+
+    @Test
+    void an_entry_whose_body_has_not_been_fetched_is_still_an_entry() {
+        ArticleDocument article = article("a1", T2, "Headline");
+        when(articles.findById("a1")).thenReturn(Optional.of(article));
         when(articles.findContent("a1")).thenReturn(Optional.empty());
 
-        // Absent, not empty: an unfetched body is the normal state of a
-        // fresh entry, and the contract turns that into a 404.
-        assertThat(feed.body("a1", null)).isEmpty();
+        // Not 404: the text has not arrived yet, which is the normal state of
+        // a fresh entry. Answering "unknown" would tell the reader the entry
+        // is gone.
+        Optional<OdeItem> item = feed.item("a1", null);
+
+        assertThat(item).isPresent();
+        assertThat(item.get().body()).isNull();
+        assertThat(item.get().title()).isEqualTo("Headline");
+    }
+
+    @Test
+    void the_full_entry_carries_what_the_listing_leaves_out() {
+        ArticleDocument article = article("a1", T2, "Headline");
+        article.setCategories(new java.util.ArrayList<>(List.of("Gaming", "Tech")));
+        article.setTopicIds(new java.util.ArrayList<>(List.of("medtop:13000000")));
+        when(articles.findById("a1")).thenReturn(Optional.of(article));
+        de.mhus.hrafnagud.munin.article.ArticleContentDocument content =
+                new de.mhus.hrafnagud.munin.article.ArticleContentDocument();
+        content.setText("the whole article");
+        when(articles.findContent("a1")).thenReturn(Optional.of(content));
+
+        OdeItem item = feed.item("a1", null).orElseThrow();
+
+        assertThat(item.body()).isEqualTo("the whole article");
+        assertThat(item.extras()).containsEntry("categories", List.of("Gaming", "Tech"));
+        assertThat(item.extras()).containsEntry("topicIds", List.of("medtop:13000000"));
     }
 
     // ──────────────────── fixtures ────────────────────

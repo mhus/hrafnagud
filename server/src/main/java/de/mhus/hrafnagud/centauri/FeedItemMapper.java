@@ -2,6 +2,7 @@ package de.mhus.hrafnagud.centauri;
 
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentDocument;
+import de.mhus.hrafnagud.munin.place.PlaceRegistry;
 import de.mhus.vance.ode.centauri.OdeItem;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,7 +35,8 @@ final class FeedItemMapper {
 
     private FeedItemMapper() {}
 
-    static OdeItem toItem(ArticleDocument article, @Nullable EnrichmentDocument translation) {
+    static OdeItem toItem(ArticleDocument article, @Nullable EnrichmentDocument translation,
+                          PlaceRegistry places) {
         String title = article.getTitle();
         String summary = article.getSummary();
         String language = article.getLanguage();
@@ -54,6 +56,19 @@ final class FeedItemMapper {
                     extras.put("translationModel", translation.getModel());
                 }
             }
+        }
+        // Where the publisher sits, as a name rather than an id.
+        //
+        // In `extras` and not as a facet value on the item: a facet is what a
+        // reader filters by, and it resolves ids against the tree it was
+        // handed with the declaration. This is the other thing — provenance to
+        // read on the entry itself — and a reader showing „iso:DE" to a person
+        // would be showing them our storage format.
+        String origin = article.getOriginCountry();
+        if (StringUtils.isNotBlank(origin)) {
+            extras.put("originCountry", origin);
+            places.forCountry(origin)
+                    .ifPresent(place -> extras.put("originPlace", place.name()));
         }
         if (!article.getSourceNames().isEmpty()) {
             // Which feeds delivered this — plural, because deduplication
@@ -93,5 +108,47 @@ final class FeedItemMapper {
     private static String text(EnrichmentDocument enrichment, String key) {
         Object value = enrichment.getContent() == null ? null : enrichment.getContent().get(key);
         return value instanceof String s ? s.trim() : "";
+    }
+
+    /**
+     * The teaser plus everything a single-entry lookup can afford.
+     *
+     * <p>Built on top of the page entry rather than beside it, so the two can
+     * never disagree about the fields they share — the detail is the same
+     * record with more filled in, which is exactly what the contract promises.
+     *
+     * <p>What is added: the fetched body, the article's verbatim publisher
+     * categories, the place path and the normalised topic path. The last two
+     * travel as ids in {@code extras} and not as facet values, because a facet
+     * is a filter and this is provenance to read; the human-readable place
+     * name is already on the teaser.
+     */
+    static OdeItem withDetail(OdeItem teaser, ArticleDocument article, @Nullable String body) {
+        Map<String, Object> extras = new LinkedHashMap<>(teaser.extras());
+        if (!article.getCategories().isEmpty()) {
+            // The publisher's own words, kept verbatim. Not a filter surface —
+            // 7,365 distinct strings across the archive — but the most direct
+            // statement about the article there is.
+            extras.put("categories", List.copyOf(article.getCategories()));
+        }
+        if (!article.getOriginPlaceIds().isEmpty()) {
+            extras.put("originPlaceIds", List.copyOf(article.getOriginPlaceIds()));
+        }
+        if (!article.getTopicIds().isEmpty()) {
+            extras.put("topicIds", List.copyOf(article.getTopicIds()));
+        }
+        if (!article.getSourceNames().isEmpty()) {
+            extras.put("sources", List.copyOf(article.getSourceNames()));
+        }
+        if (article.getFirstSeenAt() != null) {
+            extras.put("collectedAt", article.getFirstSeenAt().toString());
+        }
+        if (article.getContentWordCount() > 0) {
+            extras.put("wordCount", article.getContentWordCount());
+        }
+        return new OdeItem(
+                teaser.id(), teaser.cursor(), teaser.publishedAt(), teaser.title(),
+                teaser.url(), teaser.summary(), body, teaser.author(), teaser.language(),
+                teaser.imageUrl(), teaser.controlUrl(), teaser.tags(), Map.copyOf(extras));
     }
 }

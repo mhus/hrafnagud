@@ -7,6 +7,7 @@ import de.mhus.hrafnagud.munin.article.ArticleQuery;
 import de.mhus.hrafnagud.munin.article.ArticleService;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentDocument;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
+import de.mhus.hrafnagud.munin.place.PlaceRegistry;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
 import de.mhus.hrafnagud.munin.source.SourceService;
 import de.mhus.hrafnagud.facet.ArchiveFacets;
@@ -14,7 +15,6 @@ import de.mhus.vance.ode.centauri.FeedSource;
 import de.mhus.vance.ode.centauri.OdeCapabilities;
 import de.mhus.vance.ode.centauri.OdeDirection;
 import de.mhus.vance.ode.centauri.OdeItem;
-import de.mhus.vance.ode.centauri.OdeItemBody;
 import de.mhus.vance.ode.centauri.OdeItemPage;
 import de.mhus.vance.ode.centauri.OdeItemQuery;
 import de.mhus.vance.ode.centauri.OdeSelector;
@@ -91,6 +91,7 @@ public class HrafnagudFeedSource implements FeedSource {
     private static final int MAX_SELECTORS = 500;
 
     private final ArchiveFacets facets;
+    private final PlaceRegistry places;
     private final ArticleService articles;
     private final EnrichmentService enrichments;
     private final SourceService sources;
@@ -209,7 +210,7 @@ public class HrafnagudFeedSource implements FeedSource {
                 page.stream().map(ArticleDocument::getId).toList(), EnrichmentType.TRANSLATION);
 
         List<OdeItem> items = page.stream()
-                .map(a -> FeedItemMapper.toItem(a, translations.get(a.getId())))
+                .map(a -> FeedItemMapper.toItem(a, translations.get(a.getId()), places))
                 .toList();
 
         ArticleDocument last = page.get(page.size() - 1);
@@ -219,16 +220,34 @@ public class HrafnagudFeedSource implements FeedSource {
         return new OdeItemPage(items, nextCursor, hasMore);
     }
 
+    /**
+     * One article in full.
+     *
+     * <p>The same shape a page carries, with what the listing leaves out: the
+     * fetched body, the verbatim publisher categories, the place path and the
+     * normalised topics. A page entry is a teaser because twenty of them are
+     * produced per request and the body lives in its own collection; this is
+     * one entry and one lookup, so it can afford them.
+     *
+     * <p>Empty for an id the archive does not know, which becomes a 404. An
+     * article <em>without</em> a fetched body is <b>not</b> empty — it is an
+     * entry whose text has not arrived yet, and a 404 would tell the reader
+     * the entry is gone.
+     */
     @Override
-    public Optional<OdeItemBody> body(String itemId, @Nullable String reader) {
-        // Absent rather than empty for an article whose body has not been
-        // fetched — and the two are genuinely different here. Body fetching
-        // is opt-in and asynchronous, so "no text yet" is the normal state
-        // of a fresh entry, not a missing entry.
-        return articles.findContent(itemId)
-                .map(content -> content.getText())
-                .filter(StringUtils::isNotBlank)
-                .map(OdeItemBody::new);
+    public Optional<OdeItem> item(String itemId, @Nullable String reader) {
+        return articles.findById(itemId).map(article -> {
+            OdeItem teaser = FeedItemMapper.toItem(
+                    article,
+                    enrichments.latestForEach(List.of(article.getId()), EnrichmentType.TRANSLATION)
+                            .get(article.getId()),
+                    places);
+            String body = articles.findContent(itemId)
+                    .map(content -> content.getText())
+                    .filter(StringUtils::isNotBlank)
+                    .orElse(null);
+            return FeedItemMapper.withDetail(teaser, article, body);
+        });
     }
 
     // ──────────────────── selectors ────────────────────

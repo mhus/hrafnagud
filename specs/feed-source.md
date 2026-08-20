@@ -149,7 +149,7 @@ every page turn.
 | `pushdownLanguage` | **false** | see §5.2 |
 | `pushdownSince` | true | on `publishedAt` — the same key the stream is ordered by, so bound and order agree |
 | `supportsNewerDirection` | true | trivial with a timestamp cursor |
-| `carriesFullBody` | false | bodies are a separate collection and a separate fetch; many entries have none |
+| `carriesFullBody` | false | bodies are a separate collection and a separate fetch; many entries have none — see §6.1 for what a single-entry lookup adds |
 | `maxPageSize` | 100 | what one page of a news archive is worth reading; `maxLimit` bounds what a request may cost |
 | `signalsAccepted` | *empty* | see §5.3 |
 | `carriesControlUrl` | false | this service has no UI to link into |
@@ -219,18 +219,35 @@ news archive the invisible ones — the opposite of what a news archive is for.
 Nothing is lost: a reader that wants to show provenance can, and one that does
 not need not know.
 
-### 6.1 Bodies
+### 6.1 One entry in full
 
-`body(itemId, …)` reads `article_contents` and returns **absent** when there is
-no text — which the contract turns into a 404.
+`item(itemId, …)` answers the **same shape a page carries**, with what the
+listing leaves out:
 
-Absent rather than empty, and the two are genuinely different here: body
-fetching is opt-in and asynchronous, so "no text yet" is the normal state of a
-fresh entry rather than a missing entry.
+| Added at detail cost | From |
+|---|---|
+| `body` | `article_contents`, when the text has been fetched |
+| `extras.categories` | the publisher's verbatim rubrics — 7,365 distinct strings archive-wide, useless as a filter and the most direct statement about the article there is |
+| `extras.originPlaceIds` / `extras.topicIds` | the materialised paths, as ids |
+| `extras.collectedAt`, `extras.wordCount` | `firstSeenAt` and the fetched length |
 
-Fetch-on-demand — letting a `body()` request queue the fetch it just missed —
-is an obvious next step and deliberately not built, because it turns a
-read-only surface into one with a side effect on the content pipeline.
+One type and not two, and that is the point: a page entry is a *teaser* —
+what is cheap to produce twenty times — and this is the entry. The reader
+replaces what it holds instead of merging two shapes.
+
+**An article without a fetched body is not a 404.** Absent text is the normal
+state of a fresh entry (fetching is opt-in and asynchronous); answering
+„unknown" would tell the reader the entry is gone. Only an id the archive does
+not have is empty.
+
+The human-readable place name rides on the *teaser* as `extras.originPlace`
+(„Germany"), because provenance is worth seeing in a list. The id paths stay in
+the detail: they are for a reader that wants to do something with them, and
+`iso:DE` is our storage format, not a label.
+
+Fetch-on-demand — letting a lookup queue the body fetch it just missed — is an
+obvious next step and deliberately not built, because it turns a read-only
+surface into one with a side effect on the content pipeline.
 
 ## 7. Verified behaviour
 
