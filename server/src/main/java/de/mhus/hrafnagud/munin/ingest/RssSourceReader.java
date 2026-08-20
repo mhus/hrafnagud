@@ -19,6 +19,7 @@ import de.mhus.hrafnagud.munin.source.SourceDocument;
 import de.mhus.hrafnagud.munin.util.TextCleaner;
 import de.mhus.hrafnagud.munin.util.UrlNormalizer;
 import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -103,8 +104,14 @@ public class RssSourceReader implements SourceReader {
         // characters, and rejecting the document loses every entry in it.
         input.setXmlHealerOn(true);
 
+        // The whole header, charset included — see HttpFetchResult#contentTypeHeader.
+        // And UTF-8 as the fallback when nothing declares anything: RFC 3023's
+        // US-ASCII default is what RFC 7303 dropped, for the reason visible in
+        // any archive that applied it. It does not overrule a prolog; Rome
+        // resolves that first.
         try (XmlReader reader = new XmlReader(new ByteArrayInputStream(response.getBody()),
-                StringUtils.defaultString(response.getContentType()), true)) {
+                StringUtils.defaultString(response.contentTypeHeader()), true,
+                StandardCharsets.UTF_8.name())) {
             return input.build(reader);
         }
     }

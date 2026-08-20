@@ -11,6 +11,7 @@ import de.mhus.hrafnagud.munin.config.MuninProperties;
 import de.mhus.hrafnagud.munin.net.HttpFetchResult;
 import de.mhus.hrafnagud.munin.net.HttpFetcher;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +43,29 @@ class RssSourceReaderTest {
                 .name("example-abc123")
                 .url("https://example.com/rss")
                 .build();
+    }
+
+    /**
+     * Respond with a content type of the caller's choosing, bytes in the
+     * charset of its choosing.
+     *
+     * <p>Separate from {@link #respondWith(String)} because that one uses
+     * {@code application/rss+xml}, which is exactly the media type where the
+     * decoding question does not arise — RFC 3023 lets the XML prolog decide
+     * for {@code application/*}. Real feeds are served as {@code text/xml} far
+     * more often, and there the rules are different.
+     */
+    private void respondWith(String body, String contentType,
+                             @org.jspecify.annotations.Nullable Charset declared,
+                             Charset actual) {
+        when(fetcher.get(eq("https://example.com/rss"), any(), any()))
+                .thenReturn(HttpFetchResult.builder()
+                        .status(200)
+                        .body(body.getBytes(actual))
+                        .contentType(contentType)
+                        .headerCharset(declared)
+                        .finalUrl("https://example.com/rss")
+                        .build());
     }
 
     private void respondWith(String body) {
@@ -248,5 +272,66 @@ class RssSourceReaderTest {
         SourceReadResult result = reader.read(source());
 
         assertThat(result.getOutcome()).isEqualTo(FetchOutcome.PARSE_ERROR);
+    }
+
+    // ── charset ──────────────────────────────────────────────────────
+
+    @Test
+    void read_textXmlWithDeclaredCharset_keepsNonAsciiCharacters() {
+        // The server said UTF-8 in the Content-Type. Losing that between the
+        // fetch and the parser makes Rome fall back to RFC 3023's default for
+        // text/xml — US-ASCII — and every byte above 0x7F becomes U+FFFD.
+        respondWith("""
+                <rss version="2.0"><channel><title>T</title><item>
+                  <title>La aerolínea arrasa en la Constitución</title>
+                  <link>https://example.com/a</link>
+                  <pubDate>Tue, 18 Aug 2026 09:00:00 GMT</pubDate>
+                </item></channel></rss>
+                """, "text/xml", StandardCharsets.UTF_8, StandardCharsets.UTF_8);
+
+        SourceReadResult result = reader.read(source());
+
+        assertThat(result.getCandidates()).singleElement()
+                .satisfies(c -> assertThat(c.getTitle())
+                        .isEqualTo("La aerolínea arrasa en la Constitución"));
+    }
+
+    @Test
+    void read_textXmlWithoutCharsetOrProlog_assumesUtf8RatherThanAscii() {
+        // Nothing declares an encoding anywhere. RFC 3023 says US-ASCII here;
+        // RFC 7303 dropped that default precisely because it mangles real
+        // documents, and UTF-8 is what a feed without a declaration is.
+        respondWith("""
+                <rss version="2.0"><channel><title>T</title><item>
+                  <title>Grison se moja y habla sobre qué puede ocurrir</title>
+                  <link>https://example.com/b</link>
+                  <pubDate>Tue, 18 Aug 2026 09:00:00 GMT</pubDate>
+                </item></channel></rss>
+                """, "text/xml", null, StandardCharsets.UTF_8);
+
+        SourceReadResult result = reader.read(source());
+
+        assertThat(result.getCandidates()).singleElement()
+                .satisfies(c -> assertThat(c.getTitle())
+                        .isEqualTo("Grison se moja y habla sobre qué puede ocurrir"));
+    }
+
+    @Test
+    void read_textXmlWithLatin1Prolog_believesTheProlog() {
+        // The UTF-8 assumption above must not overrule a document that says
+        // what it is. Rome resolves the prolog first; this pins that.
+        respondWith("""
+                <?xml version="1.0" encoding="ISO-8859-1"?>
+                <rss version="2.0"><channel><title>T</title><item>
+                  <title>Politik für Bürger</title>
+                  <link>https://example.com/c</link>
+                  <pubDate>Tue, 18 Aug 2026 09:00:00 GMT</pubDate>
+                </item></channel></rss>
+                """, "text/xml", null, StandardCharsets.ISO_8859_1);
+
+        SourceReadResult result = reader.read(source());
+
+        assertThat(result.getCandidates()).singleElement()
+                .satisfies(c -> assertThat(c.getTitle()).isEqualTo("Politik für Bürger"));
     }
 }

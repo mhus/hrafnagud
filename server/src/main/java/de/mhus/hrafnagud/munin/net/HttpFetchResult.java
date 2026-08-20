@@ -54,6 +54,27 @@ public class HttpFetchResult {
         return status == 403 || status == 429;
     }
 
+    /**
+     * The {@code Content-Type} header as it arrived, mime type and charset
+     * together.
+     *
+     * <p>The two are stored apart because most callers want one or the other.
+     * An XML parser wants both, and giving it only the mime type is not a
+     * smaller truth but a different one: RFC 3023 reads {@code text/xml}
+     * without a charset parameter as <b>US-ASCII</b>, so a stripped header
+     * turns a correctly declared UTF-8 feed into one replacement character per
+     * byte. Reassembled here rather than at the call site, so the next parser
+     * does not have to know that.
+     */
+    public @Nullable String contentTypeHeader() {
+        if (contentType == null) {
+            return null;
+        }
+        return headerCharset == null
+                ? contentType
+                : contentType + "; charset=" + headerCharset.name();
+    }
+
     /** Body decoded with the header charset, falling back to UTF-8. */
     public String bodyAsText() {
         Charset charset = headerCharset == null ? StandardCharsets.UTF_8 : headerCharset;
