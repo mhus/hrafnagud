@@ -91,8 +91,18 @@ import org.springframework.data.mongodb.core.mapping.Language;
         // refuses to redefine an index in place, so an existing deployment
         // would fail to start. The old `translation_queue_idx` is now unused
         // and can be dropped by hand — nothing creates it any more.
+        //
+        // The status leads the key although the partial filter already pins it
+        // to PENDING, and that redundancy is the point: `{ firstSeenAt: -1 }`
+        // alone is `seen_idx`, and Mongo rejects a second index with the same
+        // key pattern under a different name — error 85, IndexOptionsConflict,
+        // whatever the options differ by. It refuses at index *creation*, so
+        // the failure is a boot failure on any database that already has
+        // seen_idx, which is every existing installation. Leading with the
+        // equality field also happens to be the textbook shape for
+        // equality-then-sort.
         @CompoundIndex(name = "translation_lifo_idx",
-                def = "{ 'firstSeenAt': -1 }",
+                def = "{ 'translationStatus': 1, 'firstSeenAt': -1 }",
                 partialFilter = "{ 'translationStatus': 'PENDING' }"),
         // Re-evaluating the filter rules walks the archive oldest-examined
         // first, using policyAt as its progress marker so a capped run

@@ -137,7 +137,8 @@ status field on the article plus a partial index on the pending value:
 
 ```
 content_queue_idx      { contentNextAttemptAt: 1 }   partial: contentStatus = PENDING
-translation_lifo_idx   { firstSeenAt: -1 }           partial: translationStatus = PENDING
+translation_lifo_idx   { translationStatus: 1, firstSeenAt: -1 }
+                                                    partial: translationStatus = PENDING
 ```
 
 The two queues are ordered differently on purpose. Body fetching takes the
@@ -148,6 +149,14 @@ arrival rather than by due time, and the due predicate is filtered rather than
 indexed: with a range on one field and a sort on another, one of the two is
 served by the index and the other is not, and sorting is the expensive half to
 get wrong.
+
+The status leads the key even though the partial filter already pins it, and
+that is not decoration: `{ firstSeenAt: -1 }` on its own is `seen_idx`, and
+Mongo rejects a second index with the same key pattern under a different name
+(error 85, `IndexOptionsConflict`) however much the options differ. It refuses
+at creation time, which makes it a boot failure on every database that already
+has `seen_idx` — so a partial index over an existing key pattern needs a key of
+its own.
 
 The older `translation_queue_idx { translationNextAttemptAt: 1 }` is no longer
 created. An existing deployment still has it — `auto-index-creation` adds

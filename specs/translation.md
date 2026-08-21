@@ -298,11 +298,14 @@ And `PT0S` switches the cutoff off, which makes the queue exhaustive again at
 the price of a head that may never be reached. That trade is the operator's to
 make; what is not available is having neither.
 
-The index follows the ordering: `translation_lifo_idx { firstSeenAt: -1 }`,
-partial on `PENDING` ([architecture.md](architecture.md) §4.1). It replaces
-`translation_queue_idx` under a new name rather than a new definition, because
-Mongo refuses to redefine an index in place and an existing deployment would
-fail to start on it.
+The index follows the ordering:
+`translation_lifo_idx { translationStatus: 1, firstSeenAt: -1 }`, partial on
+`PENDING` ([architecture.md](architecture.md) §4.1). Two things about it were
+learned the hard way: it replaces `translation_queue_idx` under a new *name*,
+because Mongo refuses to redefine an index in place — and it needs its own
+*key pattern*, because `{ firstSeenAt: -1 }` is already `seen_idx` and a second
+index on the same keys is rejected at creation whatever its options say. Both
+failures are boot failures, and only on a database that already exists.
 
 `POST /api/v1/articles/{id}/translate` requeues one article.
 
