@@ -9,9 +9,9 @@ because they control different things:
 
 | Setting | Controls | Default |
 |---|---|---|
-| `munin.translation.pivotLanguage` | what everything is translated **into**, and what gets queued — decided at ingest | empty — nothing is ever queued |
-| `munin.translation.readableLanguages` | which other languages need **no** translation | empty — only the pivot is exempt |
-| `munin.translation.enabled` | whether the **worker** runs | `false` — the tick returns immediately |
+| `hugin.translation.pivotLanguage` | what everything is translated **into**, and what gets queued — decided at ingest | empty — nothing is ever queued |
+| `hugin.translation.readableLanguages` | which other languages need **no** translation | empty — only the pivot is exempt |
+| `hugin.translation.enabled` | whether the **worker** runs | `false` — the tick returns immediately |
 
 ```yaml
 munin:
@@ -49,7 +49,7 @@ derived read model, written by the same step; see
 
 ## 2. Package boundary
 
-`de.mhus.hrafnagud.translate` is its own package so that Munin keeps no
+`de.mhus.hrafnagud.hugin.translate` sits outside Munin so that Munin keeps no
 dependency on Vancetope. Munin owns the queue; it owns neither the engine nor
 the result — see [architecture.md](architecture.md) §2.1 for how that survives
 without a module to enforce it.
@@ -184,7 +184,7 @@ A state field plus a partial index, not a query — see
 [architecture.md](architecture.md) §4.1. `TranslationStatus` is `PENDING`,
 `DONE`, `SKIPPED`, `FAILED`.
 
-`TranslationTick` claims a batch (`munin.translation.batchSize`) every
+`TranslationTick` claims a batch (`hugin.translation.batchSize`) every
 `tickInterval`; `translationNextAttemptAt` is both schedule and lease.
 
 **Permanent failures spend the whole retry budget at once.** Retrying a

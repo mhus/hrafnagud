@@ -1,6 +1,6 @@
 package de.mhus.hrafnagud.munin.web;
 
-import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.config.MuninProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;

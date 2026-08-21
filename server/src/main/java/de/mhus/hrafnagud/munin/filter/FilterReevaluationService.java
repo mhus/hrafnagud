@@ -4,7 +4,7 @@ import de.mhus.hrafnagud.api.filter.FilterOutcomes;
 import de.mhus.hrafnagud.api.filter.FilterReevaluationReport;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleService;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.settings.Settings;
 import de.mhus.hrafnagud.munin.source.SourceService;
 import java.time.Instant;
 import java.util.HashMap;
@@ -33,11 +33,11 @@ public class FilterReevaluationService {
     private final ArticleFilterService filterService;
     private final FilterRuleRegistry registry;
     private final SourceService sourceService;
-    private final MuninSettings.Filter config;
+    private final Settings.Filter config;
 
     public FilterReevaluationService(ArticleService articleService,
             ArticleFilterService filterService, FilterRuleRegistry registry,
-            SourceService sourceService, MuninSettings settings) {
+            SourceService sourceService, Settings settings) {
         this.articleService = articleService;
         this.filterService = filterService;
         this.registry = registry;

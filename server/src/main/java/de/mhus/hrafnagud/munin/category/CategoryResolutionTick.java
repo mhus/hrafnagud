@@ -1,7 +1,7 @@
 package de.mhus.hrafnagud.munin.category;
 
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
-import de.mhus.hrafnagud.munin.settings.WorkerSwitch;
+import de.mhus.hrafnagud.settings.Settings;
+import de.mhus.hrafnagud.settings.WorkerSwitch;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -28,20 +28,20 @@ public class CategoryResolutionTick {
 
     private final CategoryMappingService mappingService;
     private final ObjectProvider<CategoryResolver> resolverProvider;
-    private final MuninSettings.Category config;
+    private final Settings.Category config;
     private final WorkerSwitch enabled;
     private final AtomicInteger running = new AtomicInteger();
 
     public CategoryResolutionTick(CategoryMappingService mappingService,
-            ObjectProvider<CategoryResolver> resolverProvider, MuninSettings settings) {
+            ObjectProvider<CategoryResolver> resolverProvider, Settings settings) {
         this.mappingService = mappingService;
         this.resolverProvider = resolverProvider;
         this.config = settings.getCategory();
         this.enabled = new WorkerSwitch("Category resolution", config.enabled());
     }
 
-    @Scheduled(fixedDelayString = "${munin.category.tickInterval:PT30S}",
-            initialDelayString = "${munin.category.initialDelay:PT40S}")
+    @Scheduled(fixedDelayString = "${hugin.category.tickInterval:PT30S}",
+            initialDelayString = "${hugin.category.initialDelay:PT40S}")
     public void tick() {
         if (!enabled.isOn()) {
             return;

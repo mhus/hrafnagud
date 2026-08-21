@@ -3,7 +3,7 @@ package de.mhus.hrafnagud.munin.net;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.config.MuninProperties;
 import java.net.InetSocketAddress;
 import java.net.ProxySelector;
 import java.net.URI;

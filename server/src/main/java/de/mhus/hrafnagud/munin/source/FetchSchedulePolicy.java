@@ -1,8 +1,8 @@
 package de.mhus.hrafnagud.munin.source;
 
 import de.mhus.hrafnagud.api.source.FetchOutcome;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.config.MuninProperties;
+import de.mhus.hrafnagud.settings.Settings;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -45,7 +45,7 @@ public final class FetchSchedulePolicy {
     /** Multiplier applied to the interval after a poll that yielded nothing. */
     private static final double IDLE_GROWTH = 1.5;
 
-    private final MuninSettings.Feed config;
+    private final Settings.Feed config;
 
     /**
      * The named interval classes. Structure rather than a knob: adding one is
@@ -57,7 +57,7 @@ public final class FetchSchedulePolicy {
     /** Names already complained about, so an unknown one warns once, not per poll. */
     private final Set<String> unknownReported = ConcurrentHashMap.newKeySet();
 
-    public FetchSchedulePolicy(MuninSettings.Feed config,
+    public FetchSchedulePolicy(Settings.Feed config,
             Map<String, MuninProperties.Profile> configuredProfiles) {
         this.config = config;
         this.configuredProfiles = configuredProfiles;

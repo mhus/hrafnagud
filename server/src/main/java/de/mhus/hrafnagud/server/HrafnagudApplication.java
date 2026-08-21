@@ -1,6 +1,8 @@
 package de.mhus.hrafnagud.server;
 
-import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.config.HrafnagudProperties;
+import de.mhus.hrafnagud.config.HuginProperties;
+import de.mhus.hrafnagud.config.MuninProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -22,7 +24,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  */
 @SpringBootApplication(scanBasePackages = "de.mhus.hrafnagud")
 @EnableMongoRepositories(basePackages = "de.mhus.hrafnagud")
-@EnableConfigurationProperties(MuninProperties.class)
+@EnableConfigurationProperties({
+        MuninProperties.class, HuginProperties.class, HrafnagudProperties.class})
 @EnableScheduling
 public class HrafnagudApplication {
 

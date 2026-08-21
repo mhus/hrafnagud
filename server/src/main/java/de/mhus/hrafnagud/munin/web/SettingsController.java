@@ -3,8 +3,8 @@ package de.mhus.hrafnagud.munin.web;
 import de.mhus.hrafnagud.api.setting.SettingDto;
 import de.mhus.hrafnagud.api.setting.SettingSource;
 import de.mhus.hrafnagud.api.setting.SettingWriteRequest;
-import de.mhus.hrafnagud.munin.settings.Setting;
-import de.mhus.hrafnagud.munin.settings.SettingsService;
+import de.mhus.hrafnagud.settings.Setting;
+import de.mhus.hrafnagud.settings.SettingsService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
  * The values an operator can change without a restart.
  *
  * <p>Three verbs and no create: the set of settings is what this build declares
- * — {@code MuninSettings} is that list — so writing is always overriding
+ * — {@code Settings} is that list — so writing is always overriding
  * something that already exists and has a default. A key nothing declares is a
  * 404 rather than a new row, which is what keeps the collection from filling
  * with typos that look like configuration.

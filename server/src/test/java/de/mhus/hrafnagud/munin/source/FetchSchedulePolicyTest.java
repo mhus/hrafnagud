@@ -3,8 +3,8 @@ package de.mhus.hrafnagud.munin.source;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import de.mhus.hrafnagud.api.source.FetchOutcome;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
-import de.mhus.hrafnagud.munin.settings.TestSettings;
+import de.mhus.hrafnagud.config.MuninProperties;
+import de.mhus.hrafnagud.settings.TestSettings;
 import java.time.Duration;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;

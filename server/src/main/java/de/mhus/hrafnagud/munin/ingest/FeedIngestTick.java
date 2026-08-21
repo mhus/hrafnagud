@@ -2,8 +2,8 @@ package de.mhus.hrafnagud.munin.ingest;
 
 import de.mhus.hrafnagud.api.source.FetchOutcome;
 import de.mhus.hrafnagud.munin.net.HttpFetcher;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
-import de.mhus.hrafnagud.munin.settings.WorkerSwitch;
+import de.mhus.hrafnagud.settings.Settings;
+import de.mhus.hrafnagud.settings.WorkerSwitch;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
 import de.mhus.hrafnagud.munin.source.SourceService;
 import java.time.Instant;
@@ -43,7 +43,7 @@ public class FeedIngestTick {
     private final SourceService sourceService;
     private final FeedIngestService ingestService;
     private final HttpFetcher fetcher;
-    private final MuninSettings.Feed config;
+    private final Settings.Feed config;
     private final WorkerSwitch enabled;
     private final ExecutorService executor;
 
@@ -55,7 +55,7 @@ public class FeedIngestTick {
     private final AtomicInteger running = new AtomicInteger();
 
     public FeedIngestTick(SourceService sourceService, FeedIngestService ingestService,
-            HttpFetcher fetcher, MuninSettings settings) {
+            HttpFetcher fetcher, Settings settings) {
         this.sourceService = sourceService;
         this.ingestService = ingestService;
         this.fetcher = fetcher;

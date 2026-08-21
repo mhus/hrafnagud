@@ -6,8 +6,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import de.mhus.hrafnagud.api.catalog.CatalogCreateRequest;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
-import de.mhus.hrafnagud.munin.settings.TestSettings;
+import de.mhus.hrafnagud.config.MuninProperties;
+import de.mhus.hrafnagud.settings.TestSettings;
 import de.mhus.hrafnagud.munin.sourcelist.SourceListService;
 import java.time.Instant;
 import java.util.List;

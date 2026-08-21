@@ -9,7 +9,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>An interface, and Munin holds only the interface — the implementation
  * that calls a Vancetope brain lives outside, in
- * {@code de.mhus.hrafnagud.classify}, for the same reason translation does:
+ * {@code de.mhus.hrafnagud.hugin.classify}, for the same reason translation does:
  * the archive has to be collectable and classifiable-by-hand with no brain
  * anywhere near it (specs/architecture.md §2.1).
  *

@@ -6,11 +6,11 @@ import de.mhus.hrafnagud.api.source.SourceCreateRequest;
 import de.mhus.hrafnagud.api.source.SourceOrigin;
 import de.mhus.hrafnagud.api.source.SourceType;
 import de.mhus.hrafnagud.api.source.SourceUpdateRequest;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.config.MuninProperties;
 import de.mhus.hrafnagud.munin.error.BadRequestException;
 import de.mhus.hrafnagud.munin.error.ConflictException;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.settings.Settings;
 import de.mhus.hrafnagud.munin.util.Slugs;
 import de.mhus.hrafnagud.munin.util.UrlNormalizer;
 import java.time.Duration;
@@ -65,7 +65,7 @@ public class SourceService {
     private final FetchSchedulePolicy schedulePolicy;
 
     public SourceService(SourceRepository repository, MongoTemplate mongoTemplate,
-            MuninProperties properties, MuninSettings settings) {
+            MuninProperties properties, Settings settings) {
         this.repository = repository;
         this.mongoTemplate = mongoTemplate;
         // The policy holds handles rather than numbers, so one instance for the

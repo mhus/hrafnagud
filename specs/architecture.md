@@ -20,15 +20,36 @@ One Maven artifact, `de.mhus.hrafnagud:hrafnagud`, built from `server/`.
 ```
 de.mhus.hrafnagud.
   api/        DTOs and enums crossing the REST boundary. No Spring, no MongoDB.
-  munin/      Source registry, feed ingest, deduplication, full-text fetch,
-              enrichment storage, persistence, the operator REST surface.
-  translate/  Works Munin's translation backlog by calling a Vancetope brain.
-  classify/   Decides what a publisher's category means, by calling a brain.
+  munin/      MEMORY. Source registry, feed ingest, deduplication, full-text
+              fetch, enrichment storage, persistence, the operator REST surface.
+  hugin/      THOUGHT. Everything that hands text to a model.
+    translate/  works Munin's translation backlog through a Vancetope brain
+    classify/   decides what a publisher's category means, by asking one
   centauri/   Serves the archive to Vancetope as a Centauri feed source.
   zarniwoop/  Answers Vancetope research queries out of the archive.
   facet/      What both of those let a reader filter by, declared once.
-  server/     Entrypoint plus runtime configuration, nothing else.
+  config/     The three property roots: munin.*, hugin.*, hrafnagud.*
+  settings/   The values in force — config plus what an operator overrode.
+  server/     Entrypoint plus runtime wiring, nothing else.
 ```
+
+### 2.0a Two ravens, two budgets
+
+The split is not decoration. **Munin remembers**: it collects and stores, and it
+does so without a brain anywhere near it. **Hugin thinks**: it interprets what
+Munin holds. Where a new subsystem goes follows from one question — does it hand
+text to a model?
+
+It is also the line between two budgets, which is why the two halves have
+opposite defaults. Munin spends requests against publishers who did not ask to
+be crawled, so its defaults are chosen for politeness and its collection runs by
+itself. Hugin spends model time somebody pays for, so **its workers are off
+until an operator switches them on**.
+
+`config/` and `settings/` sit beside both because they serve both; a package
+under either half would be claiming an ownership it does not have. The Vancetope-
+facing servers (`centauri`, `zarniwoop`, `facet`) sit outside both because they
+neither remember nor think — they hand out what Munin holds.
 
 ### 2.0 Why one artifact and not six
 
@@ -41,35 +62,37 @@ modules that obviously wanted them. For a service one person builds in one go,
 that is the wrong side of the trade.
 
 The packages keep the names and the meaning. What changed is who enforces §2.1:
-the compiler did, and now the reader does.
+the compiler did, and now `ModuleBoundaryTest` does.
 
 ### 2.1 The one hard rule
 
 **Munin has no dependency on Vancetope.** The archive must be collectable and
 queryable without a brain anywhere near it.
 
-Five packages face Vancetope. Two call out, two answer, one is shared by the
-two that answer:
+Four package roots face Vancetope. Hugin calls out, two answer, one is shared
+by the two that answer:
 
 | Package | Direction | Uses |
 |---|---|---|
-| `translate` | calls a brain | `vance-ode-ursa` |
-| `classify` | calls a brain | `vance-ode-ursa` |
+| `hugin.translate` | calls a brain | `vance-ode-ursa` |
+| `hugin.classify` | calls a brain | `vance-ode-ursa` |
 | `centauri` | answers a brain | `vance-ode-centauri` |
 | `zarniwoop` | answers a brain | `vance-ode-zarniwoop` |
 | `facet` | neither — declares filter dimensions for both | `vance-ode-core` |
 
-All five import from `munin`; none is imported by it. **Deleting all five
-packages must leave a compiling collector** — that is the test of whether the
-boundary is real, and it is now a thing to check rather than a thing that
-fails the build. Concretely: no `import de.mhus.hrafnagud.{translate,centauri,
-zarniwoop,classify,facet}` and no `import de.mhus.vance.ode` anywhere under
-`munin/`.
+All of them import from `munin`; none is imported by it. **Deleting `hugin/`,
+`centauri/`, `zarniwoop/` and `facet/` must leave a compiling collector** — that
+is the test of whether the boundary is real, and it is now a thing to check
+rather than a thing that fails the build. Concretely: no
+`import de.mhus.hrafnagud.{hugin,centauri,zarniwoop,facet}` and no
+`import de.mhus.vance.ode` anywhere under `munin/` — and, because Munin imports
+them, not under `settings/` or `config/` either, which is where a Vancetope
+import would otherwise reach Munin's classpath through the back door.
 
-Each of them is also runtime-switchable and stays that way: `translate` and
-`classify` are inert until `vance.ode.base-url` is set — they call out, and
-without an address there is nowhere to call — while `centauri` and `zarniwoop`
-answer and are therefore **on unless switched off**
+Each of them is also runtime-switchable and stays that way: `hugin.translate`
+and `hugin.classify` are inert until `vance.ode.base-url` is set — they call
+out, and without an address there is nowhere to call — while `centauri` and
+`zarniwoop` answer and are therefore **on unless switched off**
 (`munin.centauri.enabled` / `munin.zarniwoop.enabled`). The asymmetry is the
 point: a missing address is a configuration that does not exist yet, a serving
 surface is what these packages are for. An installation that wants none of them

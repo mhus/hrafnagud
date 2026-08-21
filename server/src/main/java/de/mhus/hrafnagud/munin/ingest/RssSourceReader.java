@@ -14,7 +14,7 @@ import de.mhus.hrafnagud.api.source.SourceType;
 import de.mhus.hrafnagud.munin.article.ArticleCandidate;
 import de.mhus.hrafnagud.munin.net.HttpFetchResult;
 import de.mhus.hrafnagud.munin.net.HttpFetcher;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.settings.Settings;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
 import de.mhus.hrafnagud.munin.util.TextCleaner;
 import de.mhus.hrafnagud.munin.util.UrlNormalizer;
@@ -57,7 +57,7 @@ import org.springframework.stereotype.Component;
 public class RssSourceReader implements SourceReader {
 
     private final HttpFetcher fetcher;
-    private final MuninSettings settings;
+    private final Settings settings;
 
     @Override
     public SourceType type() {
@@ -117,7 +117,7 @@ public class RssSourceReader implements SourceReader {
     }
 
     private SourceReadResult toResult(SyndFeed feed, HttpFetchResult response) {
-        MuninSettings.Feed config = settings.getFeed();
+        Settings.Feed config = settings.getFeed();
         Instant now = Instant.now();
 
         // RSS declares the language once for the whole channel and Atom
@@ -160,7 +160,7 @@ public class RssSourceReader implements SourceReader {
      * to fetch, and without a title there is nothing to show. Everything
      * else may be missing.
      */
-    private Optional<ArticleCandidate> toCandidate(SyndEntry entry, MuninSettings.Feed config,
+    private Optional<ArticleCandidate> toCandidate(SyndEntry entry, Settings.Feed config,
             @Nullable String feedLanguage, Instant now) {
 
         String rawLink = linkOf(entry);

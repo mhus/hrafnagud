@@ -8,7 +8,7 @@ import de.mhus.hrafnagud.munin.article.ArticleService;
 import de.mhus.hrafnagud.munin.net.HttpFetchResult;
 import de.mhus.hrafnagud.munin.net.HttpFetcher;
 import de.mhus.hrafnagud.munin.net.RobotsService;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.settings.Settings;
 import de.mhus.hrafnagud.munin.util.TextCleaner;
 import java.time.Instant;
 import java.util.Locale;
@@ -39,11 +39,11 @@ public class ContentFetchService {
     private final RobotsService robotsService;
     private final ContentExtractor extractor;
     private final ArticleService articleService;
-    private final MuninSettings.Content config;
+    private final Settings.Content config;
 
     public ContentFetchService(HttpFetcher fetcher, RobotsService robotsService,
             ContentExtractor extractor, ArticleService articleService,
-            MuninSettings settings) {
+            Settings settings) {
         this.fetcher = fetcher;
         this.robotsService = robotsService;
         this.extractor = extractor;

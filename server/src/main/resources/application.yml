@@ -59,6 +59,12 @@ info:
       joined to ISO 3166-1 alpha-2.
 
 # ─────────────────────────────────────────────────────────────────────────────
+# THREE ROOTS, ONE PER LAYER. munin.* collects and stores, hugin.* thinks
+# (anything that hands text to a model), hrafnagud.* is what belongs to neither.
+# A key names the layer that owns the value, so munin.category.acceptConfidence
+# tunes the local table match at ingest while hugin.category.* is the worker
+# that asks a brain about what the match could not settle.
+#
 # Most of what follows is the DEFAULT for a setting of the same name, not the
 # last word on it. An operator can override any of these while the service runs
 # — through /api/v1/settings or the console's Einstellungen view — and the
@@ -67,21 +73,17 @@ info:
 # here or from the database.
 #
 # Read only at start-up, and therefore NOT settings: every tickInterval and
-# initialDelay (they are baked into @Scheduled), http.connectTimeout and
-# http.proxy.* (baked into the shared HTTP client), api.* (the console switch
-# decides whether a surface exists at all; the token is a secret and stays in
-# the environment), catalog.installBundled (only applies to an empty database),
-# language.lowAccuracyMode and language.languages (the detector is built once),
-# feed.profiles (structure, not a number), and settings.refreshInterval itself.
+# initialDelay (they are baked into @Scheduled), munin.http.connectTimeout and
+# munin.http.proxy.* (baked into the shared HTTP client), munin.api.* (the
+# console switch decides whether a surface exists at all; the token is a secret
+# and stays in the environment), munin.catalog.installBundled (only applies to
+# an empty database), munin.language.lowAccuracyMode and .languages (the
+# detector is built once), munin.feed.profiles (structure, not a number),
+# munin.centauri/.zarniwoop.enabled (they decide whether an endpoint exists),
+# and hrafnagud.settings.refreshInterval itself.
 # Reasoning and the full boundary: specs/settings.md.
 # ─────────────────────────────────────────────────────────────────────────────
 munin:
-  # How often stored overrides are re-read. Writes through the API are visible
-  # at once; this is for a value changed straight in the database. Not itself a
-  # setting — that would be a loop.
-  settings:
-    refreshInterval: PT30S
-
   # Catalogues — the layer that discovers source lists, so the archive fills
   # itself. Catalogue → source lists → sources, each refreshed on its own
   # schedule; nothing here needs a button.
@@ -195,21 +197,10 @@ munin:
     claimLease: PT15M
 
   # Category normalisation: what publishers call their sections, mapped onto
-  # IPTC Media Topics. Stage one is string matching against the bundled
-  # vocabulary and always runs — it costs nothing and clears the frequent,
-  # unambiguous head (about a fifth of all category uses). Stage two asks a
-  # brain about the rest and is off by default, because it spends model time.
-  #
-  # Cost note worth keeping in view: a category is resolved ONCE for the whole
-  # archive, so this follows the size of the vocabulary (~7k) and not the
-  # number of articles.
+  # IPTC Media Topics. Only stage one lives here — string matching against the
+  # bundled vocabulary, at ingest, costing nothing. Stage two asks a brain and
+  # is therefore Hugin's; see hugin.category below.
   category:
-    enabled: ${HRAFNAGUD_CATEGORY_ENABLED:false}
-    tickInterval: PT30S
-    batchSize: 10
-    maxAttempts: 3
-    retryDelay: PT10M
-    claimLease: PT5M
     # Exact label match scores 1.0, token-set match 0.9, single-word match
     # 0.4 — so the last never resolves on its own. Lowering this below 0.4
     # would let "standard" become a topic.
@@ -223,44 +214,6 @@ munin:
   filter:
     maxPerRun: 50000
     batchSize: 500
-
-  translation:
-    # Master switch for the worker. Off by default: a translation spends
-    # somebody else's model time and somebody's money, so it is a decision
-    # rather than something that happens by deploying. Off stops the worker,
-    # not the queue — what gets queued is decided by pivotLanguage below, so
-    # setting that with this off means a backlog nothing drains. The startup
-    # log says which of the four states you are in.
-    enabled: ${HRAFNAGUD_TRANSLATION_ENABLED:false}
-    # The one language everything is normalised into. Empty means no
-    # article is ever queued and the subsystem stays dormant. Setting it
-    # starts filling a backlog — make sure something is wired to work it
-    # (see vance.ode below), or the queue grows with nothing draining it.
-    #
-    # readableLanguages below is the other half of the decision: languages
-    # that need no translation at all. The pivot is always one of them, so
-    # list only the OTHER languages a reader here can already read —
-    # `pivotLanguage: de` plus `readableLanguages: [en]` translates neither
-    # German nor English and queues everything else. An empty list means
-    # every non-German article is translated, which for a bilingual reader
-    # is paying for half the archive twice.
-    #
-    # One language, not a list: this is the step that lets later stages —
-    # keywords, clustering, embeddings — work in a single language.
-    pivotLanguage: ${HRAFNAGUD_PIVOT_LANGUAGE:}
-    # Comma-separated BCP-47 primary subtags, e.g. `en` or `en,fr`. An
-    # article whose language is unknown is translated anyway — see
-    # specs/translation.md §3.
-    readableLanguages: ${HRAFNAGUD_READABLE_LANGUAGES:}
-    # Title and teaser go in one call either way; switching this off saves
-    # the teaser's tokens but not a request.
-    translateSummary: true
-    tickInterval: PT20S
-    batchSize: 10
-    maxAttempts: 3
-    retryDelay: PT5M
-    claimLease: PT5M
-    maxSourceChars: 8000
 
   language:
     enabled: true
@@ -306,6 +259,73 @@ munin:
 # brain side is the `translation` kit: it defines the event, the script
 # and the recipe, so the prompt and the model stay editable there rather
 # than being compiled in here.
+# ─────────────────────────────────────────────────────────────────────────────
+# Hugin — thought. Everything that hands text to a model and stores what comes
+# back. Its workers are off by default, and unlike Munin's that is not about
+# politeness: this half spends model time somebody pays for, so it starts when
+# an operator says so and not because a service was deployed.
+# ─────────────────────────────────────────────────────────────────────────────
+hugin:
+  translation:
+    # Master switch for the worker. Off by default: a translation spends
+    # somebody else's model time and somebody's money, so it is a decision
+    # rather than something that happens by deploying. Off stops the worker,
+    # not the queue — what gets queued is decided by pivotLanguage below, so
+    # setting that with this off means a backlog nothing drains. The startup
+    # log says which of the four states you are in.
+    enabled: ${HRAFNAGUD_TRANSLATION_ENABLED:false}
+    # The one language everything is normalised into. Empty means no
+    # article is ever queued and the subsystem stays dormant. Setting it
+    # starts filling a backlog — make sure something is wired to work it
+    # (see vance.ode below), or the queue grows with nothing draining it.
+    #
+    # readableLanguages below is the other half of the decision: languages
+    # that need no translation at all. The pivot is always one of them, so
+    # list only the OTHER languages a reader here can already read —
+    # `pivotLanguage: de` plus `readableLanguages: [en]` translates neither
+    # German nor English and queues everything else. An empty list means
+    # every non-German article is translated, which for a bilingual reader
+    # is paying for half the archive twice.
+    #
+    # One language, not a list: this is the step that lets later stages —
+    # keywords, clustering, embeddings — work in a single language.
+    pivotLanguage: ${HRAFNAGUD_PIVOT_LANGUAGE:}
+    # Comma-separated BCP-47 primary subtags, e.g. `en` or `en,fr`. An
+    # article whose language is unknown is translated anyway — see
+    # specs/translation.md §3.
+    readableLanguages: ${HRAFNAGUD_READABLE_LANGUAGES:}
+    # Title and teaser go in one call either way; switching this off saves
+    # the teaser's tokens but not a request.
+    translateSummary: true
+    tickInterval: PT20S
+    batchSize: 10
+    maxAttempts: 3
+    retryDelay: PT5M
+    claimLease: PT5M
+    maxSourceChars: 8000
+
+  # The second stage of category normalisation: what stage one could not
+  # settle is handed to a brain. Off by default, because it spends model time.
+  #
+  # Cost note worth keeping in view: a category is resolved ONCE for the whole
+  # archive, so this follows the size of the vocabulary (~7k) and not the
+  # number of articles.
+  category:
+    enabled: ${HRAFNAGUD_CATEGORY_ENABLED:false}
+    tickInterval: PT30S
+    batchSize: 10
+    maxAttempts: 3
+    retryDelay: PT10M
+    claimLease: PT5M
+
+# The service itself — what belongs to neither half.
+hrafnagud:
+  # How often stored overrides are re-read. Writes through the API are visible
+  # at once; this is for a value changed straight in the database. Not itself a
+  # setting — that would be a loop.
+  settings:
+    refreshInterval: PT30S
+
 vance:
   ode:
     base-url: ${VANCE_BRAIN_URL:}

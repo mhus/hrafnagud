@@ -19,6 +19,16 @@ The keys are **the property names unchanged**. `munin.feed.batchSize` in the
 YAML is the default for the setting called `munin.feed.batchSize`; there is no
 second vocabulary to learn and no mapping table to keep in step.
 
+Three roots, one per layer, so a key names what owns the value: `munin.*`
+collects and stores, `hugin.*` hands text to a model, `hrafnagud.*` is what
+belongs to neither (today only the settings layer itself). One property class per
+root — `MuninProperties`, `HuginProperties`, `HrafnagudProperties` in `config/` —
+because a class holding all three would be back to a name that claims a layer it
+does not own. The one seam runs through category normalisation and is deliberate:
+`munin.category.acceptConfidence` tunes the local table match at ingest, while
+`hugin.category.*` is the worker that asks a brain about what the match could
+not settle.
+
 Only overrides are rows. A setting nobody has touched has no document at all,
 which is what makes *back to the default* a delete rather than a second copy of
 the configured value — a copy would drift the moment somebody edited the YAML.
@@ -26,7 +36,7 @@ the configured value — a copy would drift the moment somebody edited the YAML.
 **A blank override counts as no override.** One gesture — clear the field —
 means the same thing everywhere, and the cost is that a setting whose default is
 non-empty cannot be set to the empty string. The one place that would matter,
-`munin.translation.pivotLanguage`, has an empty default already, so its "off" is
+`hugin.translation.pivotLanguage`, has an empty default already, so its "off" is
 reachable by deleting the row. A blank `PUT` is therefore refused with a message
 pointing at `DELETE`, rather than silently storing a row that resolves to the
 default and then reads, in the console, as a change somebody made.
@@ -44,11 +54,11 @@ from — the console's *Herkunft* column and the API's `source` field.
 
 ## 2. A handle, not a value
 
-Every setting the code reads is declared once in `MuninSettings`, and what a
+Every setting the code reads is declared once in `Settings`, and what a
 consumer holds is a `Setting` handle:
 
 ```java
-private final MuninSettings.Feed config;          // in the constructor
+private final Settings.Feed config;               // in the constructor
 ...
 sourceService.claimDue(now, config.batchSize().value());   // at the moment it matters
 ```
@@ -65,7 +75,7 @@ differ. A handle re-parses when the generation changes and not otherwise, and
 anything that derives something more expensive from settings can watch the same
 counter instead of rebuilding per call.
 
-`MuninSettings` is also the only place a key exists. A declaration carries the
+`Settings` is also the only place a key exists. A declaration carries the
 type, the default and the sentence an operator reads next to it, so there is no
 way to half-define a setting — and a `PUT` to an undeclared key is a 404 rather
 than a row nothing will ever read. Declaring one key twice fails at startup.
@@ -79,11 +89,11 @@ A value is *not* a setting when nothing would read it later. Three groups:
 | `server.port`, `spring.mongodb.*` | the settings live in that database |
 | `munin.*.tickInterval`, `munin.*.initialDelay` | baked into `@Scheduled` when the bean is built |
 | `munin.http.connectTimeout`, `munin.http.proxy.*` | baked into the one shared `HttpClient` |
-| `munin.api.consoleEnabled`, `munin.centauri.enabled`, `munin.zarniwoop.enabled` | they decide whether an HTTP surface exists; a controller cannot be unregistered at runtime |
+| `munin.api.consoleEnabled` | it decides whether an HTTP surface exists; a controller cannot be unregistered at runtime |
 | `munin.catalog.installBundled` | only ever applies to an empty database |
 | `munin.language.lowAccuracyMode`, `munin.language.languages` | the detector's models are loaded once, and hold gigabytes when they are not narrowed |
 | `munin.feed.profiles` | structure rather than a number: adding an interval class is a deployment |
-| `munin.settings.refreshInterval` | a setting that decided how settings are read would be a loop |
+| `hrafnagud.settings.refreshInterval` | a setting that decided how settings are read would be a loop |
 
 These are deliberately **absent from the settings API** rather than present and
 marked read-only. A key that can be stored but never read is a trap, and the
@@ -171,7 +181,7 @@ reversible with the same click (see [console.md](console.md) §1).
   setting are a plausible next step and are not there.
 - **Reload is a poll.** Writes through the API are visible at once because the
   write path reloads; an edit made straight in the database is picked up within
-  `munin.settings.refreshInterval` (30 s). A second instance therefore converges
+  `hrafnagud.settings.refreshInterval` (30 s). A second instance therefore converges
   rather than sharing state — which matches the single-instance assumption in
   [architecture.md](architecture.md), and would need to be revisited before it
   stops being true.

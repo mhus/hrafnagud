@@ -3,8 +3,8 @@ package de.mhus.hrafnagud.munin.content;
 import de.mhus.hrafnagud.api.article.ContentStatus;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleService;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
-import de.mhus.hrafnagud.munin.settings.WorkerSwitch;
+import de.mhus.hrafnagud.settings.Settings;
+import de.mhus.hrafnagud.settings.WorkerSwitch;
 import jakarta.annotation.PreDestroy;
 import java.time.Instant;
 import java.util.List;
@@ -34,13 +34,13 @@ public class ContentFetchTick {
 
     private final ArticleService articleService;
     private final ContentFetchService fetchService;
-    private final MuninSettings.Content config;
+    private final Settings.Content config;
     private final WorkerSwitch enabled;
     private final ExecutorService executor;
     private final AtomicInteger running = new AtomicInteger();
 
     public ContentFetchTick(ArticleService articleService, ContentFetchService fetchService,
-            MuninSettings settings) {
+            Settings settings) {
         this.articleService = articleService;
         this.fetchService = fetchService;
         this.config = settings.getContent();

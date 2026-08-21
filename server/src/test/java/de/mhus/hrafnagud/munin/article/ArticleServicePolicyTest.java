@@ -11,8 +11,8 @@ import de.mhus.hrafnagud.api.article.TranslationStatus;
 import de.mhus.hrafnagud.api.filter.FilterDecision;
 import de.mhus.hrafnagud.api.filter.FilterOutcome;
 import de.mhus.hrafnagud.api.filter.FilterOutcomes;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
-import de.mhus.hrafnagud.munin.settings.TestSettings;
+import de.mhus.hrafnagud.config.HuginProperties;
+import de.mhus.hrafnagud.settings.TestSettings;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import java.time.Instant;
 import org.bson.Document;
@@ -48,7 +48,7 @@ class ArticleServicePolicyTest {
     }
 
     private ArticleService serviceWith(String pivotLanguage) {
-        MuninProperties properties = new MuninProperties();
+        HuginProperties properties = new HuginProperties();
         properties.getTranslation().setPivotLanguage(pivotLanguage);
         return new ArticleService(
                 mock(ArticleRepository.class),

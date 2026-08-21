@@ -12,7 +12,7 @@ import de.mhus.hrafnagud.munin.error.ConflictException;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
 import de.mhus.hrafnagud.munin.net.HttpFetchResult;
 import de.mhus.hrafnagud.munin.net.HttpFetcher;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.settings.Settings;
 import de.mhus.hrafnagud.munin.source.SourceCandidate;
 import de.mhus.hrafnagud.munin.source.SourceMergePolicy;
 import de.mhus.hrafnagud.munin.source.SourceService;
@@ -61,12 +61,12 @@ public class SourceListService {
     private final MongoTemplate mongoTemplate;
     private final SourceService sourceService;
     private final HttpFetcher fetcher;
-    private final MuninSettings.SourceList config;
+    private final Settings.SourceList config;
     private final Map<SourceListType, SourceListParser> parsers = new EnumMap<>(SourceListType.class);
 
     public SourceListService(SourceListRepository repository, MongoTemplate mongoTemplate,
             SourceService sourceService, HttpFetcher fetcher, List<SourceListParser> parserBeans,
-            MuninSettings settings) {
+            Settings settings) {
         this.repository = repository;
         this.mongoTemplate = mongoTemplate;
         this.sourceService = sourceService;

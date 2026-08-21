@@ -1,8 +1,8 @@
 package de.mhus.hrafnagud.munin.catalog;
 
-import de.mhus.hrafnagud.munin.config.MuninProperties;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
-import de.mhus.hrafnagud.munin.settings.WorkerSwitch;
+import de.mhus.hrafnagud.config.MuninProperties;
+import de.mhus.hrafnagud.settings.Settings;
+import de.mhus.hrafnagud.settings.WorkerSwitch;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -28,7 +28,7 @@ import org.springframework.stereotype.Component;
 public class CatalogRefreshTick {
 
     private final SourceCatalogService catalogService;
-    private final MuninSettings.Catalog config;
+    private final Settings.Catalog config;
     private final WorkerSwitch enabled;
 
     /** The tick cadence, which is read once by the scheduler and so stays a property. */
@@ -36,7 +36,7 @@ public class CatalogRefreshTick {
     private final AtomicInteger running = new AtomicInteger();
 
     public CatalogRefreshTick(SourceCatalogService catalogService, MuninProperties properties,
-            MuninSettings settings) {
+            Settings settings) {
         this.catalogService = catalogService;
         this.config = settings.getCatalog();
         this.cadence = properties.getCatalog();

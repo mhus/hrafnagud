@@ -1,8 +1,8 @@
 package de.mhus.hrafnagud.munin.sourcelist;
 
-import de.mhus.hrafnagud.munin.config.MuninProperties;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
-import de.mhus.hrafnagud.munin.settings.WorkerSwitch;
+import de.mhus.hrafnagud.config.MuninProperties;
+import de.mhus.hrafnagud.settings.Settings;
+import de.mhus.hrafnagud.settings.WorkerSwitch;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
 public class SourceListRefreshTick {
 
     private final SourceListService listService;
-    private final MuninSettings.SourceList config;
+    private final Settings.SourceList config;
     private final WorkerSwitch enabled;
 
     /** The tick cadence, which is read once by the scheduler and so stays a property. */
@@ -32,7 +32,7 @@ public class SourceListRefreshTick {
     private final AtomicInteger running = new AtomicInteger();
 
     public SourceListRefreshTick(SourceListService listService, MuninProperties properties,
-            MuninSettings settings) {
+            Settings settings) {
         this.listService = listService;
         this.config = settings.getSourceList();
         this.cadence = properties.getSourceList();

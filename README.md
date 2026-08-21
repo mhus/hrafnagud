@@ -19,20 +19,33 @@ One Maven artifact, built from `server/`. The packages carry the structure:
 ```
 de.mhus.hrafnagud.
   api/        DTOs and enums crossing the REST boundary. No Spring, no MongoDB.
-  munin/      Source registry, feed ingest, deduplication, full-text fetch, persistence.
-  translate/  Works Munin's translation backlog by calling a Vancetope brain.
+  munin/      MEMORY: source registry, feed ingest, deduplication, full-text
+              fetch, persistence, the operator API. No brain anywhere near it.
+  hugin/      THOUGHT: everything that hands text to a model.
+    translate/  works Munin's translation backlog through a Vancetope brain
+    classify/   decides what a publisher's category means
   centauri/   Serves the archive to Vancetope as a Centauri feed source — the mirror
-              image of translate: that one calls a brain, this one answers one.
+              image of hugin: that half calls a brain, this one answers one.
   zarniwoop/  Answers Vancetope research queries out of the archive. Same data as
               centauri, opposite question: a ranked answer, not a timeline.
-  server/     Entrypoint plus runtime configuration, nothing else.
+  facet/      What both of those let a reader filter by, declared once.
+  config/     The property roots: munin.*, hugin.*, hrafnagud.*
+  settings/   The values in force — config plus whatever an operator overrode.
+  server/     Entrypoint plus runtime wiring, nothing else.
 ```
 
-**Munin imports nothing Vancetope-facing**, and the three packages that do
-import only from it. That was six Maven modules and therefore compiler-checked
-until the service turned out not to need the ceremony — see
-[architecture.md](specs/architecture.md) §2 for the rule and how to check it
+**The two ravens are the layering.** Munin remembers: it collects, deduplicates
+and stores, and it does that without a brain anywhere near it. Hugin thinks:
+translation today, rating or clustering later. Hugin imports Munin, never the
+other way round — **deleting all of `hugin/` has to leave a collector that still
+compiles.** That was six Maven modules and therefore compiler-checked until the
+service turned out not to need the ceremony; see
+[architecture.md](specs/architecture.md) §2 for the rule and how it is checked
 now.
+
+The same split runs through the configuration: `munin.*` for collecting and
+storing, `hugin.*` for what spends model time, `hrafnagud.*` for what belongs to
+neither ([settings.md](specs/settings.md) §1).
 
 **Stack:** Java 25, Spring Boot 4.1, Maven (single module), Lombok, JSpecify,
 Spring Data MongoDB, Rome (feed parsing), jsoup (HTML), Lingua (language
@@ -175,10 +188,11 @@ curl -X DELETE localhost:9800/api/v1/settings/munin.content.enabled
 ```
 
 The keys are the property names unchanged, so `munin.feed.batchSize` in the YAML
-is the default for the setting of that name. Values are checked against the
-declared type before they are stored, and a key this build does not declare is a
-404 rather than a row nothing reads. The console edits the same list under
-**Einstellungen**.
+is the default for the setting of that name — and the root says which half owns
+it: `munin.*` collects and stores, `hugin.*` hands text to a model. Values are
+checked against the declared type before they are stored, and a key this build
+does not declare is a 404 rather than a row nothing reads. The console edits the
+same list under **Einstellungen**.
 
 Switches and counts take effect at the start of the next round; the interval
 bounds apply the next time a source is rescheduled, so poll times already

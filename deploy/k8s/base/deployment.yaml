@@ -8,7 +8,7 @@ spec:
   replicas: 1
   strategy:
     # Surge first, then drain: the ingest workers claim work with leases
-    # (munin.*.claimLease), so a brief overlap of old and new pod is safe —
+    # (munin.*/hugin.*.claimLease), so a brief overlap of old and new pod is safe —
     # neither takes work the other holds. On a small cluster where two Java
     # cold starts do not fit side by side, the mini overlay flips this to
     # maxSurge 0 / maxUnavailable 1.

@@ -1,7 +1,7 @@
 /**
  * Serving the archive to Vancetope as a Centauri feed source.
  *
- * <p>The mirror image of {@link de.mhus.hrafnagud.translate}: that package
+ * <p>The mirror image of {@link de.mhus.hrafnagud.hugin.translate}: that package
  * calls out to a brain, this one answers a brain's calls. Both live outside
  * Munin for the same reason — the archive collects, deduplicates and
  * queries without knowing a brain exists, and every module that faces one

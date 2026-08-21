@@ -39,9 +39,23 @@ and the alternative deserves an answer.
 
 ## Naming
 
-**Munin** (memory) collects and stores. A future **Hugin** (thought) would
-query and analyse; it does not exist yet, and would be a package beside Munin
-rather than anything inside it.
+Odin's two ravens, and here they are the layering rather than a decoration.
 
-Everything facing [Vancetope](https://github.com/mhus/vance) lives outside
-Munin, in its own package — see [architecture.md](architecture.md) §2.
+**Munin** (memory) collects and stores: the source registry, ingest,
+deduplication, the full-text fetch, persistence, the operator API. It works
+without a brain anywhere near it, and that is checked rather than hoped for.
+
+**Hugin** (thought) interprets what Munin holds — anything that hands text to a
+model. Today that is translation and deciding what a publisher's category
+means; rating, clustering and summarising would be neighbours there rather than
+anything inside Munin. Hugin imports Munin, never the other way round.
+
+The line between them is also the line between two budgets: Munin spends
+requests against publishers, Hugin spends model time somebody pays for, which
+is why Hugin's workers are off until they are switched on. The property roots
+follow the same split — `munin.*`, `hugin.*`, and `hrafnagud.*` for what belongs
+to neither.
+
+Everything facing [Vancetope](https://github.com/mhus/vance) as a *server* —
+`centauri`, `zarniwoop`, `facet` — lives outside both, in its own package. See
+[architecture.md](architecture.md) §2.

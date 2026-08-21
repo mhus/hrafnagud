@@ -1,7 +1,7 @@
 package de.mhus.hrafnagud.munin.net;
 
-import de.mhus.hrafnagud.munin.config.MuninProperties;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.config.MuninProperties;
+import de.mhus.hrafnagud.settings.Settings;
 import de.mhus.hrafnagud.munin.util.Slugs;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -55,9 +55,9 @@ public class HttpFetcher {
      * used for the rest of the process. Changing either means a restart, which
      * is why they stay properties. See {@code specs/settings.md} §3.
      */
-    private final MuninSettings.Http config;
+    private final Settings.Http config;
 
-    public HttpFetcher(MuninProperties properties, MuninSettings settings) {
+    public HttpFetcher(MuninProperties properties, Settings settings) {
         this.config = settings.getHttp();
         this.rateLimiter = new HostRateLimiter(() -> config.minHostInterval().value());
 

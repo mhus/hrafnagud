@@ -12,7 +12,7 @@ import de.mhus.hrafnagud.munin.filter.ArticleFilterService;
 import de.mhus.hrafnagud.munin.filter.FilterSubject;
 import de.mhus.hrafnagud.munin.lang.LanguageResolver;
 import de.mhus.hrafnagud.munin.place.PlaceRegistry;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.settings.Settings;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -98,8 +98,8 @@ public class ArticleService {
     private final ArticleContentRepository contentRepository;
     private final MongoTemplate mongoTemplate;
     private final EnrichmentService enrichmentService;
-    private final MuninSettings.Content contentConfig;
-    private final MuninSettings.Translation translationConfig;
+    private final Settings.Content contentConfig;
+    private final Settings.Translation translationConfig;
     private final PlaceRegistry placeRegistry;
     private final CategoryMappingService categoryMappingService;
     private final ArticleFilterService articleFilterService;
@@ -107,7 +107,7 @@ public class ArticleService {
     public ArticleService(ArticleRepository repository, ArticleContentRepository contentRepository,
             EnrichmentService enrichmentService, MongoTemplate mongoTemplate,
             PlaceRegistry placeRegistry, CategoryMappingService categoryMappingService,
-            ArticleFilterService articleFilterService, MuninSettings settings) {
+            ArticleFilterService articleFilterService, Settings settings) {
         this.repository = repository;
         this.contentRepository = contentRepository;
         this.enrichmentService = enrichmentService;

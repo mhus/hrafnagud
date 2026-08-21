@@ -1,6 +1,6 @@
 package de.mhus.hrafnagud.munin.net;
 
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.settings.Settings;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Instant;
@@ -36,8 +36,8 @@ public class RobotsService {
     private static final int MAX_CACHED_ORIGINS = 20_000;
 
     private final HttpFetcher fetcher;
-    private final MuninSettings.Content config;
-    private final MuninSettings.Http httpConfig;
+    private final Settings.Content config;
+    private final Settings.Http httpConfig;
 
     private final Map<String, CachedRules> cache = Collections.synchronizedMap(
             new LinkedHashMap<>(1024, 0.75f, true) {
@@ -50,7 +50,7 @@ public class RobotsService {
     private record CachedRules(RobotsRules rules, Instant fetchedAt) {
     }
 
-    public RobotsService(HttpFetcher fetcher, MuninSettings settings) {
+    public RobotsService(HttpFetcher fetcher, Settings settings) {
         this.fetcher = fetcher;
         this.config = settings.getContent();
         this.httpConfig = settings.getHttp();

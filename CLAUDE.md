@@ -23,8 +23,7 @@ Satz Regeln für beide Codebasen.
 - Datengeneratoren: `scripts/` — z.B. `generate-mediatopics-tsv.py` für
   `server/src/main/resources/topics/iptc-mediatopics.tsv`
 - **Vancetope-Gegenseite:** `../vance-wb` — dort liegt `repos/vance-ode/`, also
-  der REST-Contract, den `translate/`, `classify/`, `centauri/` und
-  `zarniwoop/` bedienen, plus `specification/public/centauri-service.md` und
+  der REST-Contract, den `hugin/`, `centauri/` und `zarniwoop/` bedienen, plus `specification/public/centauri-service.md` und
   die `planning/centauri-*.md`. Contract-Fragen fangen dort an, nicht hier.
   **Nichts dort committen**, wenn hier gearbeitet wird — getrennte Repos.
 - **Cluster-Deployment:** `../mhus-infrastructure/loc1_ho/` — dieses Repo baut
@@ -75,33 +74,46 @@ Kommentar im POM.
 ```
 de.mhus.hrafnagud.
   api/        DTOs und Enums über die REST-Grenze. Kein Spring, kein MongoDB.
-  munin/      Source-Registry, Feed-Ingest, Dedup, Volltext-Fetch, Enrichments,
-              Persistenz, Operator-REST (/api/v1/**), Console
-  translate/  arbeitet Munins Übersetzungs-Backlog über ein Brain ab
-  classify/   entscheidet über ein Brain, was eine Publisher-Kategorie bedeutet
+  munin/      GEDÄCHTNIS: Source-Registry, Feed-Ingest, Dedup, Volltext-Fetch,
+              Enrichments, Persistenz, Operator-REST (/api/v1/**), Console
+  hugin/      GEDANKE: alles, was Text an ein Modell gibt
+    translate/  arbeitet Munins Übersetzungs-Backlog über ein Brain ab
+    classify/   entscheidet über ein Brain, was eine Publisher-Kategorie bedeutet
   centauri/   serviert das Archiv als Centauri-Feed-Quelle (/ode/feed/**)
   zarniwoop/  beantwortet Research-Queries aus dem Archiv (/ode/search/**)
   facet/      Filter-Dimensionen, die centauri und zarniwoop teilen
-  server/     Entrypoint plus Runtime-Konfiguration, nichts sonst
+  config/     die drei Property-Wurzeln: munin.*, hugin.*, hrafnagud.*
+  settings/   die geltenden Werte — config plus die Overrides des Operators
+  server/     Entrypoint plus Runtime-Verdrahtung, nichts sonst
 ```
+
+**Die zwei Raben sind die Schichtung, nicht Deko.** Munin erinnert (sammeln,
+speichern, ausliefern), Hugin denkt (alles mit einem Modell dahinter). Wohin ein
+neues Subsystem gehört, entscheidet eine Frage: gibt es Text an ein Modell?
+Zugleich die Grenze zwischen zwei Budgets — Munin zahlt mit fremder Bandbreite
+und läuft von selbst, Hugin zahlt mit Modellzeit und ist aus, bis jemand es
+einschaltet. `config/` und `settings/` liegen neben beiden, weil sie beiden
+dienen.
 
 ### Die eine harte Regel
 
-**Munin hat keine Abhängigkeit auf Vancetope.** Fünf Packages sind
-Vancetope-zugewandt (`translate`, `classify`, `centauri`, `zarniwoop`,
-`facet`); alle fünf importieren aus `munin`, keines wird von `munin`
-importiert. **Alle fünf löschen muss einen kompilierenden Collector
-hinterlassen.**
+**Munin hat keine Abhängigkeit auf Vancetope.** Vancetope-zugewandt sind
+`hugin/` (ruft raus), `centauri/` und `zarniwoop/` (antworten) und `facet/`
+(deklariert für die zwei Antwortenden); alle importieren aus `munin`, keines
+wird von `munin` importiert. **`hugin/`, `centauri/`, `zarniwoop/` und `facet/`
+löschen muss einen kompilierenden Collector hinterlassen.**
 
 Das war früher der Modulgraph, heute ist es `ModuleBoundaryTest` — der liest
-die Sources unter `munin/` und `api/` und verbietet `de.mhus.vance` sowie
-Imports der fünf Packages (Kommentare sind ausgenommen). Wenn etwas in Munin
-ein Brain braucht: es gehört in eines der fünf Packages, nicht in eine
-Ausnahme im Test. Begründung: `specs/architecture.md` §2.1.
+die Sources unter `munin/`, `api/`, `settings/` und `config/` und verbietet
+`de.mhus.vance` sowie Imports jener Packages (Kommentare sind ausgenommen).
+`settings/` und `config/` stehen mit in der Liste, weil `munin` sie importiert:
+ein Vance-Import dort wäre der Weg, die Regel hintenrum zu umgehen. Wenn etwas
+in Munin ein Brain braucht, gehört es nach `hugin/` — nicht in eine Ausnahme im
+Test. Begründung: `specs/architecture.md` §2.1.
 
-Runtime-Schaltbarkeit gehört dazu und bleibt so: `translate`/`classify` sind
-inert bis `vance.ode.base-url` gesetzt ist (sie rufen raus), `centauri`/
-`zarniwoop` sind **an, außer jemand schaltet sie ab** (sie antworten).
+Runtime-Schaltbarkeit gehört dazu und bleibt so: `hugin/*` ist inert bis
+`vance.ode.base-url` gesetzt ist (es ruft raus), `centauri`/`zarniwoop` sind
+**an, außer jemand schaltet sie ab** (sie antworten).
 
 ## Null-Safety mit JSpecify
 
@@ -162,23 +174,26 @@ und `ArticleContentDocument`, `SourceService` über `SourceDocument`, usw.
 
 Zwei Schichten, und die Reihenfolge ist die ganze Regel:
 
-1. **`MuninProperties`** bindet `application.yml` und die `HRAFNAGUD_*`-Env.
-   Das ist die **Default-Schicht**, nicht der Wert.
-2. **`MuninSettings`** legt darüber, was ein Operator in der `settings`-Collection
+1. **`config/`** bindet `application.yml` und die `HRAFNAGUD_*`-Env, eine Klasse
+   pro Wurzel: `MuninProperties` (`munin.*`), `HuginProperties` (`hugin.*`),
+   `HrafnagudProperties` (`hrafnagud.*`). Das ist die **Default-Schicht**, nicht
+   der Wert.
+2. **`Settings`** legt darüber, was ein Operator in der `settings`-Collection
    überschrieben hat — änderbar im Lauf, über `/api/v1/settings` oder die Console.
+   Ein Key trägt die Wurzel der Ebene, die den Wert besitzt.
 
 **Ein Betriebswert wird über ein Handle gelesen, nicht als Zahl gehalten:**
 
 ```java
-private final MuninSettings.Feed config;                  // im Konstruktor
+private final Settings.Feed config;                       // im Konstruktor
 sourceService.claimDue(now, config.batchSize().value());   // beim Gebrauch
 ```
 
 Das ist der Punkt der ganzen Konstruktion — die Konsumenten sind langlebige
 Singletons, und ein im Konstruktor gelesener `int` ist genau der Grund, warum
 eine Änderung früher einen Neustart brauchte. Neuer Wert → Deklaration in
-`MuninSettings` (Key = Property-Name, Default als Methodenreferenz auf
-`MuninProperties`, plus ein Satz, was er tut). Kein `settings.get("…")` mit
+`Settings` (Key = Property-Name inklusive Wurzel, Default als Methodenreferenz
+auf die passende Properties-Klasse, plus ein Satz, was er tut). Kein `settings.get("…")` mit
 String-Literal an der Lesestelle.
 
 **Nicht jeder Wert darf ein Setting sein.** Was beim Start gelesen wird, bleibt

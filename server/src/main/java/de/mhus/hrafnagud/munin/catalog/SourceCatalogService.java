@@ -8,7 +8,7 @@ import de.mhus.hrafnagud.api.source.FetchOutcome;
 import de.mhus.hrafnagud.munin.error.BadRequestException;
 import de.mhus.hrafnagud.munin.error.ConflictException;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.settings.Settings;
 import de.mhus.hrafnagud.munin.sourcelist.SourceListCandidate;
 import de.mhus.hrafnagud.munin.sourcelist.SourceListService;
 import de.mhus.hrafnagud.munin.util.Slugs;
@@ -55,13 +55,13 @@ public class SourceCatalogService {
     private final SourceCatalogRepository repository;
     private final MongoTemplate mongoTemplate;
     private final SourceListService listService;
-    private final MuninSettings.Catalog config;
-    private final MuninSettings.SourceList listConfig;
+    private final Settings.Catalog config;
+    private final Settings.SourceList listConfig;
     private final Map<String, CatalogReader> readers = new LinkedHashMap<>();
 
     public SourceCatalogService(SourceCatalogRepository repository, MongoTemplate mongoTemplate,
             SourceListService listService, List<CatalogReader> readerBeans,
-            MuninSettings settings) {
+            Settings settings) {
         this.repository = repository;
         this.mongoTemplate = mongoTemplate;
         this.listService = listService;

@@ -4,8 +4,8 @@ import com.github.pemistahl.lingua.api.IsoCode639_1;
 import com.github.pemistahl.lingua.api.Language;
 import com.github.pemistahl.lingua.api.LanguageDetector;
 import com.github.pemistahl.lingua.api.LanguageDetectorBuilder;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.config.MuninProperties;
+import de.mhus.hrafnagud.settings.Settings;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -34,7 +34,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class LinguaLanguageClassifier implements LanguageClassifier {
 
-    private final MuninSettings.Language config;
+    private final Settings.Language config;
 
     /**
      * What the detector itself is built from. Start-up only: the models are
@@ -49,7 +49,7 @@ public class LinguaLanguageClassifier implements LanguageClassifier {
 
     private final Object lock = new Object();
 
-    public LinguaLanguageClassifier(MuninProperties properties, MuninSettings settings) {
+    public LinguaLanguageClassifier(MuninProperties properties, Settings settings) {
         this.config = settings.getLanguage();
         this.model = properties.getLanguage();
     }

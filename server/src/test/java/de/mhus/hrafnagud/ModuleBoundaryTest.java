@@ -33,8 +33,16 @@ import org.junit.jupiter.api.Test;
  */
 class ModuleBoundaryTest {
 
-    /** Package roots that must stay ignorant of everything below. */
-    private static final List<String> INDEPENDENT = List.of("munin", "api");
+    /**
+     * Package roots that must stay ignorant of everything below.
+     *
+     * <p>Not just {@code munin} and {@code api}: {@code settings} and
+     * {@code config} are imported <em>by</em> munin, so a Vancetope import in
+     * either of them would put the whole contract on Munin's classpath through
+     * the back door.
+     */
+    private static final List<String> INDEPENDENT =
+            List.of("munin", "api", "settings", "config");
 
     /**
      * What they must not reach for: the Ode libraries, and the packages that
@@ -43,11 +51,12 @@ class ModuleBoundaryTest {
      */
     private static final List<String> FORBIDDEN = List.of(
             "de.mhus.vance",
-            "de.mhus.hrafnagud.translate",
-            "de.mhus.hrafnagud.classify",
+            // Hugin: everything that hands text to a model. One prefix covers
+            // hugin/translate and hugin/classify, and whatever thinks next.
+            "de.mhus.hrafnagud.hugin",
             "de.mhus.hrafnagud.centauri",
             "de.mhus.hrafnagud.zarniwoop",
-            // Not one of the four, and still outward-facing: it declares
+            // Not one of the three, and still outward-facing: it declares
             // Munin's fields as Ode facets and therefore imports vance-ode. An
             // import of it from munin would smuggle the whole contract in
             // through a package whose name does not say so.
@@ -105,11 +114,10 @@ class ModuleBoundaryTest {
 
         assertThat(violations)
                 .as("""
-                        Munin reaches outward. Deleting translate/, classify/, \
-                        centauri/ and zarniwoop/ has to leave a collector that \
+                        Munin reaches outward. Deleting hugin/, centauri/, \
+                        zarniwoop/ and facet/ has to leave a collector that \
                         still compiles — see specs/architecture.md §2.1. Move \
-                        whatever needs the brain into one of those four \
-                        packages instead.""")
+                        whatever needs a brain into hugin/ instead.""")
                 .isEmpty();
     }
 }

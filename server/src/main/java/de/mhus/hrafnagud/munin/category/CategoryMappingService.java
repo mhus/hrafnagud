@@ -2,7 +2,7 @@ package de.mhus.hrafnagud.munin.category;
 
 import de.mhus.hrafnagud.api.category.CategoryMappingStatus;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
-import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.settings.Settings;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -47,11 +47,11 @@ public class CategoryMappingService {
     private final MongoTemplate mongoTemplate;
     private final CategoryMatcher matcher;
     private final TopicRegistry topics;
-    private final MuninSettings.Category config;
+    private final Settings.Category config;
 
     public CategoryMappingService(CategoryMappingRepository repository,
             MongoTemplate mongoTemplate, CategoryMatcher matcher, TopicRegistry topics,
-            MuninSettings settings) {
+            Settings settings) {
         this.repository = repository;
         this.mongoTemplate = mongoTemplate;
         this.matcher = matcher;
