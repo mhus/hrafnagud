@@ -163,6 +163,32 @@ und `ArticleContentDocument`, `SourceService` über `SourceDocument`, usw.
   aus einem Parser, `*Query`/`*Cursor` = Abfrage-Parameter, `*Policy` = reine
   Entscheidungslogik ohne Spring (das ist die Stelle, die Unit-Tests bekommt).
 
+### MongoDB ist 4.4, und das bleibt so
+
+Der Zielserver läuft **MongoDB 4.4** — nicht als Altlast, sondern dauerhaft:
+ab 5.0 verlangt MongoDB **AVX**, und die Maschine hat es nicht. Lokal läuft
+dagegen ein aktuelles Mongo, und das ist die Falle: 8.x erlaubt Dinge, die 4.4
+beim **Anlegen eines Index** ablehnt, und `auto-index-creation` macht daraus
+einen Startfehler statt einer langsamen Query — sichtbar nur auf einer
+Datenbank, die schon existiert, also nie auf dem Laptop.
+
+Zwei Regeln, beide von `MongoIndexCompatibilityTest` geprüft, damit sie nicht
+erinnert werden müssen:
+
+- **Partial-Filter nur mit Gleichheit, `$exists: true`, Range-Operatoren,
+  `$type`, `$and`.** Kein `$in`, kein `$or` — die kommen erst mit 6.0. Ist der
+  Filter damit nicht ausdrückbar, ist die Frage meist, ob die Collection klein
+  genug ist, um ganz ohne auszukommen (`CategoryMappingDocument`).
+- **Kein zweiter Index auf demselben Key-Muster.** Ein eigener Name reicht
+  nicht, ein anderer Partial-Filter auch nicht (Fehler 85). Der schmalere Index
+  bekommt ein eigenes Muster — mit dem Feld voran, das sein Filter festnagelt
+  (`ArticleDocument.translation_lifo_idx`).
+
+Der Java-Treiber trägt 4.4 (sein Minimum wird gerade *auf* 4.4 gehoben), wir
+sitzen also am Boden des unterstützten Bereichs und nicht darunter. Alles, was
+neuer ist — Aggregations-Stufen ab 5.0, `$setWindowFields`, `$merge` — gilt hier
+als nicht vorhanden.
+
 ### Asynchrone Arbeit
 
 - Ein `@Scheduled`-Tick pro Pipeline (`FeedIngestTick`, `ContentFetchTick`,

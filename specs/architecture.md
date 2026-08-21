@@ -130,6 +130,24 @@ head across both repositories.
 | `article_contents` | extracted bodies, images, page metadata | bodies are ~50× larger than the metadata, and most queries want the metadata |
 | `enrichments` | output of processing steps, one document per run | see [enrichments.md](enrichments.md) §2 |
 
+### 4.0a The server is MongoDB 4.4
+
+Worth knowing before designing anything that touches an index: the deployment
+target runs MongoDB 4.4, and it stays there. MongoDB 5.0 and later require AVX
+and the machine does not have it, so this is a floor rather than a migration
+waiting to happen. The Java driver still supports 4.4 — its minimum is being
+raised *to* that version — so the stack is at the bottom of its supported range
+rather than outside it.
+
+The practical consequence is narrow but sharp: a partial index may only use
+equality, `$exists: true`, the range operators, `$type` and `$and`, and no two
+indexes of one collection may share a key pattern. Both are refused at index
+*creation*, which `auto-index-creation` turns into a failure to start — and only
+on a database that already exists, so a fresh local run never sees it. A newer
+local MongoDB is more permissive about both, which is why
+`MongoIndexCompatibilityTest` checks the declarations instead of trusting a
+local boot.
+
 ### 4.1 Queues are state fields, not queries
 
 Both asynchronous pipelines — body fetching and translation — are driven by a
