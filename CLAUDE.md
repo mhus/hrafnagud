@@ -13,8 +13,12 @@ Satz Regeln für beide Codebasen.
 ## Directories
 
 - Repo-Root: `/Users/hummel/sources/mhus/hrafnagud`
-- Java-Code (GPLv3, siehe `LICENSE`): `server/` — ein Maven-Artefakt, kein
-  Reactor. Der Zwischenordner ist Absicht, damit später ein `client/` daneben passt.
+- Java-Code (GPLv3, siehe `LICENSE`): `src/`, gebaut aus dem Repo-Root — ein
+  Maven-Artefakt, kein Reactor. Lag bis August 2026 unter `server/`, damit
+  später ein `client/` daneben passen würde; der Ordner hat den zweiten
+  Bewohner nie bekommen und kostete jeden Build-Aufruf ein `cd`. Kommt ein
+  Client, ist der Umzug zurück in einen Reactor derselbe Handgriff wie damals
+  heraus.
 - Referenz-Doku: `specs/` — ein Dokument pro Thema, Englisch. Kein Changelog,
   keine Task-Liste (siehe `specs/README.md`).
 - Planung / Brainstorming: `planning/` — Vorüberlegungen, Session-Exports,
@@ -26,7 +30,7 @@ Satz Regeln für beide Codebasen.
   liegt und nicht in vance-kits.
 - Container-Build und Alt-Manifeste: `deploy/` (siehe unten)
 - Datengeneratoren: `scripts/` — z.B. `generate-mediatopics-tsv.py` für
-  `server/src/main/resources/topics/iptc-mediatopics.tsv`
+  `src/main/resources/topics/iptc-mediatopics.tsv`
 - **Vancetope-Gegenseite:** `../vance-wb` — dort liegt `repos/vance-ode/`, also
   der REST-Contract, den `hugin/`, `centauri/` und `zarniwoop/` bedienen, plus `specification/public/centauri-service.md` und
   die `planning/centauri-*.md`. Contract-Fragen fangen dort an, nicht hier.
@@ -47,7 +51,7 @@ Satz Regeln für beide Codebasen.
   Thema ist
 - **Kommentare erklären das Warum.** Der Stil in diesem Repo ist, die nicht
   offensichtliche Entscheidung neben den Code zu schreiben, der sie umsetzt
-  (siehe `server/pom.xml`, `application.yml`, `ModuleBoundaryTest`). Eine
+  (siehe `pom.xml`, `application.yml`, `ModuleBoundaryTest`). Eine
   Entscheidung mit Tragweite über eine Klasse hinaus gehört zusätzlich in
   `specs/`
 
@@ -56,7 +60,7 @@ Satz Regeln für beide Codebasen.
 | Komponente | Technologie |
 |---|---|
 | Java | 25 |
-| Build | Maven, **ein** Modul (`de.mhus.hrafnagud:hrafnagud`, gebaut aus `server/`) |
+| Build | Maven, **ein** Modul (`de.mhus.hrafnagud:hrafnagud`), gebaut aus dem Repo-Root |
 | Framework | Spring Boot 4.1 |
 | Boilerplate | Lombok |
 | Null-Safety | JSpecify 1.0.1 (`@NullMarked` pro Package) |
@@ -216,7 +220,7 @@ Alternative ist, ihn am Live-Endpunkt zu entdecken.
 
 ### Console
 
-`server/src/main/resources/console/` — drei Dateien, kein Bundler, kein
+`src/main/resources/console/` — drei Dateien, kein Bundler, kein
 Framework, bewusst (`specs/console.md` §2). Bootstrap kommt vom CDN.
 
 **Die eine Regel, die nicht Stil ist:** jeder String aus der API ist
@@ -235,7 +239,7 @@ false` „nicht ausgeliefert" heißen muss.
   `@SpringBootTest`/`@WebMvcTest`/Testcontainers sind **opt-in** — auf Anfrage
   oder wenn ein Bug ohne sie nicht reproduzierbar ist, nicht prophylaktisch.
 - **Extraktion wird gegen den Fixture-Korpus getestet**, nicht gegen das Netz:
-  `server/src/test/resources/pages/` (siehe dessen `README.md`). Eine Seite,
+  `src/test/resources/pages/` (siehe dessen `README.md`). Eine Seite,
   die schlecht extrahiert, wird auf ihr Skelett reduziert und kommt dort dazu —
   das ist der Weg, `content-extraction` zu verbessern.
 - Nicht getestet: triviale Getter/Setter, Lombok-Generiertes,
@@ -250,13 +254,13 @@ false` „nicht ausgeliefert" heißen muss.
 Braucht eine MongoDB; Defaults erwarten `localhost:27017`.
 
 ```bash
-cd server && mvn install                  # Build inkl. Unit-Tests
-cd server && mvn test                     # nur Tests
-cd server && mvn test -Dtest=UrlNormalizerTest   # eine Klasse
-java -jar server/target/hrafnagud.jar     # :9800, Console auf /
+mvn install                               # Build inkl. Unit-Tests
+mvn test                                  # nur Tests
+mvn test -Dtest=UrlNormalizerTest         # eine Klasse
+java -jar target/hrafnagud.jar            # :9800, Console auf /
 
 # Feature-Schalter beim Start, ohne YAML anzufassen
-java -jar server/target/hrafnagud.jar --munin.content.enabled=true
+java -jar target/hrafnagud.jar --munin.content.enabled=true
 ```
 
 `mvn install` ist die Fertigstellungsprüfung für eine Änderung — die

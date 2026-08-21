@@ -48,7 +48,7 @@ REMOTE_BASE="${REGISTRY}/${NAMESPACE}/${IMAGE_NAME}"
 TAGS=("${TAG}")
 if [[ "${WITH_VERSION}" == "1" ]]; then
     version="$(project_version)"
-    [ -n "${version}" ] || die "could not read the version from server/pom.xml"
+    [ -n "${version}" ] || die "could not read the version from pom.xml"
     TAGS+=("${version}")
 fi
 

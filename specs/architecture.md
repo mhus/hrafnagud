@@ -15,7 +15,7 @@ lives in the consumer.
 
 ## 2. Packages
 
-One Maven artifact, `de.mhus.hrafnagud:hrafnagud`, built from `server/`.
+One Maven artifact, `de.mhus.hrafnagud:hrafnagud`, built from the repository root.
 
 ```
 de.mhus.hrafnagud.

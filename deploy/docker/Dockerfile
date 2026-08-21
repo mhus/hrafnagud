@@ -27,7 +27,7 @@ FROM eclipse-temurin:25-jre-noble AS extractor
 # The JAR sits outside the destination directory on purpose: `extract`
 # refuses a destination that is not empty, so extracting into the directory
 # holding the JAR fails.
-COPY server/target/hrafnagud.jar /hrafnagud.jar
+COPY target/hrafnagud.jar /hrafnagud.jar
 # --launcher keeps the Spring Boot loader as its own layer, which lets the
 # runtime stage start via JarLauncher against the exploded tree instead of
 # the JAR. `-Djarmode=tools` is the Boot 3.3+ successor to the older

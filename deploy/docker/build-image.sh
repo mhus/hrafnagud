@@ -4,7 +4,7 @@
 #
 # Runs the Maven build first (unless SKIP_MAVEN=1) and then `docker build`
 # with the repository root as context, because the Dockerfile copies the JAR
-# from server/target/.
+# from target/.
 #
 # Usage:
 #   deploy/docker/build-image.sh                     # :latest, host arch
@@ -35,15 +35,15 @@ done
 
 IMAGE_TAG="${IMAGE_TAG:-latest}${ARCH_SUFFIX}"
 SKIP_MAVEN="${SKIP_MAVEN:-0}"
-JAR="${REPO_ROOT}/server/target/hrafnagud.jar"
+JAR="${REPO_ROOT}/target/hrafnagud.jar"
 
 cd "${REPO_ROOT}"
 
 if [[ "${SKIP_MAVEN}" != "1" ]]; then
-    log "mvn -f server/pom.xml install (set SKIP_MAVEN=1 to skip)"
+    log "mvn install (set SKIP_MAVEN=1 to skip)"
     # install, not package: a sibling checkout may want the artifact out of
     # the local repository.
-    mvn -f server/pom.xml install
+    mvn install
 fi
 
 [ -f "${JAR}" ] || die "missing ${JAR#"${REPO_ROOT}/"} — run without SKIP_MAVEN=1"

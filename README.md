@@ -14,7 +14,7 @@ analyses. Today only Munin exists.
 
 ## Layout
 
-One Maven artifact, built from `server/`. The packages carry the structure:
+One Maven artifact, built from the repository root. The packages carry the structure:
 
 ```
 de.mhus.hrafnagud.
@@ -34,7 +34,7 @@ de.mhus.hrafnagud.
   server/     Entrypoint plus runtime wiring, nothing else.
 ```
 
-Beside `server/` sits [`kits/`](kits/) — the brain side of what `hugin/` calls,
+Beside `src/` sits [`kits/`](kits/) — the brain side of what `hugin/` calls,
 as Vancetope kits installable straight from this repository.
 
 **The two ravens are the layering.** Munin remembers: it collects, deduplicates
@@ -59,7 +59,7 @@ detection), JUnit 5 + Mockito + AssertJ.
 Needs a MongoDB. The defaults expect one on `localhost:27017`:
 
 ```bash
-cd server && mvn install
+mvn install
 java -jar target/hrafnagud.jar
 ```
 
@@ -231,7 +231,7 @@ works through whatever has accumulated, since ingest queues everything — at
 start-up, or while it runs:
 
 ```bash
-java -jar server/target/hrafnagud.jar --munin.content.enabled=true
+java -jar target/hrafnagud.jar --munin.content.enabled=true
 
 curl -X PUT localhost:9800/api/v1/settings/munin.content.enabled \
      -H 'Content-Type: application/json' -d '{"value":"true"}'

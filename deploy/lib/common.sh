@@ -129,10 +129,10 @@ check_ssh_key() {
 }
 
 # ── misc ────────────────────────────────────────────────────────────────
-# Project version straight from the aggregator POM, without invoking Maven
+# Project version straight from the POM, without invoking Maven
 # (which would cost seconds and needs a working settings.xml). Used for
 # version-tagged pushes.
 project_version() {
     sed -n 's|^[[:space:]]*<version>\(.*\)</version>.*|\1|p' \
-        "${REPO_ROOT}/server/pom.xml" | sed -n 2p
+        "${REPO_ROOT}/pom.xml" | sed -n 2p
 }
