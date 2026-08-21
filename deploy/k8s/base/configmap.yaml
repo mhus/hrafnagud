@@ -41,6 +41,19 @@ data:
   # translation would mark everything ingested meanwhile as SKIPPED for good.
   HRAFNAGUD_TRANSLATION_ENABLED: "false"
   HRAFNAGUD_PIVOT_LANGUAGE: ""
+  # Languages that need no translation at all, comma-separated. The pivot
+  # language always counts as one, so list only the others a reader here can
+  # already read — with pivot "de" and this "en", neither German nor English
+  # articles are queued.
+  HRAFNAGUD_READABLE_LANGUAGES: ""
+  # Which provider does the work: "vance-ode" (a brain) or "gemini" (the
+  # model, called directly). Empty picks the only one that is wired, and is
+  # an error state when both are — nothing translates until this names one.
+  HRAFNAGUD_TRANSLATION_PROVIDER: ""
+  # Only for the gemini path. As Google's API names it; they rename and
+  # retire these on their own schedule, which is why it is reachable here
+  # rather than baked in.
+  HRAFNAGUD_GEMINI_MODEL: "gemini-3.5-flash-lite"
 
   # Vancetope binding. Everything stays inert while VANCE_BRAIN_URL is
   # empty — no client, no translation provider, no outbound traffic. The

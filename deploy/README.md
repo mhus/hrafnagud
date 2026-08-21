@@ -115,11 +115,21 @@ Secrets), create a Secret of that name with those keys and pass
 
 Two independent directions, both off by default:
 
-- **Translation** — hrafnagud calls the brain. Needs `VANCE_BRAIN_URL`,
-  `VANCE_TENANT` and `VANCE_TRANSLATE_TOKEN` *and* both translation switches
-  (`HRAFNAGUD_TRANSLATION_ENABLED=true` plus `HRAFNAGUD_PIVOT_LANGUAGE`).
-  In-cluster, if the brain runs in the `vance` namespace of the same cluster:
+- **Translation, through a brain** — hrafnagud calls Vancetope. Needs
+  `VANCE_BRAIN_URL`, `VANCE_TENANT` and `VANCE_TRANSLATE_TOKEN` *and* both
+  translation switches (`HRAFNAGUD_TRANSLATION_ENABLED=true` plus
+  `HRAFNAGUD_PIVOT_LANGUAGE`). In-cluster, if the brain runs in the `vance`
+  namespace of the same cluster:
   `VANCE_BRAIN_URL=http://brain.vance.svc.cluster.local:9990`.
+- **Translation, calling a model directly** — the other path. Needs
+  `GEMINI_API_KEY` (a Secret key, so it goes in the env file that
+  `render-secret.sh` reads) plus the same two switches. `HRAFNAGUD_GEMINI_MODEL`
+  overrides which model, since Google renames and retires them. **With both
+  paths wired, nothing translates until `HRAFNAGUD_TRANSLATION_PROVIDER` names
+  one** (`vance-ode` or `gemini`) — picking one of two ways to spend money by
+  accident would be worse than saying so, and the startup log says so.
+  `HRAFNAGUD_READABLE_LANGUAGES` is worth setting either way: languages listed
+  there are never queued, and for a bilingual reader that is half the bill.
 - **Centauri** — the brain calls hrafnagud, to read the archive as a feed
   source. Needs `HRAFNAGUD_CENTAURI_ENABLED=true` and, before you expose it,
   `HRAFNAGUD_CENTAURI_API_KEY`.

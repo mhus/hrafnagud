@@ -55,6 +55,10 @@ data:
   # Ursa event token for the brain-side translation kit. Empty is fine; the
   # translation subsystem is inert unless VANCE_BRAIN_URL is set too.
   VANCE_TRANSLATE_TOKEN: "$(b64 "${VANCE_TRANSLATE_TOKEN:-}")"
+  # Google AI key for the other translation path — the model called directly
+  # instead of through a brain. Empty means that provider is not wired; with
+  # both wired, HRAFNAGUD_TRANSLATION_PROVIDER in the ConfigMap decides.
+  GEMINI_API_KEY: "$(b64 "${GEMINI_API_KEY:-}")"
   # Bearer key guarding the Centauri feed endpoint. Empty means no check at
   # all — acceptable only behind a proxy that authenticates for it.
   HRAFNAGUD_CENTAURI_API_KEY: "$(b64 "${HRAFNAGUD_CENTAURI_API_KEY:-}")"
