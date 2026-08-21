@@ -20,15 +20,23 @@ import org.jspecify.annotations.Nullable;
  * files satisfies that formally and is unusable in practice — which is the
  * whole reason for the levels below.
  *
- * <p>Partitioned by hour, from measurement rather than taste: at a few
- * thousand articles a day a per-day folder holds four to five thousand
- * entries, and a per-hour folder holds a couple of hundred. Every level of the
- * walk down is bounded — twelve months, thirty-one days, twenty-four hours —
- * so no listing anywhere in the tree is large.
+ * <p>Partitioned down to the minute, and the depth is measured rather than
+ * chosen. Steady state is three to five thousand articles a day, so an hourly
+ * folder would hold a couple of hundred — comfortable. But arrival is
+ * <b>bursty</b>: filling a fresh archive means every source delivering its
+ * whole feed window at once, and in a real one that put <b>20,229</b> articles
+ * into a single hour and 2,009 into its busiest minute. A listing writes a
+ * metadata row per entry on the reader's side, so a twenty-thousand-entry
+ * folder is not a tidiness problem.
+ *
+ * <p>A minute leaf holds two to four in steady state and a couple of thousand
+ * at the peak of a mass import. That residue is a property of bursty arrival
+ * rather than of the layout — no time partitioning removes it, it happens once
+ * per archive, and nothing forces anyone to browse into that minute.
  *
  * <pre>
- * article/2026/08/21/14/68a7c1f2e4b09d3a5c6e7f80.md
- * img/2026/08/21/14/276a1ac0…44ab9d9.jpg
+ * article/2026/08/21/14/37/68a7c1f2e4b09d3a5c6e7f80.md
+ * img/2026/08/21/14/37/276a1ac0…44ab9d9.jpg
  * </pre>
  *
  * <h2>Two properties that cannot be changed later</h2>
@@ -54,7 +62,10 @@ public final class ArchivePath {
     public static final String ARTICLE_SUFFIX = ".md";
 
     private static final DateTimeFormatter PARTITION =
-            DateTimeFormatter.ofPattern("yyyy/MM/dd/HH", Locale.ROOT).withZone(ZoneOffset.UTC);
+            DateTimeFormatter.ofPattern("yyyy/MM/dd/HH/mm", Locale.ROOT).withZone(ZoneOffset.UTC);
+
+    /** Segments in a full file path: subtree, five partition levels, file name. */
+    private static final int SEGMENTS = 7;
 
     /**
      * File extension per stored media type.
@@ -85,7 +96,7 @@ public final class ArchivePath {
      *
      * @param kind      subtree the path belongs to
      * @param id        object id — what a lookup needs, and all it needs
-     * @param partition the {@code yyyy/MM/dd/HH} the path spelled, to be
+     * @param partition the {@code yyyy/MM/dd/HH/mm} the path spelled, to be
      *                  checked against the object that comes back
      */
     public record Ref(Kind kind, String id, String partition) {
@@ -128,8 +139,8 @@ public final class ArchivePath {
      */
     public static Optional<Ref> parse(String path) {
         String[] segments = StringUtils.strip(path, "/").split("/");
-        if (segments.length != 6) {
-            // subtree / yyyy / MM / dd / HH / file
+        if (segments.length != SEGMENTS) {
+            // subtree / yyyy / MM / dd / HH / mm / file
             return Optional.empty();
         }
         Kind kind = switch (segments[0]) {
@@ -140,11 +151,12 @@ public final class ArchivePath {
         if (kind == null || !isPartition(segments, 1)) {
             return Optional.empty();
         }
-        String id = stripExtension(kind, segments[5]);
+        String id = stripExtension(kind, segments[SEGMENTS - 1]);
         if (!isHexOrObjectId(id)) {
             return Optional.empty();
         }
-        String partition = segments[1] + "/" + segments[2] + "/" + segments[3] + "/" + segments[4];
+        String partition = String.join("/", segments[1], segments[2], segments[3],
+                segments[4], segments[5]);
         return Optional.of(new Ref(kind, id, partition));
     }
 
@@ -157,7 +169,8 @@ public final class ArchivePath {
         return isDigits(segments[from], 4)
                 && isDigits(segments[from + 1], 2)
                 && isDigits(segments[from + 2], 2)
-                && isDigits(segments[from + 3], 2);
+                && isDigits(segments[from + 3], 2)
+                && isDigits(segments[from + 4], 2);
     }
 
     private static boolean isDigits(String value, int length) {

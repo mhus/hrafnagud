@@ -23,19 +23,19 @@ class ArchivePathTest {
     // ─── Building ───
 
     @Test
-    void article_isPartitionedByHour() {
+    void article_isPartitionedByMinute() {
         assertThat(ArchivePath.ofArticle(ARTICLE_ID, SEEN))
-                .isEqualTo("article/2026/08/21/14/68a7c1f2e4b09d3a5c6e7f80.md");
+                .isEqualTo("article/2026/08/21/14/37/68a7c1f2e4b09d3a5c6e7f80.md");
     }
 
     @Test
     void image_takesItsExtensionFromTheMediaType() {
         assertThat(ArchivePath.ofImage(IMAGE_ID, SEEN, "image/jpeg"))
-                .contains("img/2026/08/21/14/" + IMAGE_ID + ".jpg");
+                .contains("img/2026/08/21/14/37/" + IMAGE_ID + ".jpg");
         assertThat(ArchivePath.ofImage(IMAGE_ID, SEEN, "image/png"))
-                .contains("img/2026/08/21/14/" + IMAGE_ID + ".png");
+                .contains("img/2026/08/21/14/37/" + IMAGE_ID + ".png");
         assertThat(ArchivePath.ofImage(IMAGE_ID, SEEN, "IMAGE/WEBP "))
-                .contains("img/2026/08/21/14/" + IMAGE_ID + ".webp");
+                .contains("img/2026/08/21/14/37/" + IMAGE_ID + ".webp");
     }
 
     @Test
@@ -54,13 +54,13 @@ class ArchivePathTest {
         // here, the same object would live at two paths depending on where the
         // service runs.
         assertThat(ArchivePath.ofArticle(ARTICLE_ID, Instant.parse("2026-08-21T23:30:00Z")))
-                .contains("2026/08/21/23");
+                .contains("2026/08/21/23/30");
     }
 
     @Test
     void midnight_andEndOfYear_keepTheirZeros() {
         assertThat(ArchivePath.ofArticle(ARTICLE_ID, Instant.parse("2026-01-01T00:00:00Z")))
-                .isEqualTo("article/2026/01/01/00/" + ARTICLE_ID + ".md");
+                .isEqualTo("article/2026/01/01/00/00/" + ARTICLE_ID + ".md");
     }
 
     // ─── Resolving ───
@@ -87,7 +87,7 @@ class ArchivePathTest {
 
     @Test
     void leadingSlash_isTolerated() {
-        assertThat(ArchivePath.parse("/article/2026/08/21/14/" + ARTICLE_ID + ".md")).isPresent();
+        assertThat(ArchivePath.parse("/article/2026/08/21/14/37/" + ARTICLE_ID + ".md")).isPresent();
     }
 
     @Test
@@ -98,11 +98,11 @@ class ArchivePathTest {
                 ArchivePath.parse(ArchivePath.ofArticle(ARTICLE_ID, SEEN)).orElseThrow();
 
         assertThat(ref.matches(SEEN)).isTrue();
-        assertThat(ref.matches(SEEN.plusSeconds(3600)))
-                .as("an hour later is a different partition")
-                .isFalse();
         assertThat(ref.matches(SEEN.plusSeconds(60)))
-                .as("a minute later is the same partition")
+                .as("a minute later is a different partition")
+                .isFalse();
+        assertThat(ref.matches(SEEN.plusSeconds(20)))
+                .as("still inside the same minute")
                 .isTrue();
     }
 
@@ -110,52 +110,56 @@ class ArchivePathTest {
 
     @Test
     void unknownSubtree_isRejected() {
-        assertThat(ArchivePath.parse("audio/2026/08/21/14/" + ARTICLE_ID + ".md")).isEmpty();
+        assertThat(ArchivePath.parse("audio/2026/08/21/14/37/" + ARTICLE_ID + ".md")).isEmpty();
     }
 
     @Test
     void wrongDepth_isRejected() {
-        assertThat(ArchivePath.parse("article/2026/08/21/" + ARTICLE_ID + ".md")).isEmpty();
-        assertThat(ArchivePath.parse("article/2026/08/21/14/15/" + ARTICLE_ID + ".md")).isEmpty();
+        assertThat(ArchivePath.parse("article/2026/08/21/14/" + ARTICLE_ID + ".md"))
+                .as("one level short — that is the minute folder, not a file")
+                .isEmpty();
+        assertThat(ArchivePath.parse("article/2026/08/21/14/37/00/" + ARTICLE_ID + ".md"))
+                .as("one level too deep")
+                .isEmpty();
         assertThat(ArchivePath.parse("article")).isEmpty();
         assertThat(ArchivePath.parse("")).isEmpty();
     }
 
     @Test
     void nonNumericPartition_isRejected() {
-        assertThat(ArchivePath.parse("article/2026/aug/21/14/" + ARTICLE_ID + ".md")).isEmpty();
-        assertThat(ArchivePath.parse("article/26/08/21/14/" + ARTICLE_ID + ".md")).isEmpty();
+        assertThat(ArchivePath.parse("article/2026/aug/21/14/37/" + ARTICLE_ID + ".md")).isEmpty();
+        assertThat(ArchivePath.parse("article/26/08/21/14/37/" + ARTICLE_ID + ".md")).isEmpty();
     }
 
     @Test
     void traversalAttempts_areRejected() {
         // The id shape is what stops a path segment from reaching a query as
         // anything other than hex.
-        assertThat(ArchivePath.parse("article/2026/08/21/14/../../../etc/passwd")).isEmpty();
-        assertThat(ArchivePath.parse("article/2026/08/21/14/..%2f..%2fpasswd.md")).isEmpty();
-        assertThat(ArchivePath.parse("img/2026/08/21/14/*.jpg")).isEmpty();
+        assertThat(ArchivePath.parse("article/2026/08/21/14/37/../../../etc/passwd")).isEmpty();
+        assertThat(ArchivePath.parse("article/2026/08/21/14/37/..%2f..%2fpasswd.md")).isEmpty();
+        assertThat(ArchivePath.parse("img/2026/08/21/14/37/*.jpg")).isEmpty();
     }
 
     @Test
     void nonHexId_isRejected() {
-        assertThat(ArchivePath.parse("article/2026/08/21/14/ZZZ7c1f2e4b09d3a5c6e7f80.md"))
+        assertThat(ArchivePath.parse("article/2026/08/21/14/37/ZZZ7c1f2e4b09d3a5c6e7f80.md"))
                 .isEmpty();
-        assertThat(ArchivePath.parse("article/2026/08/21/14/68A7C1F2E4B09D3A5C6E7F80.md"))
+        assertThat(ArchivePath.parse("article/2026/08/21/14/37/68A7C1F2E4B09D3A5C6E7F80.md"))
                 .as("upper case is not how either id is written")
                 .isEmpty();
     }
 
     @Test
     void wrongIdLength_isRejected() {
-        assertThat(ArchivePath.parse("article/2026/08/21/14/abc.md")).isEmpty();
-        assertThat(ArchivePath.parse("img/2026/08/21/14/" + IMAGE_ID + "ff.jpg")).isEmpty();
+        assertThat(ArchivePath.parse("article/2026/08/21/14/37/abc.md")).isEmpty();
+        assertThat(ArchivePath.parse("img/2026/08/21/14/37/" + IMAGE_ID + "ff.jpg")).isEmpty();
     }
 
     @Test
     void folderPartition_isTheSameFormat() {
         // The listing side has to agree with the building side, or a folder
         // lists files that claim to be elsewhere.
-        assertThat(ArchivePath.partitionOf(SEEN)).isEqualTo("2026/08/21/14");
+        assertThat(ArchivePath.partitionOf(SEEN)).isEqualTo("2026/08/21/14/37");
         assertThat(ArchivePath.ofArticle(ARTICLE_ID, SEEN))
                 .contains(ArchivePath.partitionOf(SEEN));
     }

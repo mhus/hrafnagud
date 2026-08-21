@@ -29,6 +29,17 @@ spring:
     uri: mongodb://root:example@localhost:27017/hrafnagud?authSource=admin
     database: hrafnagud
 
+munin:
+  # Serve the archive as a mounted file tree. Off in the committed defaults,
+  # because there an unguarded /ode/files is a file server; on here, because
+  # this file only ever applies to a laptop and the alternative is remembering
+  # a --flag on every run.
+  #
+  # Start-up only, not a setting: it decides whether the endpoint exists at
+  # all, so changing it needs a restart rather than a PUT.
+  jaglan:
+    enabled: true
+
 logging:
   level:
     # The decisions, without the transport chatter. Feed polls, extraction

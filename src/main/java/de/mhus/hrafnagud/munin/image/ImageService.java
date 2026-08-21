@@ -222,6 +222,39 @@ public class ImageService {
                 .filter(image -> image.getStatus().stored() && image.getData() != null);
     }
 
+    /**
+     * Metadata for one image by its id, without the bytes.
+     *
+     * <p>The by-id twin of {@link #stat(String)}: a caller holding a derived
+     * address has the id already, and making it hash a URL back would mean
+     * carrying the URL around for no reason.
+     */
+    public Optional<ImageDocument> statById(String id) {
+        Query query = Query.query(Criteria.where("_id").is(id));
+        query.fields().exclude(F_DATA);
+        return Optional.ofNullable(mongoTemplate.findOne(query, ImageDocument.class));
+    }
+
+    /** The bytes of one stored image by id. */
+    public Optional<ImageDocument> loadById(String id) {
+        return repository.findById(id)
+                .filter(image -> image.getStatus().stored() && image.getData() != null);
+    }
+
+    /**
+     * Stored images first seen in {@code [from, to)}, without the bytes.
+     *
+     * <p>Bounded by the caller's range rather than by a limit, because the
+     * caller is a folder listing and a listing that omits an entry is read as
+     * a deletion. What keeps it small is how narrow the range is.
+     */
+    public List<ImageDocument> storedBetween(Instant from, Instant to) {
+        Query query = Query.query(Criteria.where(F_STATUS).is(ImageStatus.STORED)
+                .and("firstSeenAt").gte(from).lt(to));
+        query.fields().exclude(F_DATA);
+        return mongoTemplate.find(query, ImageDocument.class);
+    }
+
     /** Counts per status, for the stats endpoint and the console. */
     public Map<ImageStatus, Long> countByStatus() {
         Map<ImageStatus, Long> counts = new LinkedHashMap<>();

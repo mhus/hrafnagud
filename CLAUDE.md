@@ -70,7 +70,7 @@ Satz Regeln für beide Codebasen.
 | HTML / OPML | jsoup |
 | Spracherkennung | Lingua |
 | Utility | Apache Commons (`StringUtils.isBlank(…)`) |
-| Vancetope-Anbindung | `de.mhus.vance.ode:vance-ode-{ursa,centauri,zarniwoop}` |
+| Vancetope-Anbindung | `de.mhus.vance.ode:vance-ode-{ursa,centauri,zarniwoop,jaglan}` |
 | Tests | JUnit 5, Mockito, AssertJ |
 | Console | statisches HTML + Vanilla-JS, kein Build-Step |
 
@@ -126,7 +126,10 @@ Test. Begründung: `specs/architecture.md` §2.1.
 
 Runtime-Schaltbarkeit gehört dazu und bleibt so: `hugin/*` ist inert bis
 `vance.ode.base-url` gesetzt ist (es ruft raus), `centauri`/`zarniwoop` sind
-**an, außer jemand schaltet sie ab** (sie antworten).
+**an, außer jemand schaltet sie ab** (sie antworten). `jaglan` ist **aus, bis
+jemand es einschaltet** — es liefert Dateiinhalte unter begehbaren Pfaden aus,
+ein unbewachter Pfad ist damit ein Fileserver und kein Lesezugriff auf
+zusammengesetzte Antworten (`specs/jaglan.md` §4.1).
 
 ## Null-Safety mit JSpecify
 

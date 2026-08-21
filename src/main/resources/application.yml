@@ -278,6 +278,17 @@ munin:
   zarniwoop:
     enabled: ${HRAFNAGUD_ZARNIWOOP_ENABLED:true}
 
+  # The third Vancetope-facing surface: the archive as a mounted file tree,
+  # article texts as Markdown and stored images as bytes.
+  #
+  # Off by default, unlike the two above, and the difference is what the
+  # endpoint hands out. Those serve answers assembled from the archive; this
+  # one serves file contents under paths a caller can walk, so an unguarded
+  # path is a file server rather than a read-only view. Doing nothing is the
+  # closed state here.
+  jaglan:
+    enabled: ${HRAFNAGUD_JAGLAN_ENABLED:false}
+
 # Vancetope binding (vance-ode). Everything here is inert until base-url
 # is set — no client, no translation provider, no outbound traffic. The
 # brain side is the `translation` kit: it defines the event, the script
@@ -411,6 +422,14 @@ vance:
       # Ceiling on what one request may cost, independent of what the
       # source declares it can serve.
       maxLimit: 200
+    jaglan:
+      path: ${HRAFNAGUD_JAGLAN_PATH:/ode/files}
+      # The shared secret with the reader's mount configuration
+      # (jaglan.mount.<name>.apiKey on the brain side). Worth setting even
+      # where the others are left open: this path serves file contents.
+      apiKey: ${HRAFNAGUD_JAGLAN_API_KEY:}
+      defaultSearchLimit: 25
+      maxSearchLimit: 200
     zarniwoop:
       path: ${HRAFNAGUD_ZARNIWOOP_PATH:/ode/search}
       apiKey: ${HRAFNAGUD_ZARNIWOOP_API_KEY:}

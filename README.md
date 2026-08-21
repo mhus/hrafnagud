@@ -275,6 +275,34 @@ discovered by extraction, and an archive whose bodies were fetched while
 copying was off keeps the image list but has nothing queued (see
 [images.md](specs/images.md) §3.1 — there is deliberately no backfill).
 
+## The archive as a file tree
+
+`munin.jaglan.enabled` serves the archive to Vancetope as a **mounted file
+tree**: every article as Markdown, every stored image as bytes, under paths that
+mean the same file tomorrow.
+
+```bash
+java -jar target/hrafnagud.jar --munin.jaglan.enabled=true
+
+curl 'localhost:9800/ode/files/list?path=article/2026/08/21/14/37'
+curl 'localhost:9800/ode/files/content?path=article/2026/08/21/14/37/<id>.md'
+```
+
+On the brain side it becomes `vance:/_ext/hrafnagud/article/…` and is read with
+the ordinary document tools. Two things to know before enabling it:
+
+- **Off by default**, unlike the Centauri and Zarniwoop surfaces, because this
+  one serves *file contents* rather than assembled answers — an unguarded path
+  is a file server. `vance.ode.jaglan.apiKey` is the shared secret with the
+  mount's own configuration on the reader's side; enabling without one logs a
+  WARN naming what is exposed.
+- **Every article is a file**, whether or not its body was fetched — title,
+  teaser, sources and link are already a document. Images appear only where
+  `munin.image.enabled` made a copy.
+
+The tree is partitioned down to the minute, which is measured rather than
+chosen: [jaglan.md](specs/jaglan.md) §2 has the distribution that decided it.
+
 ## Filter rules
 
 Fetching a body costs a request and translating costs tokens. Which articles are
