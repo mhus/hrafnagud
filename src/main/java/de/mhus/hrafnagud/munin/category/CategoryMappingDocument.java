@@ -41,7 +41,14 @@ import org.springframework.data.mongodb.core.mapping.Document;
         //
         // `{ status: 1 }` alone is gone with it: this index has it as a prefix,
         // so the counts-by-status queries are served by the same one.
-        @CompoundIndex(name = "category_queue_idx",
+        //
+        // A new name, because the key pattern is new. `category_queue_idx` was
+        // `{ nextAttemptAt: 1 }`, and re-declaring a name over a different
+        // pattern is error 86 (IndexKeySpecsConflict) — refused at creation, so
+        // a boot failure on every database that already has the old one, and
+        // never on a fresh schema. The stale index stays behind costing write
+        // rate until somebody drops it; that is the cheap half of the trade.
+        @CompoundIndex(name = "category_status_queue_idx",
                 def = "{ 'status': 1, 'nextAttemptAt': 1 }")
 })
 @Data

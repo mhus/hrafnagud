@@ -87,11 +87,6 @@ import org.springframework.data.mongodb.core.mapping.Language;
         // skipping the few that are leased or backed off is cheap, because in
         // a healthy queue nearly every PENDING article is due.
         //
-        // A new name rather than a new definition under the old one: Mongo
-        // refuses to redefine an index in place, so an existing deployment
-        // would fail to start. The old `translation_queue_idx` is now unused
-        // and can be dropped by hand — nothing creates it any more.
-        //
         // The status leads the key although the partial filter already pins it
         // to PENDING, and that redundancy is the point: `{ firstSeenAt: -1 }`
         // alone is `seen_idx`, and Mongo rejects a second index with the same
@@ -101,7 +96,17 @@ import org.springframework.data.mongodb.core.mapping.Language;
         // seen_idx, which is every existing installation. Leading with the
         // equality field also happens to be the textbook shape for
         // equality-then-sort.
-        @CompoundIndex(name = "translation_lifo_idx",
+        //
+        // A name per key pattern, and this is the third of them. Two are
+        // retired and nothing creates them any more: `translation_queue_idx`
+        // ({ translationNextAttemptAt: 1 }) went with the switch to LIFO, and
+        // `translation_lifo_idx` ({ firstSeenAt: -1 }) went when the pattern
+        // gained its leading status field — that one was rejected by the
+        // cluster before it existed there, but a permissive local MongoDB 8
+        // did create it, and re-declaring a name over a different pattern is
+        // error 86 (IndexKeySpecsConflict) on any database that holds it.
+        // MongoIndexCompatibilityTest keeps the retired names out.
+        @CompoundIndex(name = "translation_status_lifo_idx",
                 def = "{ 'translationStatus': 1, 'firstSeenAt': -1 }",
                 partialFilter = "{ 'translationStatus': 'PENDING' }"),
         // Re-evaluating the filter rules walks the archive oldest-examined

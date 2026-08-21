@@ -119,7 +119,7 @@ Same mechanism as the two asynchronous pipelines that already exist
 ([architecture.md](architecture.md) §4.1): a status field driving the work, and
 `nextAttemptAt` doubling as the claim lease (§4.2).
 
-The index is **not** partial here, unlike theirs — `category_queue_idx
+The index is **not** partial here, unlike theirs — `category_status_queue_idx
 { status: 1, nextAttemptAt: 1 }`, equality before range. Two reasons pointing
 the same way. This backlog is bounded by the vocabulary rather than by the news
 volume (§5), so a full index over some thousands of rows costs nothing worth
@@ -127,6 +127,13 @@ saving. And the filter it would need, `status $in [NEW, GUESSED]`, is not among
 the expressions a partial index accepts before MongoDB 6.0 — the server refuses
 it at index *creation*, which makes it a boot failure rather than a slow query,
 and the cluster this deploys to runs 4.4.
+
+The name is its own, not the `category_queue_idx` this replaces: that one is
+`{ nextAttemptAt: 1 }` on every database that already has it, and a name over a
+new key pattern is error 86 at creation — a boot failure, and only where the old
+index exists ([architecture.md](architecture.md) §4.1). `category_status_idx
+{ status: 1 }` is retired with it; the new index has status as its prefix and
+serves the counts-by-status queries too.
 
 | Status | Meaning |
 |---|---|

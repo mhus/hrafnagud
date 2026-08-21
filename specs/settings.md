@@ -165,6 +165,30 @@ string, and the mismatch would surface in a worker at three in the morning;
 instead the value is parsed against the declared type before anything is stored,
 so `PT5X` is a 400 at the API.
 
+**The type carries a range where the type alone would not be enough**, because
+"parses" and "a worker can use it" are not the same thing, and the gap is
+occupied by exactly one value: zero.
+
+- A count (`INT`, `LONG`) must be positive. `munin.feed.batchSize: 0` claims
+  zero sources per round, for ever, while `WorkerSwitch` keeps logging the
+  worker as on — a service that has stopped doing anything and says it is fine.
+  `hugin.translation.maxSourceChars: 0` is worse than idle: it truncates every
+  title to nothing, and the article is then charged its whole attempt budget for
+  having no title to translate, so a single write empties the backlog into
+  `FAILED`.
+- A fraction (`DOUBLE`) must be between zero and one, and finite. `NaN` and the
+  infinities parse happily and then poison every comparison they reach without
+  ever throwing; a confidence above one is compared against a score that cannot
+  reach it, and a temperature outside the range is rejected by the provider one
+  call later.
+- A duration must not be negative — the oldest of these checks, and the model
+  for the rest.
+
+The range lives in the `Setting` subclass rather than at each declaration,
+because it is a property of what the type *means* here: every whole number in
+this catalogue is a count of something to do. A setting that genuinely wanted
+zero would be a different type, not an exception.
+
 The console renders the same catalogue under **Einstellungen**, grouped by
 section, editing in place. That is within what the console is for — it changes
 what an operator is looking at while looking at it, and every change is
@@ -175,10 +199,16 @@ reversible with the same click (see [console.md](console.md) §1).
 - **No history.** A row carries `updatedAt` and the current value; what it was
   before, and who changed it, is not recorded. The log line for the write is the
   only trace, and it is not queryable.
-- **No validation beyond the type.** `batchSize` accepts `0` and
-  `minInterval` accepts a value above `maxInterval`; nothing checks pairs
-  against each other, and the results are the ones you would expect. Bounds per
-  setting are a plausible next step and are not there.
+- **No validation across settings.** Each value is checked against its own type
+  and range (§6), and nothing checks a pair: `minInterval` accepts a value above
+  `maxInterval`, and the result is the one you would expect. Bounds per
+  individual key — a batch size capped at some sane maximum, say — are a
+  plausible next step and are not there either.
+- **An undeclared override is reported, not removed.** A key nothing declares —
+  most often one renamed in a release — is named in the log once at startup and
+  once whenever it first appears, and then left alone. Deleting somebody's
+  stored value because this build does not recognise it is the more destructive
+  reading of the same fact.
 - **Reload is a poll.** Writes through the API are visible at once because the
   write path reloads; an edit made straight in the database is picked up within
   `hrafnagud.settings.refreshInterval` (30 s). A second instance therefore converges

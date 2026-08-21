@@ -2,11 +2,15 @@ package de.mhus.hrafnagud.settings;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import de.mhus.hrafnagud.config.HuginProperties;
 import de.mhus.hrafnagud.config.MuninProperties;
 import de.mhus.hrafnagud.munin.error.BadRequestException;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -135,6 +139,45 @@ class SettingsServiceTest {
     }
 
     /**
+     * A number that parses is not the same as a number a worker can use, and
+     * the difference is not academic: zero is the value that turns a worker off
+     * while every switch still reads "on".
+     */
+    @Test
+    void a_count_of_zero_or_less_is_refused_rather_than_stored() {
+        TestSettings.Fixture fixture = TestSettings.fixture(new MuninProperties(), Map.of());
+
+        // Claims zero sources per round, for ever, and WorkerSwitch says on.
+        assertThatThrownBy(() -> fixture.store().set("munin.feed.batchSize", "0"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("positive");
+        // Truncates every title to nothing, and the article is then charged its
+        // whole attempt budget for having no title to translate.
+        assertThatThrownBy(() -> fixture.store().set("hugin.translation.maxSourceChars", "0"))
+                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> fixture.store().set("munin.content.maxAttempts", "-1"))
+                .isInstanceOf(BadRequestException.class);
+        // A byte cap of zero is not a strict limit, it is a fetcher that
+        // rejects everything while looking configured.
+        assertThatThrownBy(() -> fixture.store().set("munin.http.maxBodyBytes", "0"))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void a_fraction_outside_zero_to_one_is_refused() {
+        TestSettings.Fixture fixture = TestSettings.fixture(new MuninProperties(), Map.of());
+
+        assertThatThrownBy(() -> fixture.store().set("munin.category.acceptConfidence", "1.5"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("fraction");
+        assertThatThrownBy(() -> fixture.store().set("hugin.gemini.temperature", "-0.1"))
+                .isInstanceOf(BadRequestException.class);
+        // Both ends are meaningful: accept every match, sample deterministically.
+        fixture.store().set("munin.category.acceptConfidence", "0");
+        assertThat(fixture.settings().getCategory().acceptConfidence().value()).isZero();
+    }
+
+    /**
      * A blank write is a reset that does not look like one. Refusing it keeps
      * the two gestures apart — see {@code SettingsService.set}.
      */
@@ -169,6 +212,31 @@ class SettingsServiceTest {
 
         assertThat(settings.getFeed().claimLease().value())
                 .isEqualTo(new MuninProperties().getFeed().getClaimLease());
+    }
+
+    /**
+     * The startup order this has to survive: the first load runs from
+     * {@code SettingsService}'s own {@code @PostConstruct}, before
+     * {@link Settings} declares anything, and every following poll returns
+     * early because the values have not changed. So the one case the check
+     * exists for — an override left behind by a rename, sitting there from the
+     * start — is the one it used to miss entirely.
+     */
+    @Test
+    void an_override_stored_before_the_declarations_is_still_reported() {
+        SettingRepository repository = mock(SettingRepository.class);
+        when(repository.findAll()).thenReturn(List.of(
+                SettingDocument.builder().key("munin.feed.batchSize").value("42").build(),
+                SettingDocument.builder().key("munin.renamed.knob").value("3").build()));
+
+        SettingsService store = new SettingsService(repository);
+        store.load();
+        // Nothing declared yet, so nothing may look unknown here.
+        assertThat(store.undeclaredOverrides()).isEmpty();
+
+        new Settings(store, new MuninProperties(), new HuginProperties());
+
+        assertThat(store.undeclaredOverrides()).containsExactly("munin.renamed.knob");
     }
 
     @Test

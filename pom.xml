@@ -31,6 +31,20 @@
         <spring.boot.version>4.1.0</spring.boot.version>
         <lombok.version>1.18.46</lombok.version>
         <jspecify.version>1.0.1</jspecify.version>
+        <!--
+            A SNAPSHOT, and it needs saying because nothing in this file can
+            resolve one: vance-ode publishes to Maven Central through the
+            Central Portal and has no snapshot repository, so there is no
+            <repositories> entry that would help. Until 0.2.0 is released, this
+            builds only where the artifacts were installed locally
+            (`wb ode install` from the workbench) — a fresh clone, CI or a
+            Docker build without the host's ~/.m2 fails at dependency
+            resolution.
+
+            The jaglan mount and the kit source are what pin it here: both are
+            0.2.0 modules. The way out is the release, not a repository — see
+            CLAUDE.md, "Vancetope-Anbindung", and README's known gaps.
+        -->
         <vance.ode.version>0.2.0-SNAPSHOT</vance.ode.version>
         <!--
             langchain4j: the direct path to a model, for the translation

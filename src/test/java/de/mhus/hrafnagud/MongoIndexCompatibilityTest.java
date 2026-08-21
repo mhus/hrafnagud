@@ -18,10 +18,10 @@ import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.index.Indexed;
 
 /**
- * The two rules about indexes that a unit test can check and a deployment
+ * The three rules about indexes that a unit test can check and a deployment
  * cannot survive breaking.
  *
- * <p>Both were learned the same afternoon, both as a pod that would not start.
+ * <p>All three were learned the same way, as a pod that would not start.
  * Spring's {@code auto-index-creation} builds every declared index when the
  * repository bean is created, so an index the <em>server</em> refuses is not a
  * slow query later — it is a boot failure, and only on a database that already
@@ -30,7 +30,7 @@ import org.springframework.data.mongodb.core.index.Indexed;
  * <h2>Why a static check and not a Testcontainer</h2>
  * Booting against a real MongoDB 4.4 would catch more, and this project's own
  * doctrine keeps Testcontainers opt-in. The cheaper guard is enough for exactly
- * these two rules: both are decidable from the declaration, and both are the
+ * these rules: all three are decidable from the declaration, and all three are
  * ones that actually broke.
  *
  * <h2>The target server is MongoDB 4.4</h2>
@@ -52,9 +52,48 @@ class MongoIndexCompatibilityTest {
     private static final Set<String> ALLOWED_IN_PARTIAL_FILTER = Set.of(
             "$exists", "$gt", "$gte", "$lt", "$lte", "$type", "$and", "$eq");
 
+    /**
+     * Index names this project has already created somewhere, over a key
+     * pattern it no longer declares. Re-using one of them is error 86
+     * ({@code IndexKeySpecsConflict}) — refused at creation, on every database
+     * that holds the old index and on none that does not.
+     *
+     * <p>This is the one rule that lives between the code and a database rather
+     * than inside the code, so the list is the part of the database the test is
+     * allowed to know. A pattern change therefore costs one line here plus a
+     * new name in the annotation, which is exactly the gesture the rule asks
+     * for. The retired index itself stays behind costing write rate until
+     * somebody drops it by hand; {@code CLAUDE.md} has the diffing recipe.
+     */
+    private static final Map<String, String> RETIRED_NAMES = Map.of(
+            // Went with the switch to LIFO ordering of the translation queue.
+            "translation_queue_idx", "{ translationNextAttemptAt: 1 }",
+            // Went when that pattern gained its leading status field, to stop
+            // colliding with seen_idx. Rejected by the cluster before it
+            // existed there, but a permissive local MongoDB 8 created it.
+            "translation_lifo_idx", "{ firstSeenAt: -1 }",
+            // Went when the category queue dropped its partial filter and took
+            // the status into the key.
+            "category_queue_idx", "{ nextAttemptAt: 1 }",
+            // Folded into category_status_queue_idx, which has status as its
+            // prefix and serves the counts-by-status queries too.
+            "category_status_idx", "{ status: 1 }");
+
     /** One declared index, as the annotation says it. */
     private record DeclaredIndex(String collection, String name, Document keys,
             String partialFilter) {
+
+        /**
+         * The key pattern as MongoDB compares it — <b>in order</b>.
+         *
+         * <p>{@code Document} is a {@code LinkedHashMap}, so its {@code equals}
+         * is map equality and blind to order. To the server
+         * {@code { a: 1, b: -1 }} and {@code { b: -1, a: 1 }} are two different
+         * indexes, and conflating them would report a clash that is not one.
+         */
+        String keyPattern() {
+            return keys.toJson();
+        }
     }
 
     @Test
@@ -95,16 +134,16 @@ class MongoIndexCompatibilityTest {
      */
     @Test
     void no_two_indexes_of_one_collection_share_a_key_pattern() {
-        Map<String, Map<Document, String>> perCollection = new LinkedHashMap<>();
+        Map<String, Map<String, String>> perCollection = new LinkedHashMap<>();
         List<String> violations = new ArrayList<>();
 
         for (DeclaredIndex index : declaredIndexes()) {
-            Map<Document, String> seen =
+            Map<String, String> seen =
                     perCollection.computeIfAbsent(index.collection(), c -> new LinkedHashMap<>());
-            String clash = seen.putIfAbsent(index.keys(), index.name());
+            String clash = seen.putIfAbsent(index.keyPattern(), index.name());
             if (clash != null) {
                 violations.add("%s: %s and %s both index %s"
-                        .formatted(index.collection(), clash, index.name(), index.keys().toJson()));
+                        .formatted(index.collection(), clash, index.name(), index.keyPattern()));
             }
         }
 
@@ -115,7 +154,43 @@ class MongoIndexCompatibilityTest {
                         one a key of its own — leading with the field its \
                         partial filter pins is both unique and the right shape \
                         for equality-then-sort (see ArticleDocument's \
-                        translation_lifo_idx).""")
+                        translation_status_lifo_idx).""")
+                .isEmpty();
+    }
+
+    /**
+     * The rule that used to be written down and trusted to memory: an index
+     * whose key pattern changes needs a new <em>name</em>.
+     *
+     * <p>Same name plus a different pattern is error 86
+     * ({@code IndexKeySpecsConflict}), and unlike error 85 it does not depend on
+     * the server version — it fails on any database that already holds the old
+     * index, while a fresh schema and both other tests here stay green. So the
+     * only thing a static check can do is refuse to re-use a name that was
+     * once deployed, which is what {@link #RETIRED_NAMES} is for.
+     */
+    @Test
+    void no_declared_index_reuses_a_retired_name() {
+        List<String> violations = new ArrayList<>();
+
+        for (DeclaredIndex index : declaredIndexes()) {
+            String retiredPattern = RETIRED_NAMES.get(index.name());
+            if (retiredPattern != null) {
+                violations.add("%s.%s was retired over %s and is declared again over %s"
+                        .formatted(index.collection(), index.name(), retiredPattern,
+                                index.keyPattern()));
+            }
+        }
+
+        assertThat(violations)
+                .as("""
+                        This index name has already been created over a \
+                        different key pattern, so re-declaring it is error 86 \
+                        (IndexKeySpecsConflict) on every database that holds \
+                        the old one — and green on a fresh schema, which is why \
+                        a local run never sees it. Pick a name that says what \
+                        the new pattern leads with, and add the old \
+                        name/pattern pair to RETIRED_NAMES.""")
                 .isEmpty();
     }
 

@@ -3,7 +3,12 @@ package de.mhus.hrafnagud.jaglan;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -70,8 +75,16 @@ class ArchiveFileSourceTest {
 
         assertThat(capabilities.access()).isEqualTo(OdeFileAccess.READ_ONLY);
         assertThat(capabilities.canSearch()).isTrue();
-        assertThat(capabilities.itemCount()).isEqualTo(83_646L);
         assertThat(capabilities.metadataTtl()).isPositive();
+    }
+
+    @Test
+    void theItemCount_coversBothSubtrees() {
+        // Articles alone understate the tree by every image copy in it.
+        when(articles.countAll()).thenReturn(83_646L);
+        when(images.countStored()).thenReturn(12_400L);
+
+        assertThat(source.capabilities().itemCount()).isEqualTo(96_046L);
     }
 
     @Test
@@ -151,6 +164,45 @@ class ArchiveFileSourceTest {
     void animpossibleDate_listsNothing() {
         // 31 February parses as numbers and is not a date.
         assertThat(source.list("article/2026/02/31/14/37")).isEmpty();
+    }
+
+    @Test
+    void aLevelOutsideItsRange_listsNothingInsteadOfThrowing() {
+        // All numeric, none of them a date level — and a caller types these.
+        // Uncaught, they were a DateTimeException and a NumberFormatException,
+        // which the contract reads as "this source is broken" rather than
+        // "there is no such folder".
+        assertThat(source.list("article/2026/13")).isEmpty();
+        assertThat(source.list("article/2026/00")).isEmpty();
+        assertThat(source.list("article/2026/08/32")).isEmpty();
+        assertThat(source.list("article/2026/08/21/24")).isEmpty();
+        assertThat(source.list("article/2026/08/21/14/60")).isEmpty();
+        assertThat(source.list("article/99999999999")).isEmpty();
+    }
+
+    @Test
+    void aLevelSpelledUncanonically_isNotAFolder() {
+        // Otherwise article/2026/8 is a second working address for the folder
+        // article/2026/08 already names, and stable paths are the one promise
+        // the mount contract rests on.
+        assertThat(source.list("article/2026/8")).isEmpty();
+        assertThat(source.list("article/026/08")).isEmpty();
+        assertThat(source.stat("article/2026/8")).isEmpty();
+        assertThat(source.stat("article/2026/08")).isPresent();
+    }
+
+    @Test
+    void theLeaf_readsEveryBodyInOneQuery() {
+        // Not tidiness: the busiest minute so far holds 2,009 articles, and one
+        // query per entry is 2,009 round trips for a listing's metadata.
+        when(articles.count(any(ArticleQuery.class))).thenReturn(2L);
+        when(articles.search(any(ArticleQuery.class), anyInt(), anyInt()))
+                .thenReturn(List.of(article(SEEN), article(SEEN)));
+
+        source.list("article/2026/08/21/14/37");
+
+        verify(articles).findContent(anyCollection());
+        verify(articles, never()).findContent(anyString());
     }
 
     @Test
@@ -247,17 +299,32 @@ class ArchiveFileSourceTest {
     // ─── search ───
 
     @Test
-    void search_delegatesToTheTextIndex() {
-        when(articles.search(any(ArticleQuery.class), anyInt(), anyInt()))
+    void search_ordersByRelevanceNotByDate() {
+        // One page, no cursor: a result sorted by collection date puts the best
+        // match wherever it happens to fall, and the caller cannot page past it.
+        when(articles.searchByRelevance(any(ArticleQuery.class), any(), anyInt(), anyBoolean()))
                 .thenReturn(List.of(article(SEEN)));
 
         assertThat(paths(source.search("wall street", 5)))
                 .containsExactly("article/2026/08/21/14/37/" + ARTICLE_ID + ".md");
+        verify(articles, never()).search(any(), anyInt(), anyInt());
+    }
+
+    @Test
+    void search_alsoLooksInsideBodies() {
+        // A mount holds the whole article, so a phrase in the fifth paragraph
+        // is inside the file the caller is after.
+        when(articles.searchByRelevance(any(ArticleQuery.class), any(), anyInt(), anyBoolean()))
+                .thenReturn(List.of());
+
+        source.search("wall street", 5);
+
+        verify(articles).searchByRelevance(any(ArticleQuery.class), isNull(), eq(5), eq(true));
     }
 
     @Test
     void blankSearch_asksNothing() {
         assertThat(source.search("  ", 5)).isEmpty();
-        verify(articles, never()).search(any(), anyInt(), anyInt());
+        verify(articles, never()).searchByRelevance(any(), any(), anyInt(), anyBoolean());
     }
 }

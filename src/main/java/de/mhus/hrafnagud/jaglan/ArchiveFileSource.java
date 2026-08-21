@@ -23,6 +23,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -80,7 +81,11 @@ public class ArchiveFileSource implements FileSource {
                 // write would have nowhere to land.
                 OdeFileAccess.READ_ONLY,
                 true,
-                articleService.countAll(),
+                // Both subtrees, because both are files in this mount. Counting
+                // only the articles would understate the tree by every image
+                // copy the archive holds, and by all of them once image copying
+                // has been on for a while.
+                articleService.countAll() + imageService.countStored(),
                 METADATA_TTL,
                 null,
                 "Hrafnagud archive");
@@ -137,13 +142,16 @@ public class ArchiveFileSource implements FileSource {
         }
         // subtree + five date levels = 6 segments, and that last one is the
         // folder holding files. Anything deeper is a file path, not a folder.
-        if (segments.length > 6 || !partitionIsNumeric(segments)) {
+        if (segments.length > 6) {
             return List.of();
         }
-        if (segments.length == 6) {
-            return leaf(subtree, segments);
+        int[] levels = levels(segments);
+        if (levels == null) {
+            return List.of();
         }
-        return partitionFolders(clean, segments);
+        return levels.length == 5
+                ? leaf(subtree, levels)
+                : partitionFolders(clean, levels);
     }
 
     /**
@@ -154,7 +162,7 @@ public class ArchiveFileSource implements FileSource {
      * of empty folders — feed windows reach back years, but what the tree is
      * organised by is when we collected, and that range is short and known.
      */
-    private List<OdeFileEntry> partitionFolders(String path, String[] segments) {
+    private List<OdeFileEntry> partitionFolders(String path, int[] levels) {
         Optional<Instant> oldest = articleService.oldestArticleAt();
         Optional<Instant> newest = articleService.newestArticleAt();
         if (oldest.isEmpty() || newest.isEmpty()) {
@@ -164,54 +172,52 @@ public class ArchiveFileSource implements FileSource {
         ZonedDateTime to = newest.get().atZone(ZoneOffset.UTC);
 
         List<OdeFileEntry> folders = new ArrayList<>();
-        switch (segments.length) {
-            case 1 -> {
+        switch (levels.length) {
+            case 0 -> {
                 for (int year = from.getYear(); year <= to.getYear(); year++) {
                     folders.add(OdeFileEntry.folder(path + "/" + year));
                 }
             }
-            case 2 -> {
-                int year = Integer.parseInt(segments[1]);
+            case 1 -> {
+                int year = levels[0];
                 int firstMonth = year == from.getYear() ? from.getMonthValue() : 1;
                 int lastMonth = year == to.getYear() ? to.getMonthValue() : 12;
                 for (int month = firstMonth; month <= lastMonth; month++) {
                     folders.add(OdeFileEntry.folder(path + "/" + two(month)));
                 }
             }
-            case 3 -> {
-                YearMonth month =
-                        YearMonth.of(Integer.parseInt(segments[1]), Integer.parseInt(segments[2]));
+            case 2 -> {
+                YearMonth month = YearMonth.of(levels[0], levels[1]);
                 for (int day = 1; day <= month.lengthOfMonth(); day++) {
                     folders.add(OdeFileEntry.folder(path + "/" + two(day)));
                 }
             }
-            case 4 -> {
+            case 3 -> {
                 for (int hour = 0; hour < 24; hour++) {
                     folders.add(OdeFileEntry.folder(path + "/" + two(hour)));
                 }
             }
-            case 5 -> {
+            case 4 -> {
                 for (int minute = 0; minute < 60; minute++) {
                     folders.add(OdeFileEntry.folder(path + "/" + two(minute)));
                 }
             }
             default -> {
-                // Unreachable: length is 1..5 here.
+                // Unreachable: five levels is the leaf, handled by list().
             }
         }
         return folders;
     }
 
     /** Every article or image collected within one minute. */
-    private List<OdeFileEntry> leaf(String subtree, String[] segments) {
+    private List<OdeFileEntry> leaf(String subtree, int[] levels) {
         Instant from;
         try {
-            from = ZonedDateTime.of(
-                    Integer.parseInt(segments[1]), Integer.parseInt(segments[2]),
-                    Integer.parseInt(segments[3]), Integer.parseInt(segments[4]),
-                    Integer.parseInt(segments[5]), 0, 0, ZoneOffset.UTC).toInstant();
+            from = ZonedDateTime.of(levels[0], levels[1], levels[2], levels[3], levels[4],
+                    0, 0, ZoneOffset.UTC).toInstant();
         } catch (RuntimeException e) {
-            // 2026/02/31/25/99 parses as numbers and is not a date.
+            // 2026/02/31 is five levels each inside its own range and still not
+            // a day. Only the calendar knows, so only it can refuse this.
             return List.of();
         }
         Instant to = from.plus(1, ChronoUnit.MINUTES);
@@ -225,14 +231,10 @@ public class ArchiveFileSource implements FileSource {
         }
 
         ArticleQuery query = ArticleQuery.builder().since(from).until(to).build();
-        List<OdeFileEntry> entries = new ArrayList<>();
         // Complete for the folder, not a page: what a listing omits, the
         // reader deletes. The minute partition is what keeps this bounded.
         int size = (int) Math.min(articleService.count(query), 10_000);
-        for (ArticleDocument article : articleService.search(query, 0, Math.max(size, 1))) {
-            entries.add(entryFor(article));
-        }
-        return entries;
+        return entriesFor(articleService.search(query, 0, Math.max(size, 1)));
     }
 
     // ─── open ───
@@ -276,6 +278,12 @@ public class ArchiveFileSource implements FileSource {
      * whole reason {@code canSearch} is true: this archive has a text index,
      * and a tree walk over half a million files to find a phrase is the
      * alternative.
+     *
+     * <p>Ordered by relevance and not by date, which is the difference between a
+     * search and a listing: there is one page and no cursor, so the best match
+     * has to be on it. Bodies are searched too — a mount holds the whole
+     * article, so a phrase in the fifth paragraph is inside the file the caller
+     * is looking for.
      */
     @Override
     public List<OdeFileEntry> search(String query, int limit) {
@@ -283,18 +291,45 @@ public class ArchiveFileSource implements FileSource {
             return List.of();
         }
         ArticleQuery filter = ArticleQuery.builder().text(query.strip()).build();
-        List<OdeFileEntry> entries = new ArrayList<>();
-        for (ArticleDocument article : articleService.search(filter, 0, Math.max(limit, 1))) {
-            entries.add(entryFor(article));
-        }
-        return entries;
+        List<ArticleDocument> hits =
+                articleService.searchByRelevance(filter, null, Math.max(limit, 1), true);
+        return entriesFor(hits);
     }
 
     // ─── entries ───
 
+    /**
+     * Entries for a whole page of articles, with their bodies read in one query.
+     *
+     * <p>Which is the difference that matters at this size: the archive's
+     * busiest minute so far holds 2,009 articles, and a listing of it asking
+     * per article is 2,009 round trips to produce metadata rows. The bodies are
+     * needed either way — the size and the etag are properties of the rendering,
+     * not of the article — so what is saved is the waiting, not the reading.
+     */
+    private List<OdeFileEntry> entriesFor(List<ArticleDocument> articles) {
+        List<String> ids = new ArrayList<>(articles.size());
+        for (ArticleDocument article : articles) {
+            ids.add(StringUtils.defaultString(article.getId()));
+        }
+        Map<String, ArticleContentDocument> bodies = articleService.findContent(ids);
+
+        List<OdeFileEntry> entries = new ArrayList<>(articles.size());
+        for (ArticleDocument article : articles) {
+            entries.add(entryFor(article,
+                    bodies.get(StringUtils.defaultString(article.getId()))));
+        }
+        return entries;
+    }
+
     private OdeFileEntry entryFor(ArticleDocument article) {
         String id = StringUtils.defaultString(article.getId());
-        ArticleContentDocument content = articleService.findContent(id).orElse(null);
+        return entryFor(article, articleService.findContent(id).orElse(null));
+    }
+
+    private OdeFileEntry entryFor(ArticleDocument article,
+            @Nullable ArticleContentDocument content) {
+        String id = StringUtils.defaultString(article.getId());
         byte[] rendered = ArticleMarkdown.renderBytes(article, content);
         return new OdeFileEntry(
                 ArchivePath.ofArticle(id, article.getFirstSeenAt()),
@@ -377,16 +412,54 @@ public class ArchiveFileSource implements FileSource {
         }
         boolean known = ArchivePath.ARTICLES.equals(segments[0])
                 || ArchivePath.IMAGES.equals(segments[0]);
-        return known && partitionIsNumeric(segments);
+        return known && levels(segments) != null;
     }
 
-    private static boolean partitionIsNumeric(String[] segments) {
+    /**
+     * The date levels of a path, or {@code null} when it is not one.
+     *
+     * <p>The one place a path segment becomes a number, because "digits" and "a
+     * date level" are not the same thing and the difference is what a caller
+     * types: {@code article/2026/13} and {@code article/99999999999} are both
+     * numeric, and parsing them raw is a {@code DateTimeException} and a
+     * {@code NumberFormatException} on a path somebody guessed at.
+     *
+     * <p>Each level is also required to be spelled the way this tree writes
+     * it — four digits for the year, two below it. Otherwise {@code /8} would
+     * be a second, working address for the folder {@code /08} already names,
+     * and a mount whose paths have two spellings has broken the one promise the
+     * contract rests on.
+     *
+     * @return one entry per level, in path order, or {@code null}
+     */
+    private static int @Nullable [] levels(String[] segments) {
+        int[] levels = new int[segments.length - 1];
         for (int i = 1; i < segments.length; i++) {
-            if (!StringUtils.isNumeric(segments[i])) {
-                return false;
+            Integer level = level(segments[i], LEVEL_WIDTHS[i - 1], LEVEL_BOUNDS[i - 1]);
+            if (level == null) {
+                return null;
             }
+            levels[i - 1] = level;
         }
-        return true;
+        return levels;
+    }
+
+    /** Digits per level: a four-digit year, then two each for month to minute. */
+    private static final int[] LEVEL_WIDTHS = {4, 2, 2, 2, 2};
+
+    /**
+     * Inclusive {@code {min, max}} per level. The day stops at 31 because a
+     * month is not known at that point in the path; the calendar settles
+     * February in {@link #leaf}.
+     */
+    private static final int[][] LEVEL_BOUNDS = {{1000, 9999}, {1, 12}, {1, 31}, {0, 23}, {0, 59}};
+
+    private static @Nullable Integer level(String segment, int width, int[] bounds) {
+        if (segment.length() != width || !StringUtils.isNumeric(segment)) {
+            return null;
+        }
+        int value = Integer.parseInt(segment);
+        return value < bounds[0] || value > bounds[1] ? null : value;
     }
 
     private static String two(int value) {

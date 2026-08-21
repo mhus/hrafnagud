@@ -112,6 +112,22 @@ which is the shape of every path-traversal bug there has ever been. The id's
 shape is also what keeps a path segment from reaching a query as anything but
 hex.
 
+**Folders are held to the same standard**, and that took a second pass to get
+right. "Numeric" is not "a date level": `article/2026/13` and
+`article/99999999999` are both digits, and parsing them raw is a
+`DateTimeException` and a `NumberFormatException` on a path somebody typed —
+which the contract reads as "this source is broken" rather than "there is no
+such folder". Every level is now checked against its own range before it is
+used, and an out-of-range one lists nothing.
+
+The width is checked with it, for a different reason: `article/2026/8` would
+otherwise be a second working address for the folder `article/2026/08` already
+names. Two spellings of one folder is the same defect as two spellings of one
+file (§2.2), and stable paths are the one promise the whole contract rests on.
+What the range check cannot settle is the calendar — `2026/02/31` is five levels
+each inside its range and still not a day — so the leaf builds the instant and
+lets `java.time` refuse it.
+
 An image's extension comes from the **stored media type**, not from the source
 URL — a CDN URL frequently has no extension or a wrong one, and a file named
 `.jpg` holding PNG bytes is one some readers refuse. A media type the map does
@@ -165,9 +181,28 @@ hand anyway, since the size came from them, so the exact answer is also the
 cheap one. For an image the etag is its content hash, which is exact and
 already stored: image bytes never change under a path.
 
+Which is why a **listing reads its bodies in one query** rather than one per
+entry. The rendering is needed for every row — that is where the size and the
+etag come from — but the waiting is not: the busiest minute the archive has seen
+holds 2,009 articles, and asking per article would be 2,009 round trips to
+produce metadata. Rendering two thousand short Markdown documents in memory is
+not the cost; two thousand queries are.
+
 **Search is delegated**, over the same text index the research surface uses.
 That is the whole reason `canSearch` is true: the alternative is the reader
 walking a tree of half a million files to find a phrase.
+
+It is ordered by **relevance**, not by collection date, and the distinction is
+not stylistic: there is one page and no cursor here, so a caller that gets the
+newest matches instead of the best ones has no way to look past them
+([research-source.md](research-source.md) §3 has the same argument at length).
+Bodies are searched as the second tier, because a mount holds the whole article
+— a phrase in the fifth paragraph is inside the file the caller is after, which
+is less obviously true of a feed entry.
+
+**`itemCount` covers both subtrees.** It is a declared total for the mount, and
+counting only the articles would understate it by every image copy in the tree —
+by more and more of it as copying runs.
 
 ### 4.1 Off by default, unlike the other two
 

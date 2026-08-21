@@ -27,9 +27,9 @@ import org.springframework.stereotype.Service;
  *
  * <p>The one rule that shapes this class is that the bytes live in the
  * document (see {@link ImageDocument}), so every read states whether it wants
- * them. {@link #stat(String)} and {@link #claimDue} project them away;
- * {@link #load(String)} is the only method that returns an image file, and it
- * exists to be called once per served request.
+ * them. {@link #statById}, {@link #storedBetween} and {@link #claimDue} project
+ * them away; {@link #loadById} is the only method that returns an image file,
+ * and it exists to be called once per served request.
  */
 @Service
 @Slf4j
@@ -198,36 +198,17 @@ public class ImageService {
     // ─── Reading ───
 
     /**
-     * Metadata for one image URL, without the bytes.
+     * Metadata for one image, without the bytes.
      *
      * <p>This is the question a serving path asks: is there a local copy, and
      * what is it? A miss — never queued, still pending, failed — means the
      * caller uses the publisher URL, which is why the answer is an
      * {@link Optional} of metadata rather than a boolean.
-     */
-    public Optional<ImageDocument> stat(String url) {
-        Query query = Query.query(Criteria.where("_id").is(ImageKey.of(url)));
-        query.fields().exclude(F_DATA);
-        return Optional.ofNullable(mongoTemplate.findOne(query, ImageDocument.class));
-    }
-
-    /**
-     * The bytes of a stored image.
      *
-     * <p>The only method that loads an image file. Empty when the archive has
-     * no copy, including when a record exists but is pending or failed.
-     */
-    public Optional<ImageDocument> load(String url) {
-        return repository.findById(ImageKey.of(url))
-                .filter(image -> image.getStatus().stored() && image.getData() != null);
-    }
-
-    /**
-     * Metadata for one image by its id, without the bytes.
-     *
-     * <p>The by-id twin of {@link #stat(String)}: a caller holding a derived
-     * address has the id already, and making it hash a URL back would mean
-     * carrying the URL around for no reason.
+     * <p>By id rather than by URL, because that is what a caller has: the id is
+     * derived from the URL ({@link ImageKey}) and appears in the mount's own
+     * paths, so a by-URL twin would only exist to hash a string the caller
+     * already hashed.
      */
     public Optional<ImageDocument> statById(String id) {
         Query query = Query.query(Criteria.where("_id").is(id));
@@ -235,7 +216,12 @@ public class ImageService {
         return Optional.ofNullable(mongoTemplate.findOne(query, ImageDocument.class));
     }
 
-    /** The bytes of one stored image by id. */
+    /**
+     * The bytes of one stored image by id.
+     *
+     * <p>The only method that loads an image file. Empty when the archive has
+     * no copy, including when a record exists but is pending or failed.
+     */
     public Optional<ImageDocument> loadById(String id) {
         return repository.findById(id)
                 .filter(image -> image.getStatus().stored() && image.getData() != null);
@@ -255,17 +241,30 @@ public class ImageService {
         return mongoTemplate.find(query, ImageDocument.class);
     }
 
-    /** Counts per status, for the stats endpoint and the console. */
-    public Map<ImageStatus, Long> countByStatus() {
-        Map<ImageStatus, Long> counts = new LinkedHashMap<>();
+    /**
+     * Counts per status, for the stats endpoint and the console.
+     *
+     * <p>Keyed by the status name rather than the enum, like the article
+     * counts it sits beside: this goes straight into a DTO and out as JSON,
+     * and one shape for all of them means one way to read them.
+     */
+    public Map<String, Long> countByStatus() {
+        Map<String, Long> counts = new LinkedHashMap<>();
         for (ImageStatus status : ImageStatus.values()) {
             long count = mongoTemplate.count(Query.query(Criteria.where(F_STATUS).is(status)),
                     ImageDocument.class);
             if (count > 0) {
-                counts.put(status, count);
+                counts.put(status.name(), count);
             }
         }
         return counts;
+    }
+
+    /** How many images the archive holds a copy of. */
+    public long countStored() {
+        return mongoTemplate.count(
+                Query.query(Criteria.where(F_STATUS).is(ImageStatus.STORED)),
+                ImageDocument.class);
     }
 
     /**

@@ -5,15 +5,19 @@ import de.mhus.hrafnagud.munin.error.NotFoundException;
 import jakarta.annotation.PostConstruct;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -46,6 +50,9 @@ public class SettingsService {
 
     /** Declared settings in declaration order, which is the order the API lists them. */
     private final Map<String, Setting<?>> declared = new LinkedHashMap<>();
+
+    /** Keys already reported as undeclared, so the warning is news and not noise. */
+    private final Set<String> warnedUnknown = ConcurrentHashMap.newKeySet();
 
     private volatile Snapshot snapshot = Snapshot.empty();
 
@@ -262,24 +269,64 @@ public class SettingsService {
     }
 
     /**
+     * Reports the stored overrides nothing declares, once the declarations
+     * exist.
+     *
+     * <p>Which is why this hangs off {@code ApplicationReadyEvent} rather than
+     * off the load: the first load runs from this bean's own
+     * {@code @PostConstruct}, before {@link Settings} has been constructed, so
+     * the check there sees an empty declaration list and skips. Afterwards the
+     * poll short-circuits on unchanged values and never reaches it either — so
+     * an override left behind by a rename, the exact case this exists for, was
+     * the one case never reported.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    void reportUnknownKeys() {
+        warnAboutUnknownKeys(snapshot.values().keySet());
+    }
+
+    /**
      * An override whose key nothing declares is dead weight — most likely a key
      * that was renamed or removed in a release, and it will never be read
      * again. Naming it beats leaving somebody to wonder why their change has no
      * effect.
      *
-     * <p>Skipped while nothing is declared yet: the first load runs from this
-     * bean's own {@code @PostConstruct}, before {@link Settings} has been
-     * constructed, and every key would look unknown.
+     * <p>Once per key, not once per poll: the poll runs every thirty seconds and
+     * a stale override survives until somebody deletes it, which would be a
+     * warning every thirty seconds for as long as the service runs.
      */
     private void warnAboutUnknownKeys(Iterable<String> keys) {
-        if (declared.isEmpty()) {
-            return;
-        }
-        for (String key : keys) {
-            if (!declared.containsKey(key)) {
+        for (String key : undeclaredAmong(keys)) {
+            if (warnedUnknown.add(key)) {
                 log.warn("Stored setting {} is not declared by this build — it is ignored. "
                         + "Delete it, or check the release notes for a rename.", key);
             }
         }
+    }
+
+    /**
+     * Which of these keys nothing declares, in the order given.
+     *
+     * <p>Empty while nothing is declared at all, because that is not "every key
+     * is unknown" but "the declarations have not been built yet" — the first
+     * load runs from this bean's {@code @PostConstruct}, before
+     * {@link Settings} exists.
+     */
+    List<String> undeclaredAmong(Iterable<String> keys) {
+        if (declared.isEmpty()) {
+            return List.of();
+        }
+        List<String> unknown = new ArrayList<>();
+        for (String key : keys) {
+            if (!declared.containsKey(key)) {
+                unknown.add(key);
+            }
+        }
+        return unknown;
+    }
+
+    /** The stored overrides this build has no declaration for. */
+    List<String> undeclaredOverrides() {
+        return undeclaredAmong(snapshot.values().keySet());
     }
 }

@@ -99,7 +99,21 @@ public class TranslationTick {
         }
         log.debug("Translation tick: {} articles claimed", claimed.size());
 
+        int attempted = 0;
         for (ArticleDocument article : claimed) {
+            // A provider that rate-limited the last article will refuse this
+            // one. Asking it nine more times is nine more 429s, which is what
+            // the whole cooldown exists to avoid — so the round ends here and
+            // hands the rest of the batch back.
+            Instant cooldown = translationService.cooldownUntil(now);
+            if (cooldown != null) {
+                int released = releaseUntried(claimed, attempted, cooldown);
+                log.info("Translation round stopped after {} of {} article(s) — the provider "
+                                + "is rate-limiting us; {} returned to the queue until {}",
+                        attempted, claimed.size(), released, cooldown);
+                break;
+            }
+            attempted++;
             try {
                 translationService.translate(article, now);
             } catch (RuntimeException e) {
@@ -112,6 +126,27 @@ public class TranslationTick {
                         article.getTranslationAttempts(), now);
             }
         }
-        return claimed.size();
+        return attempted;
+    }
+
+    /**
+     * Gives the untried tail of a claimed batch back, the same way a throttled
+     * article is given back.
+     *
+     * <p>Not optional tidiness: the claim spends an attempt per article before
+     * anything is asked of the provider, so leaving them leased would charge
+     * {@code maxAttempts} to articles that were never tried and drop them from
+     * the backlog after a few throttled rounds. Deferring to the end of the
+     * cooldown also means the next round finds them due rather than waiting out
+     * the lease on top of it.
+     *
+     * @param from index of the first article that was not attempted
+     * @return how many were handed back
+     */
+    private int releaseUntried(List<ArticleDocument> claimed, int from, Instant until) {
+        for (int i = from; i < claimed.size(); i++) {
+            articleService.deferTranslation(String.valueOf(claimed.get(i).getId()), until);
+        }
+        return claimed.size() - from;
     }
 }

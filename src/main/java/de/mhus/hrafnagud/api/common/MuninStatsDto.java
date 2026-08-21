@@ -50,6 +50,20 @@ public class MuninStatsDto {
     /** Translation enrichments stored — more than one per article after a re-run. */
     private long enrichmentsTotal;
 
+    /**
+     * Image count per {@code ImageStatus}. Empty while
+     * {@code munin.image.enabled} has never been on — nothing is queued then,
+     * so there is nothing to count.
+     */
+    private Map<String, Long> imagesByStatus = new LinkedHashMap<>();
+
+    /**
+     * Bytes held across all stored image copies. The number that decides
+     * whether the switch stays on: the copies live in MongoDB documents, so
+     * this is database volume rather than disk somewhere else.
+     */
+    private long imageBytesStored;
+
     /** Article count per language, most frequent first, top 20. */
     private Map<String, Long> articlesByLanguage = new LinkedHashMap<>();
 

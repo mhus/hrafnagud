@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import de.mhus.hrafnagud.config.HuginProperties;
 import de.mhus.hrafnagud.config.MuninProperties;
@@ -16,6 +17,8 @@ import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.hrafnagud.settings.TestSettings;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
@@ -139,6 +142,63 @@ class TranslationThrottleTest {
 
         verify(articleService).deferTranslation(ID, NOW.plus(Duration.ofMinutes(15)));
         assertThat(service.throttled(NOW.plus(Duration.ofMinutes(14)))).isTrue();
+    }
+
+    /**
+     * The round, not only the article.
+     *
+     * <p>The gate before the claim is not enough: it answers for the round that
+     * has not started yet, and the first 429 arrives inside one that has. The
+     * batch is ten, so without this the provider is asked nine more times after
+     * saying no — nine requests, nine deferrals, and the cooldown achieving
+     * nothing it exists for.
+     */
+    @Test
+    void a_throttled_round_stops_instead_of_asking_the_provider_nine_more_times() {
+        Throttling provider = new Throttling();
+        TranslationService service = serviceWith(provider, Map.of());
+        when(articleService.claimTranslationDue(any(), anyInt())).thenReturn(batchOf(10));
+
+        TranslationTick tick = new TranslationTick(articleService, service,
+                TestSettings.build(new MuninProperties(), properties, Map.of()));
+
+        assertThat(tick.runRound(NOW)).isEqualTo(1);
+        assertThat(provider.calls).isEqualTo(1);
+    }
+
+    /**
+     * And hands the rest back, because the claim already spent an attempt on
+     * each of them: left leased, nine untried articles would be charged their
+     * whole budget by a few throttled rounds and drop out of the backlog.
+     */
+    @Test
+    void the_untried_tail_of_a_stopped_round_returns_to_the_queue() {
+        TranslationService service = serviceWith(new Throttling(), Map.of());
+        when(articleService.claimTranslationDue(any(), anyInt())).thenReturn(batchOf(3));
+
+        TranslationTick tick = new TranslationTick(articleService, service,
+                TestSettings.build(new MuninProperties(), properties, Map.of()));
+        tick.runRound(NOW);
+
+        Instant until = NOW.plus(new HuginProperties().getTranslation().getThrottleCooldown());
+        // The first by translate(), the other two by the round that stopped —
+        // all three to the end of the same cooldown, so the next round finds
+        // them due rather than waiting out the lease on top of it.
+        verify(articleService).deferTranslation("article-0", until);
+        verify(articleService).deferTranslation("article-1", until);
+        verify(articleService).deferTranslation("article-2", until);
+        verify(articleService, never())
+                .recordTranslationFailure(any(), any(), anyInt(), any());
+    }
+
+    private static List<ArticleDocument> batchOf(int size) {
+        List<ArticleDocument> batch = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            ArticleDocument article = article();
+            article.setId("article-" + i);
+            batch.add(article);
+        }
+        return batch;
     }
 
     /** An ordinary failure still counts, or nothing would ever be given up on. */

@@ -272,6 +272,19 @@ before it claims anything — waiting is the work. Both edges are logged once:
 entering the cooldown and coming out of it, because a worker that stopped and a
 worker that is merely idle look identical from outside.
 
+The tick asks **again between articles**, and that half is not decoration: the
+gate before the claim answers for a round that has not started, while the first
+`429` arrives inside one that has. Without the second check a batch of ten sends
+nine more requests to a provider that has just said no — which is the exact
+spending the cooldown exists to prevent, done inside the round that triggered it.
+
+A round that stops that way hands back what it did not try. The claim spends an
+attempt per article before anything is asked of the provider, so nine untried
+articles left leased would be charged their whole budget by a few throttled
+rounds and drop out of the backlog having never been offered to a model. They
+are deferred to the end of the same cooldown the throttled article got, so the
+next round finds them due rather than waiting out the lease on top of it.
+
 A provider may name its own wait, and then that wins over the setting. Google's
 client does not surface `Retry-After`, so for the Gemini path the configured
 cooldown is what is used — stated here because the code cannot make the header
@@ -299,13 +312,15 @@ the price of a head that may never be reached. That trade is the operator's to
 make; what is not available is having neither.
 
 The index follows the ordering:
-`translation_lifo_idx { translationStatus: 1, firstSeenAt: -1 }`, partial on
-`PENDING` ([architecture.md](architecture.md) §4.1). Two things about it were
-learned the hard way: it replaces `translation_queue_idx` under a new *name*,
-because Mongo refuses to redefine an index in place — and it needs its own
-*key pattern*, because `{ firstSeenAt: -1 }` is already `seen_idx` and a second
-index on the same keys is rejected at creation whatever its options say. Both
-failures are boot failures, and only on a database that already exists.
+`translation_status_lifo_idx { translationStatus: 1, firstSeenAt: -1 }`, partial
+on `PENDING` ([architecture.md](architecture.md) §4.1). Two things about it were
+learned the hard way, and each cost a name. It needs its own *key pattern*,
+because `{ firstSeenAt: -1 }` is already `seen_idx` and a second index on the
+same keys is rejected at creation whatever its options say (error 85). And a new
+pattern needs a new *name*, because reusing one over different keys is refused
+just as flatly (error 86) — which is how `translation_queue_idx` and then
+`translation_lifo_idx` were both retired. Every one of these is a boot failure,
+and only on a database that already holds the old index.
 
 `POST /api/v1/articles/{id}/translate` requeues one article.
 

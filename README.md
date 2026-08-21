@@ -277,6 +277,11 @@ discovered by extraction, and an archive whose bodies were fetched while
 copying was off keeps the image list but has nothing queued (see
 [images.md](specs/images.md) §3.1 — there is deliberately no backfill).
 
+What it is costing is on `GET /api/v1/stats` as `imagesByStatus` and
+`imageBytesStored`, and in the console as a card that appears once anything has
+been queued. The bytes live in MongoDB documents, so that number is database
+volume rather than disk somewhere else.
+
 ## The archive as a file tree
 
 `munin.jaglan.enabled` serves the archive to Vancetope as a **mounted file
@@ -301,13 +306,20 @@ the ordinary document tools. Two things to know before enabling it:
 - **Every article is a file**, whether or not its body was fetched — title,
   teaser, sources and link are already a document. Images appear only where
   `munin.image.enabled` made a copy.
+- **Search here is ranked, not chronological.** The mount answers
+  `/ode/files/search` out of the same text index the research surface uses, best
+  match first and bodies included — there is one page and no cursor, so the
+  newest matches would be the wrong ones to return.
 
 The tree is partitioned down to the minute, which is measured rather than
 chosen: [jaglan.md](specs/jaglan.md) §2 has the distribution that decided it.
+Every folder level is checked against its own range and its own spelling, so
+`article/2026/13` and `article/2026/8` are both simply not folders — one address
+per file is what the whole contract rests on.
 
 ## Configuring a project against the archive
 
-`munin.kit.enabled` serves this service's own **kits** over
+`munin.kit.enabled` (**on** by default) serves this service's own **kits** over
 `vance-ode-kit`, so a Vancetope project configures itself instead of being
 configured by hand:
 
@@ -492,7 +504,9 @@ article. Without the cutoff the backlog would grow for ever
 with its attempt returned and pauses the whole worker for
 `hugin.translation.throttleCooldown` — on a free tier being throttled is the
 normal state, and charging articles for it would mark the backlog `FAILED`
-without anything having been translated. Both edges of the pause are in the log
+without anything having been translated. The round it happened in stops there
+and hands the rest of its batch back to the queue, rather than asking a provider
+that just said no another nine times. Both edges of the pause are in the log
 ([translation.md](specs/translation.md) §5.1).
 
 Each run is recorded in `enrichments`, not on the article — so re-running with
@@ -622,11 +636,19 @@ Named rather than left to be discovered:
   a service whose user base is the person running it, and not enough for
   anything with several operators. Empty — the default — means no check at
   all: right on a loopback binding, wrong on a reachable port.
-- **Settings have no history.** A changed value carries the time it was
-  written and nothing else — not the previous value and not who wrote it. The
-  log line for the write is the only trace, and it is not queryable. Nor is
-  anything validated beyond its type: `minInterval` above `maxInterval` is
-  accepted and behaves as you would expect.
+- **The build needs a locally installed `vance-ode`.** `vance.ode.version` is
+  `0.2.0-SNAPSHOT`, and vance-ode publishes to Maven Central only — there is no
+  snapshot repository to declare. So this builds where the artifacts were
+  installed by hand and nowhere else: a fresh clone, CI or a Docker build
+  without the host's `~/.m2` fails at dependency resolution. Releasing 0.2.0
+  and pinning it is the fix; `jaglan/` and `kit/` are what need it.
+- **Settings are validated per value, never against each other.** A number has
+  to be positive and a fraction has to be between zero and one — both refused
+  at the API rather than found by a worker — but nothing checks a pair:
+  `minInterval` above `maxInterval` is accepted and behaves as you would
+  expect. Nor is there any history. A changed value carries the time it was
+  written and nothing else — not the previous value and not who wrote it; the
+  log line for the write is the only trace, and it is not queryable.
 - **No retention policy.** At a few thousand articles a day the archive grows
   quickly and nothing prunes it yet. A TTL or archival tier is needed before
   this runs for months. With `munin.image.enabled` on, the growth is roughly

@@ -120,6 +120,14 @@ rules (`filter.md`), and retention is a decision this document does not make:
 nothing here deletes an image, and at the volumes above that is a choice worth
 taking consciously rather than by default.
 
+Which is why the numbers are **reported rather than merely computable**.
+`/api/v1/stats` carries `imagesByStatus` and `imageBytesStored`, and the console
+grows a card for them as soon as anything has been queued — the copies live in
+MongoDB documents, so this is database volume, and an operator who turned the
+switch on and cannot see the gibibytes accumulate has been handed a bill with no
+statement. The card is absent while nothing is queued, which keeps a feature
+that is off out of a row built for six.
+
 ## 5. Fetching
 
 Through the shared `HttpFetcher` (`collection.md` §6.3), so an image request

@@ -17,6 +17,8 @@ import de.mhus.hrafnagud.munin.source.SourceDocument;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -282,6 +284,25 @@ public class ArticleService {
 
     public Optional<ArticleContentDocument> findContent(String articleId) {
         return contentRepository.findByArticleId(articleId);
+    }
+
+    /**
+     * The bodies of many articles at once, keyed by article id.
+     *
+     * <p>For a caller that renders a whole page of articles rather than one:
+     * asking per article is a round trip per article, and the file mount does
+     * that for every entry in a folder listing. Articles without a body are
+     * simply absent from the map.
+     */
+    public Map<String, ArticleContentDocument> findContent(Collection<String> articleIds) {
+        if (articleIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, ArticleContentDocument> byArticle = new HashMap<>();
+        for (ArticleContentDocument content : contentRepository.findByArticleIdIn(articleIds)) {
+            byArticle.put(content.getArticleId(), content);
+        }
+        return byArticle;
     }
 
     public List<ArticleDocument> search(ArticleQuery filter, int page, int size) {

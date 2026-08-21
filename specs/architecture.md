@@ -147,7 +147,8 @@ indexes of one collection may share a key pattern. Both are refused at index
 on a database that already exists, so a fresh local run never sees it. A newer
 local MongoDB is more permissive about both, which is why
 `MongoIndexCompatibilityTest` checks the declarations instead of trusting a
-local boot.
+local boot. A third rule joins them below (§4.1): a name may not be reused over
+a new key pattern.
 
 ### 4.1 Queues are state fields, not queries
 
@@ -155,9 +156,9 @@ Both asynchronous pipelines — body fetching and translation — are driven by 
 status field on the article plus a partial index on the pending value:
 
 ```
-content_queue_idx      { contentNextAttemptAt: 1 }   partial: contentStatus = PENDING
-translation_lifo_idx   { translationStatus: 1, firstSeenAt: -1 }
-                                                    partial: translationStatus = PENDING
+content_queue_idx           { contentNextAttemptAt: 1 }   partial: contentStatus = PENDING
+translation_status_lifo_idx { translationStatus: 1, firstSeenAt: -1 }
+                                                          partial: translationStatus = PENDING
 ```
 
 The two queues are ordered differently on purpose. Body fetching takes the
@@ -177,10 +178,16 @@ at creation time, which makes it a boot failure on every database that already
 has `seen_idx` — so a partial index over an existing key pattern needs a key of
 its own.
 
-The older `translation_queue_idx { translationNextAttemptAt: 1 }` is no longer
-created. An existing deployment still has it — `auto-index-creation` adds
-indexes and never drops them — and it can be dropped by hand; nothing queries
-it any more.
+Three names are retired and no longer created. An existing deployment still has
+them — `auto-index-creation` adds indexes and never drops them — and each can be
+dropped by hand; nothing queries any of them:
+
+```
+translation_queue_idx  { translationNextAttemptAt: 1 }   went with the LIFO switch
+translation_lifo_idx   { firstSeenAt: -1 }               went when the status led the key
+category_queue_idx     { nextAttemptAt: 1 }              went when the status led the key
+category_status_idx    { status: 1 }                     folded into the one above it
+```
 
 #### Renaming an index is part of changing it
 
@@ -188,15 +195,26 @@ That asymmetry — created but never dropped — has a consequence sharp enough 
 be a rule: **if an index's key pattern changes, its name changes with it.**
 
 Reusing the name is error 86, `IndexKeySpecsConflict`, on every database that
-already holds the old definition, while a fresh schema starts perfectly. Both
-of the guards that exist miss it by construction: `MongoIndexCompatibilityTest`
-reads declarations and cannot know what a server holds, and a boot against an
-empty database creates the new definition unopposed. It surfaces only when
-starting against real data — which, on the way to a deployment, means it
-surfaces in the deployment.
+already holds the old definition, while a fresh schema starts perfectly. A boot
+against an empty database creates the new definition unopposed, so it surfaces
+only when starting against real data — which, on the way to a deployment, means
+it surfaces in the deployment.
+
+Which is why the retired names above are not only documentation: they are a list
+in `MongoIndexCompatibilityTest`, and re-declaring one fails the build. That is
+as far as a static check reaches — it cannot know what a server holds, so it
+knows instead what this project has ever created. A pattern change therefore
+costs one line in that list plus a new name in the annotation, which is exactly
+the gesture the rule asks for.
 
 An old index left under its own name is the cheap failure by comparison: it
 lingers, costs write throughput, and is dropped when somebody gets round to it.
+
+`translation_lifo_idx` is on the list for a reason worth stating: the cluster
+never created it, because the pattern it had then collided with `seen_idx` and
+was refused with error 85. A local MongoDB 8 was permissive enough to create it,
+so the database that would fail to boot on the reused name is a developer's, not
+the deployment's — the mirror image of the usual case, and the same rule.
 
 The reference for "what should exist" is a database the current code just
 created. Filling an empty one and diffing the two index sets by

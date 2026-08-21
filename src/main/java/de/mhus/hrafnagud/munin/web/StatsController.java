@@ -4,6 +4,7 @@ import de.mhus.hrafnagud.api.common.MuninStatsDto;
 import de.mhus.hrafnagud.api.enrichment.EnrichmentType;
 import de.mhus.hrafnagud.munin.article.ArticleService;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
+import de.mhus.hrafnagud.munin.image.ImageService;
 import de.mhus.hrafnagud.munin.source.SourceService;
 import de.mhus.hrafnagud.munin.sourcelist.SourceListService;
 import java.time.Duration;
@@ -28,6 +29,7 @@ public class StatsController {
     private final SourceListService listService;
     private final ArticleService articleService;
     private final EnrichmentService enrichmentService;
+    private final ImageService imageService;
 
     @GetMapping("/api/v1/stats")
     public MuninStatsDto stats() {
@@ -44,6 +46,11 @@ public class StatsController {
                 .translationBacklog(articleService.countTranslationBacklog())
                 .articlesByTranslationStatus(articleService.countByTranslationStatus())
                 .enrichmentsTotal(enrichmentService.countByType(EnrichmentType.TRANSLATION))
+                // Image copying is the one feature whose cost is storage, so
+                // the queue and the volume belong in the same glance as
+                // everything else. Both are zero until the switch has been on.
+                .imagesByStatus(imageService.countByStatus())
+                .imageBytesStored(imageService.storedBytes())
                 .newestArticleAt(articleService.newestArticleAt().orElse(null))
                 .oldestArticleAt(articleService.oldestArticleAt().orElse(null))
                 .serverTime(now)

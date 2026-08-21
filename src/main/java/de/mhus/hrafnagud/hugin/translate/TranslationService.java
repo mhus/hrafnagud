@@ -57,6 +57,19 @@ public class TranslationService {
     private final AtomicReference<@Nullable String> announced = new AtomicReference<>();
 
     /**
+     * Last complaint about the provider setting, so a misconfiguration is a line
+     * in the log rather than a stream of them.
+     *
+     * <p>{@link #provider()} is resolved per article and, when nothing resolves,
+     * once per tick as well — every twenty seconds, for as long as the setting
+     * stays wrong. The state is worth saying and worth saying once, which is the
+     * same deal {@code announced} and
+     * {@link de.mhus.hrafnagud.settings.WorkerSwitch} make: log the change, not
+     * the condition.
+     */
+    private final AtomicReference<@Nullable String> complained = new AtomicReference<>();
+
+    /**
      * When the worker may talk to a provider again, after being rate-limited.
      *
      * <p>Held here rather than on the tick because the provider tells this
@@ -108,22 +121,33 @@ public class TranslationService {
         if (!wanted.isEmpty()) {
             for (TranslationProvider candidate : providers) {
                 if (candidate.name().equalsIgnoreCase(wanted)) {
+                    complained.set(null);
                     return candidate;
                 }
             }
-            log.warn("hugin.translation.provider is '{}', which is not wired ({}) — "
-                    + "nothing translates until it names one of them", wanted, names());
+            complainOnce("unknown:" + wanted,
+                    "hugin.translation.provider is '{}', which is not wired ({}) — "
+                            + "nothing translates until it names one of them", wanted, names());
             return null;
         }
         if (providers.size() == 1) {
+            complained.set(null);
             return providers.getFirst();
         }
         if (providers.size() > 1) {
-            log.warn("{} translation providers are wired ({}) and "
-                    + "hugin.translation.provider names none — set it to one of them",
+            complainOnce("ambiguous",
+                    "{} translation providers are wired ({}) and "
+                            + "hugin.translation.provider names none — set it to one of them",
                     providers.size(), names());
         }
         return null;
+    }
+
+    /** Warns about {@code state} unless that is already the state warned about. */
+    private void complainOnce(String state, String message, Object... arguments) {
+        if (!Objects.equals(complained.getAndSet(state), state)) {
+            log.warn(message, arguments);
+        }
     }
 
     private String names() {
@@ -174,19 +198,34 @@ public class TranslationService {
      * lease and a request per article to learn what the first one already said.
      */
     public boolean throttled(Instant now) {
+        return cooldownUntil(now) != null;
+    }
+
+    /**
+     * When the worker may talk to a provider again, or {@code null} when it may
+     * now.
+     *
+     * <p>The same question as {@link #throttled} with the answer attached,
+     * because a round that stops mid-batch has to defer what it did not try
+     * <em>to</em> some time, and inventing a second one here would drift from
+     * the wait the provider actually asked for. Expiry is settled here rather
+     * than by a timer: an elapsed cooldown is cleared on the first read that
+     * notices.
+     */
+    public @Nullable Instant cooldownUntil(Instant now) {
         Instant until = cooldownUntil.get();
         if (until == null) {
-            return false;
+            return null;
         }
         if (now.isBefore(until)) {
-            return true;
+            return until;
         }
         // Expired: clear it so the next round is not told to wait again, and
         // say so — a worker resuming is as much news as a worker stopping.
         if (cooldownUntil.compareAndSet(until, null)) {
             log.info("Translation resumes: the rate-limit cooldown has expired");
         }
-        return false;
+        return null;
     }
 
     private void enterCooldown(Instant until, @Nullable String reason) {

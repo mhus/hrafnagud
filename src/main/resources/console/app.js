@@ -372,6 +372,10 @@ async function loadStats() {
         card('Übersetzungs-Rückstand', num(stats.translationBacklog),
             num(stats.enrichmentsTotal) + ' Ergebnisse gespeichert',
             stats.translationBacklog > 0 ? 'border-warning' : ''),
+        // Only once there is something to say. Image copying is off by
+        // default, and a card reading zero would be a seventh in a row built
+        // for six — spent on a feature that is not running.
+        imageCard(stats),
     ].join('');
 
     countTable(document.getElementById('tbl-languages'), stats.articlesByLanguage,
@@ -384,6 +388,44 @@ async function loadStats() {
     renderHealth(stats, now);
     document.getElementById('stats-age').textContent =
         'Stand ' + absolute(stats.serverTime);
+}
+
+/**
+ * The image-copy card, or nothing.
+ *
+ * Storage is what this feature costs, so the volume is the number an operator
+ * has to see — and the pending count next to it says whether the volume is
+ * still growing. Both come from the stats endpoint; neither exists until
+ * munin.image.enabled has been on.
+ */
+function imageCard(stats) {
+    const byStatus = stats.imagesByStatus || {};
+    const stored = byStatus.STORED || 0;
+    const pending = byStatus.PENDING || 0;
+    const failed = byStatus.FAILED || 0;
+    if (!stored && !pending && !failed) {
+        return '';
+    }
+    return card('Bildkopien', bytes(stats.imageBytesStored),
+        num(stored) + ' gespeichert, ' + num(pending) + ' offen, '
+        + num(failed) + ' fehlgeschlagen',
+        failed > 0 ? 'border-warning' : '');
+}
+
+/** Bytes as something readable — the copies live in MongoDB, so this is DB volume. */
+function bytes(value) {
+    if (typeof value !== 'number') {
+        return '—';
+    }
+    const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+    let size = value;
+    let unit = 0;
+    while (size >= 1024 && unit < units.length - 1) {
+        size /= 1024;
+        unit++;
+    }
+    return size.toLocaleString('de-DE', { maximumFractionDigits: unit ? 1 : 0 })
+        + ' ' + units[unit];
 }
 
 function card(title, value, hint, extraClass) {

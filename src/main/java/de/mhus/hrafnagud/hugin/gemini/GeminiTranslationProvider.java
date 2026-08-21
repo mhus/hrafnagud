@@ -86,8 +86,19 @@ public class GeminiTranslationProvider implements TranslationProvider {
     private record Shape(String model, double temperature, Duration timeout) {
     }
 
-    private volatile @Nullable Shape shape;
-    private volatile @Nullable ChatModel client;
+    /**
+     * A client together with the settings it was built from.
+     *
+     * <p>One field rather than two, so a reader cannot see a client from one
+     * rebuild labelled with another's settings — two {@code volatile} writes in
+     * sequence are two chances to interleave, and the result would be a client
+     * quietly answering for a model nobody asked for. Same construction as
+     * {@code Setting.Resolved}, for the same reason.
+     */
+    private record Built(Shape shape, ChatModel client) {
+    }
+
+    private volatile @Nullable Built built;
 
     public GeminiTranslationProvider(String apiKey, Settings.Gemini config) {
         this(apiKey, config, google());
@@ -129,14 +140,13 @@ public class GeminiTranslationProvider implements TranslationProvider {
     private ChatModel client() {
         Shape wanted = new Shape(config.model().value(), config.temperature().value(),
                 config.timeout().value());
-        ChatModel current = client;
-        if (current != null && wanted.equals(shape)) {
-            return current;
+        Built current = built;
+        if (current != null && wanted.equals(current.shape())) {
+            return current.client();
         }
         ChatModel fresh = factory.create(apiKey, wanted.model(), wanted.temperature(),
                 wanted.timeout());
-        client = fresh;
-        shape = wanted;
+        built = new Built(wanted, fresh);
         log.info("Gemini client built for model '{}' (temperature {}, timeout {})",
                 wanted.model(), wanted.temperature(), wanted.timeout());
         return fresh;
