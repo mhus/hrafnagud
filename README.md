@@ -657,8 +657,10 @@ Named rather than left to be discovered:
 - **The kit endpoint hands out the other surfaces' keys.** `hrafnagud-archive`
   ships the feed, research and mount API keys in its bundle, so the kit token is
   worth as much as all three together — one secret instead of two guarding each
-  other. Deliberate, off by default, and not exposed in any deployment today;
-  the trade and the two ways to split it are in
+  other. Deliberate, and now **on by default**, which moves the whole weight
+  onto `vance.ode.kit.apiKey`: without it, anyone who reaches the port receives
+  those three keys, and the only thing saying so is a WARN at startup. The trade
+  and the two ways to split it are in
   [planning/kit-secret-distribution.md](planning/kit-secret-distribution.md).
 - **Image copies have no backfill.** Copying is queued when a body is
   extracted, so articles whose bodies were fetched while `munin.image.enabled`

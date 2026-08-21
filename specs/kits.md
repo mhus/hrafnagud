@@ -98,13 +98,19 @@ The keys are hashed, not folded in verbatim: a revision is handed out on a
 cheap, cacheable call, and a secret belongs in the bundle behind a token rather
 than in the answer that says whether the bundle changed.
 
-## 4. Off by default, and this one most of all
+## 4. On by default, and guarded by a key rather than by a switch
 
-`munin.kit.enabled` ships off, like `munin.jaglan.enabled` and unlike the two
-read surfaces. The reason is sharper here than anywhere else in the service:
-**this endpoint hands out the keys to the others.** An unguarded path gives away
-read access to the whole archive, so enabling it without
-`vance.ode.kit.apiKey` logs a WARN that says so.
+`munin.kit.enabled` ships **on**, unlike `munin.jaglan.enabled` and unlike the
+two read surfaces. It costs nothing until a reader asks, and a kit that has to be
+switched on before a project can configure itself is not much of an improvement
+over configuring by hand.
+
+The risk it carries is unchanged, and it is sharper here than anywhere else in
+the service: **this endpoint hands out the keys to the others.** An unguarded
+path gives away read access to the whole archive. What guards it is
+`vance.ode.kit.apiKey`, not the switch — running without one logs a WARN at every
+start, and that WARN is now the normal state of an unconfigured instance rather
+than something you only see after opting in.
 
 That is also the trade the whole design makes, and it is worth stating plainly:
 the kit token becomes as valuable as the three read keys together. It is meant

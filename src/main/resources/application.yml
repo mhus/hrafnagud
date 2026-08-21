@@ -293,11 +293,16 @@ munin:
   # itself against the archive instead of being configured by hand: the
   # endpoints, the file mount, and a skill that says what is in the archive.
   #
-  # Off by default, and this one for the sharpest reason of the four: it hands
-  # out the API keys of the other surfaces. An unguarded path here gives away
-  # read access to everything.
+  # On by default, unlike the three above: this one costs nothing until a
+  # reader asks, and having to flip a switch before a project can configure
+  # itself defeats the point of serving a kit at all.
+  #
+  # What it hands out is still the sharpest of the four — the API keys of the
+  # other surfaces travel inside it. So set vance.ode.kit.apiKey whenever the
+  # port is reachable by anything you do not trust; without it the startup log
+  # says so in a WARN, and anyone who finds the path receives those keys.
   kit:
-    enabled: ${HRAFNAGUD_KIT_ENABLED:false}
+    enabled: ${HRAFNAGUD_KIT_ENABLED:true}
 
 # Vancetope binding (vance-ode). Everything here is inert until base-url
 # is set — no client, no translation provider, no outbound traffic. The

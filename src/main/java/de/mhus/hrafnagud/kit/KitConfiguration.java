@@ -13,10 +13,15 @@ import org.springframework.context.annotation.Configuration;
  * Publishes the two {@link KitSource} beans, which is what makes the Ode module
  * serve them.
  *
- * <p>Off by default, for the same reason the file mount is: this endpoint hands
- * out configuration that includes API keys, so an unguarded path gives away
+ * <p>On by default, unlike the other three surfaces: it costs nothing until a
+ * reader asks, and a kit that has to be switched on before a project can
+ * configure itself is not much of an improvement over configuring by hand.
+ *
+ * <p>That does not make it harmless. This endpoint hands out configuration that
+ * includes the API keys of the other surfaces, so an unguarded path gives away
  * read access to the whole archive. Set {@code vance.ode.kit.apiKey} and the
- * key travels only to a caller that already holds a secret.
+ * keys travel only to a caller that already holds a secret; without it the bean
+ * below logs a WARN at every start.
  *
  * <p>What the two kits are for, and why they live in this repository rather
  * than in a kit collection: {@code specs/kits.md}.

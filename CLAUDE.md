@@ -129,10 +129,14 @@ Test. Begründung: `specs/architecture.md` §2.1.
 
 Runtime-Schaltbarkeit gehört dazu und bleibt so: `hugin/*` ist inert bis
 `vance.ode.base-url` gesetzt ist (es ruft raus), `centauri`/`zarniwoop` sind
-**an, außer jemand schaltet sie ab** (sie antworten). `jaglan` und `kit` sind **aus, bis
-jemand sie einschaltet** — es liefert Dateiinhalte unter begehbaren Pfaden aus,
+**an, außer jemand schaltet sie ab** (sie antworten). `jaglan` ist **aus, bis
+jemand es einschaltet** — es liefert Dateiinhalte unter begehbaren Pfaden aus,
 ein unbewachter Pfad ist damit ein Fileserver und kein Lesezugriff auf
-zusammengesetzte Antworten (`specs/jaglan.md` §4.1).
+zusammengesetzte Antworten (`specs/jaglan.md` §4.1). `kit` ist **an**, obwohl es
+das gefährlichste der vier ausliefert: die API-Keys der anderen Surfaces
+reisen in seinem Bundle. Was es bewacht, ist `vance.ode.kit.apiKey` und nicht
+der Schalter — ein Kit, das erst eingeschaltet werden muss, spart niemandem die
+Handkonfiguration, die es ersetzen soll (`specs/kits.md` §4).
 
 ## Null-Safety mit JSpecify
 
