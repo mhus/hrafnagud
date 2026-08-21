@@ -188,6 +188,30 @@ erinnert werden müssen:
   bekommt ein eigenes Muster — mit dem Feld voran, das sein Filter festnagelt
   (`ArticleDocument.translation_lifo_idx`).
 
+Eine dritte Regel prüft **kein** Test, weil sie nicht im Code steht, sondern
+zwischen Code und einer bestehenden Datenbank:
+
+- **Ändert sich das Key-Muster eines Index, ändert sich sein Name mit.**
+  Gleicher Name plus anderes Muster ist Fehler 86 (`IndexKeySpecsConflict`) —
+  und zwar auf *jeder* Datenbank, die den alten Index schon hat, während ein
+  frisches Schema tadellos startet. Der statische Test ist dabei grün, der
+  Boot gegen eine leere DB auch; sichtbar wird es erst beim Start gegen echte
+  Daten. Ein alter Index mit eigenem Namen bleibt dagegen einfach liegen und
+  kostet nur Schreibrate, bis ihn jemand absichtlich dropt.
+
+  Aufräumen ohne Raten: eine leere DB mit dem aktuellen Stand befüllen und
+  gegen die bestehende diffen — das ist der deklarierte Stand, gegen den man
+  vergleichen will.
+
+  ```bash
+  docker run -d --rm --name mongo44 -p 27044:27017 \
+    -e MONGO_INITDB_ROOT_USERNAME=root -e MONGO_INITDB_ROOT_PASSWORD=example mongo:4.4
+  # App einmal dagegen starten, dann in beiden DBs:
+  #   db.getCollectionNames().forEach(c => db.getCollection(c).getIndexes().forEach(
+  #     i => print(c+"|"+i.name+"|"+JSON.stringify(i.key))))
+  # sortieren, comm/diff — was nur links steht, ist Altlast.
+  ```
+
 Der Java-Treiber trägt 4.4 (sein Minimum wird gerade *auf* 4.4 gehoben), wir
 sitzen also am Boden des unterstützten Bereichs und nicht darunter. Alles, was
 neuer ist — Aggregations-Stufen ab 5.0, `$setWindowFields`, `$merge` — gilt hier

@@ -1,0 +1,36 @@
+# Local development, and only that.
+#
+# Spring activates the `default` profile when no other one is set, so this
+# file applies to `java -jar target/hrafnagud.jar` on a laptop and to an IDE
+# run — and never in the container, which sets SPRING_PROFILES_ACTIVE=prod.
+# That is the whole reason it can hold opinions the committed defaults should
+# not: switching a worker on here cannot reach a deployment.
+#
+# Nothing secret goes in here. This file is committed; credentials for trying
+# things out live in `confidential/`, which is not.
+
+spring:
+  mongodb:
+    # The compose stack in deploy/docker, and the same value application.yml
+    # already falls back to — spelled out so the local target is visible in
+    # one place rather than inferred from a ${...:default}.
+    #
+    # To test against the version the cluster actually runs, start a 4.4
+    # container and point this at it. Worth doing before anything that
+    # touches an index: 4.4 refuses index definitions that a current MongoDB
+    # accepts, and `auto-index-creation` turns that into a failure to start
+    # rather than a slow query (see specs/architecture.md §4.0a).
+    #
+    #   docker run -d --rm --name mongo44 -p 27044:27017 \
+    #     -e MONGO_INITDB_ROOT_USERNAME=root \
+    #     -e MONGO_INITDB_ROOT_PASSWORD=example mongo:4.4
+    #
+    # uri: mongodb://root:example@localhost:27044/hrafnagud?authSource=admin
+    uri: mongodb://root:example@localhost:27017/hrafnagud?authSource=admin
+    database: hrafnagud
+
+logging:
+  level:
+    # The decisions, without the transport chatter. Feed polls, extraction
+    # rungs and queue rounds log at DEBUG; what they are talking to does not.
+    de.mhus.hrafnagud: DEBUG

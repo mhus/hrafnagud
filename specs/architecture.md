@@ -182,6 +182,27 @@ created. An existing deployment still has it — `auto-index-creation` adds
 indexes and never drops them — and it can be dropped by hand; nothing queries
 it any more.
 
+#### Renaming an index is part of changing it
+
+That asymmetry — created but never dropped — has a consequence sharp enough to
+be a rule: **if an index's key pattern changes, its name changes with it.**
+
+Reusing the name is error 86, `IndexKeySpecsConflict`, on every database that
+already holds the old definition, while a fresh schema starts perfectly. Both
+of the guards that exist miss it by construction: `MongoIndexCompatibilityTest`
+reads declarations and cannot know what a server holds, and a boot against an
+empty database creates the new definition unopposed. It surfaces only when
+starting against real data — which, on the way to a deployment, means it
+surfaces in the deployment.
+
+An old index left under its own name is the cheap failure by comparison: it
+lingers, costs write throughput, and is dropped when somebody gets round to it.
+
+The reference for "what should exist" is a database the current code just
+created. Filling an empty one and diffing the two index sets by
+`collection|name|keys` is how leftovers get found without guessing, and it is
+worth doing before a deployment that touched an index annotation.
+
 The partial filter is what keeps the index proportional to the *backlog*
 rather than to the archive — the difference between thousands of entries and
 tens of millions.

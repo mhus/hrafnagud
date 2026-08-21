@@ -68,6 +68,15 @@ java -jar target/hrafnagud.jar
 Listens on `:9800`. Override with `HRAFNAGUD_PORT`, `HRAFNAGUD_MONGO_URI`,
 `HRAFNAGUD_MONGO_DB`.
 
+Local runs pick up `application-default.yml` as well — Spring activates the
+`default` profile when no other one is set, and the container always sets
+`SPRING_PROFILES_ACTIVE=prod`. So that file is where a development setting
+belongs: it cannot reach a deployment, which is exactly why it may hold
+opinions the committed defaults should not. It also carries the one-liner for
+starting a MongoDB **4.4** container, which is the version the cluster runs and
+the one that refuses index definitions a current MongoDB accepts
+([architecture.md](specs/architecture.md) §4.0a).
+
 To route all outbound traffic through a proxy — feeds, source lists,
 article pages and `robots.txt` alike, since they all leave through the same
 client:
