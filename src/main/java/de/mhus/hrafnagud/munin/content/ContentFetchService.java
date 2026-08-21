@@ -5,6 +5,7 @@ import de.mhus.hrafnagud.munin.article.ArticleContentDocument;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleImage;
 import de.mhus.hrafnagud.munin.article.ArticleService;
+import de.mhus.hrafnagud.munin.image.ImageService;
 import de.mhus.hrafnagud.munin.net.HttpFetchResult;
 import de.mhus.hrafnagud.munin.net.HttpFetcher;
 import de.mhus.hrafnagud.munin.net.RobotsService;
@@ -39,15 +40,17 @@ public class ContentFetchService {
     private final RobotsService robotsService;
     private final ContentExtractor extractor;
     private final ArticleService articleService;
+    private final ImageService imageService;
     private final Settings.Content config;
 
     public ContentFetchService(HttpFetcher fetcher, RobotsService robotsService,
             ContentExtractor extractor, ArticleService articleService,
-            Settings settings) {
+            ImageService imageService, Settings settings) {
         this.fetcher = fetcher;
         this.robotsService = robotsService;
         this.extractor = extractor;
         this.articleService = articleService;
+        this.imageService = imageService;
         this.config = settings.getContent();
     }
 
@@ -131,8 +134,13 @@ public class ContentFetchService {
                 .build();
 
         articleService.recordContentSuccess(articleId, content, now);
-        log.debug("Fetched body for {} — {} words, {} images, via {}", article.getUrl(),
-                extracted.getWordCount(), extracted.getImages().size(), extracted.getExtractor());
+        // After the content is stored, never before: the queue entry says
+        // "there is an article referencing this image", and until the write
+        // above succeeded that was not true.
+        int queued = imageService.enqueue(articleId, content.getImages(), now);
+        log.debug("Fetched body for {} — {} words, {} images ({} queued for copying), via {}",
+                article.getUrl(), extracted.getWordCount(), extracted.getImages().size(),
+                queued, extracted.getExtractor());
         return ContentStatus.FETCHED;
     }
 

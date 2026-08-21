@@ -84,7 +84,8 @@ Kommentar im POM.
 de.mhus.hrafnagud.
   api/        DTOs und Enums über die REST-Grenze. Kein Spring, kein MongoDB.
   munin/      GEDÄCHTNIS: Source-Registry, Feed-Ingest, Dedup, Volltext-Fetch,
-              Enrichments, Persistenz, Operator-REST (/api/v1/**), Console
+              Bild-Kopien, Enrichments, Persistenz, Operator-REST
+              (/api/v1/**), Console
   hugin/      GEDANKE: alles, was Text an ein Modell gibt
     translate/  arbeitet Munins Übersetzungs-Backlog über ein Brain ab
     classify/   entscheidet über ein Brain, was eine Publisher-Kategorie bedeutet

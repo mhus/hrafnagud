@@ -46,6 +46,7 @@ public class MuninProperties {
     private final Http http = new Http();
     private final Feed feed = new Feed();
     private final Content content = new Content();
+    private final Image image = new Image();
     private final SourceList sourceList = new SourceList();
     private final Catalog catalog = new Catalog();
     private final Language language = new Language();
@@ -243,6 +244,66 @@ public class MuninProperties {
 
         /** How long a parsed {@code robots.txt} is reused. */
         private Duration robotsCacheTtl = Duration.ofHours(6);
+    }
+
+    /**
+     * Keeping copies of the images an article references.
+     *
+     * <p>The archive stores image <em>URLs</em> whatever this says. What this
+     * switches on is holding the bytes as well, which turns the most
+     * perishable part of an article — a publisher's CDN link — into something
+     * the archive still has next year. An image that was never stored, or
+     * whose fetch failed, keeps being served as the original link, so the
+     * feature degrades to the previous behaviour per image rather than as a
+     * whole.
+     */
+    @Data
+    public static class Image {
+
+        /**
+         * Master switch, off by default.
+         *
+         * <p>Storing bytes is the one part of collection with an unbounded
+         * cost attached, so it does not begin because the service was
+         * installed. Measured: a lead image is ~110 KiB, which at a few
+         * thousand articles a day is ten-odd GiB a month and never shrinks.
+         */
+        private boolean enabled = false;
+
+        private Duration tickInterval = Duration.ofSeconds(20);
+
+        /**
+         * Store only the lead image, not every image on the page.
+         *
+         * <p>The cheapest filter there is, and the one that decides whether
+         * this feature costs ten GiB a month or forty: inline images are three
+         * to four times the volume of the lead image and are mostly page
+         * furniture, portraits and related-article thumbnails. Anything
+         * finer-grained belongs in the filter rules.
+         */
+        private boolean leadOnly = true;
+
+        /** Images claimed per round. */
+        private int batchSize = 20;
+
+        /** Attempts before an image is marked {@code FAILED}. */
+        private int maxAttempts = 3;
+
+        /** Delay before the first retry; doubles per attempt. */
+        private Duration retryDelay = Duration.ofMinutes(10);
+
+        /** Lease held on a claimed image. */
+        private Duration claimLease = Duration.ofMinutes(5);
+
+        /**
+         * Bytes accepted for one image.
+         *
+         * <p>Well above what a news lead image is (the largest in a sample of
+         * mainstream outlets was 384 KiB) and well below the 16 MB a MongoDB
+         * document can hold, which is the limit that actually matters because
+         * the bytes live in the document.
+         */
+        private long maxBytes = 4L * 1024 * 1024;
     }
 
     /** Source-list refresh. */

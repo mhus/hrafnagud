@@ -92,10 +92,13 @@ corpus.
 
 ## 4. Images
 
-**Collected as URLs with captions, never as bytes.** A reference is cheap and
-uncontroversial; storing publishers' image files is a storage question and a
-copyright question at once, and a URL leaves that decision open where the
-reverse would not.
+**Collected as URLs with captions.** A reference is cheap and uncontroversial;
+storing publishers' image files is a storage question and a copyright question
+at once, and a URL leaves both decisions open where the reverse would not.
+
+Keeping the bytes as well is a separate, switchable subsystem — off by
+default, per-image, and never a precondition for anything here: extraction's
+output is the same list either way. See [images.md](images.md).
 
 - The **lead image** comes from the declaration (JSON-LD, `og:image`).
 - **Inline images** come from inside the chosen container, because position is

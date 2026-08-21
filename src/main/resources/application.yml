@@ -180,6 +180,30 @@ munin:
     respectRobots: true
     robotsCacheTtl: PT6H
 
+  image:
+    # Keeping copies of the images an article references. Off by default:
+    # this is the one part of collecting with an unbounded cost attached —
+    # a lead image measures around 110 KiB, which at a few thousand
+    # articles a day is ten-odd GiB a month that never shrinks.
+    #
+    # URLs are stored either way. What this decides is whether the archive
+    # also holds the bytes, and it degrades per image: whatever was not
+    # stored is still referenced by its publisher link, as before.
+    enabled: false
+    tickInterval: PT20S
+    # The cheapest filter, and the one that decides ten GiB a month versus
+    # forty. Inline images are three to four times the volume and mostly
+    # page furniture, portraits and related-article thumbnails.
+    leadOnly: true
+    batchSize: 20
+    maxAttempts: 3
+    retryDelay: PT10M
+    claimLease: PT5M
+    # Well above a news lead image (largest measured across mainstream
+    # outlets: 384 KiB) and well below MongoDB's 16 MB document limit,
+    # which is the one that matters because the bytes live in the document.
+    maxBytes: 4194304
+
   source-list:
     enabled: true
     tickInterval: PT5M

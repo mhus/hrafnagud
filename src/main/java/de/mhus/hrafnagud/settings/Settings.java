@@ -58,6 +58,7 @@ public class Settings {
     private final Http http;
     private final Feed feed;
     private final Content content;
+    private final Image image;
     private final SourceList sourceList;
     private final Catalog catalog;
     private final Translation translation;
@@ -100,6 +101,17 @@ public class Settings {
             SettingInt maxTextChars,
             SettingBoolean respectRobots,
             SettingDuration robotsCacheTtl) {
+    }
+
+    /** Keeping copies of article images. */
+    public record Image(
+            SettingBoolean enabled,
+            SettingBoolean leadOnly,
+            SettingInt batchSize,
+            SettingInt maxAttempts,
+            SettingDuration retryDelay,
+            SettingDuration claimLease,
+            SettingLong maxBytes) {
     }
 
     /** Source-list refresh. */
@@ -243,6 +255,29 @@ public class Settings {
                 store.duration("munin.content.robotsCacheTtl",
                         contentDefaults::getRobotsCacheTtl,
                         "How long a parsed robots.txt is reused."));
+
+        MuninProperties.Image imageDefaults = defaults.getImage();
+        this.image = new Image(
+                store.bool("munin.image.enabled", imageDefaults::isEnabled,
+                        "Whether copies of article images are kept. Off means an image is "
+                                + "referenced by its publisher URL, as before — and an image "
+                                + "that was never stored keeps being referenced that way even "
+                                + "when this is on."),
+                store.bool("munin.image.leadOnly", imageDefaults::isLeadOnly,
+                        "Store only the lead image rather than every image on the page. The "
+                                + "difference is roughly a factor of three in volume, and "
+                                + "inline images are mostly page furniture."),
+                store.integer("munin.image.batchSize", imageDefaults::getBatchSize,
+                        "Images claimed per round."),
+                store.integer("munin.image.maxAttempts", imageDefaults::getMaxAttempts,
+                        "Attempts before an image is marked FAILED."),
+                store.duration("munin.image.retryDelay", imageDefaults::getRetryDelay,
+                        "Delay before the first retry; doubles per attempt."),
+                store.duration("munin.image.claimLease", imageDefaults::getClaimLease,
+                        "Lease held on a claimed image."),
+                store.number("munin.image.maxBytes", imageDefaults::getMaxBytes,
+                        "Bytes accepted for one image. The bytes live in the document, so "
+                                + "this stays well under MongoDB's 16 MB limit."));
 
         MuninProperties.SourceList listDefaults = defaults.getSourceList();
         this.sourceList = new SourceList(

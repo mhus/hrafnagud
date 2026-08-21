@@ -240,6 +240,30 @@ curl -X PUT localhost:9800/api/v1/settings/munin.content.enabled \
 `POST /api/v1/articles/{id}/fetch-content` requeues one article with a fresh
 retry budget; `POST .../skip-content` takes one out of the queue for good.
 
+## Keeping the images
+
+An article's images are collected as URLs. Keeping the **bytes** as well is a
+second switch, also off by default, and the reason it is off is a number: a
+lead image measures around 110 KiB, which at a few thousand articles a day is
+ten-odd GiB a month that never shrinks. In return, the most perishable part of
+an article — a publisher CDN link — stops being the archive's weak point.
+
+```bash
+curl -X PUT localhost:9800/api/v1/settings/munin.image.enabled \
+     -H 'Content-Type: application/json' -d '{"value":"true"}'
+```
+
+It degrades per image, not as a feature: whatever was not stored — never
+queued, still pending, permanently failed — keeps being referenced by its
+original URL exactly as before, so nothing depends on a copy existing.
+`munin.image.leadOnly` (on by default) is the dial that matters — inline
+images are three to four times the volume and mostly page furniture.
+
+Copies need bodies, so `munin.content.enabled` is the prerequisite: images are
+discovered by extraction, and an archive whose bodies were fetched while
+copying was off keeps the image list but has nothing queued (see
+[images.md](specs/images.md) §3.1 — there is deliberately no backfill).
+
 ## Filter rules
 
 Fetching a body costs a request and translating costs tokens. Which articles are
@@ -498,6 +522,7 @@ that a single list stopped being readable:
 | [architecture](specs/architecture.md) | Modules, the rule that keeps Munin free of Vancetope, collections, why two timestamps |
 | [collection](specs/collection.md) | Source identity, deduplication, URL normalisation, adaptive polling, source lists, language provenance |
 | [content-extraction](specs/content-extraction.md) | The four-rung ladder, images, script-aware word counts, the fixture corpus |
+| [images](specs/images.md) | Keeping the bytes of an article's images: optional and per-image, the URL-derived address, what it costs per month |
 | [enrichments](specs/enrichments.md) | Why a processing result is a document and not a field |
 | [settings](specs/settings.md) | Operational values in the database, what stays a start-up property, and when a change takes effect |
 | [translation](specs/translation.md) | The pivot language, the two providers and why the choice is a setting, the Vancetope event, the nested timeouts |
@@ -532,9 +557,15 @@ Named rather than left to be discovered:
   log line for the write is the only trace, and it is not queryable. Nor is
   anything validated beyond its type: `minInterval` above `maxInterval` is
   accepted and behaves as you would expect.
-- **No retention policy.** At ten thousand articles a day the archive grows
+- **No retention policy.** At a few thousand articles a day the archive grows
   quickly and nothing prunes it yet. A TTL or archival tier is needed before
-  this runs for months.
+  this runs for months. With `munin.image.enabled` on, the growth is roughly
+  ten GiB a month of image bytes on top, and nothing deletes those either —
+  [images.md](specs/images.md) §4 has the measured numbers.
+- **Image copies have no backfill.** Copying is queued when a body is
+  extracted, so articles whose bodies were fetched while `munin.image.enabled`
+  was off keep their image list and have nothing queued. Re-queueing them from
+  stored content is possible and not built.
 - **Near-duplicate clustering is not implemented.** `contentHash` is stored
   and indexed so the same story republished at a different URL can be found,
   but nothing groups them yet. Exact-URL dedup is what works today. The same

@@ -128,6 +128,7 @@ head across both repositories.
 | `source_lists` | directories that populate `sources` | — |
 | `articles` | article metadata, deduplicated across sources | — |
 | `article_contents` | extracted bodies, images, page metadata | bodies are ~50× larger than the metadata, and most queries want the metadata |
+| `images` | copies of article images: the bytes, keyed by `sha256(url)` | an image file is two orders of magnitude larger than the article referencing it, and optional — see [images.md](images.md) |
 | `enrichments` | output of processing steps, one document per run | see [enrichments.md](enrichments.md) §2 |
 
 ### 4.0a The server is MongoDB 4.4

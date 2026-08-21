@@ -18,6 +18,7 @@ decisions that were not obvious, and where it stops.
 | [categories.md](categories.md) | Normalising publishers' section names against IPTC Media Topics — a mapping table that learns, and what it must not throw away (design) |
 | [content-extraction.md](content-extraction.md) | Fetching article pages and separating content from furniture |
 | [filter.md](filter.md) | Deciding which articles are worth fetching and translating — accept/deny rules, and why the category rule needs a second pass (design) |
+| [images.md](images.md) | Keeping copies of article images: why it is optional and per-image, the URL-derived address, what it costs |
 | [enrichments.md](enrichments.md) | Where the record of a processing step goes, and why it is not a field on the article |
 | [geo.md](geo.md) | Three kinds of location, the containment hierarchy, and why a source's country is not an article's subject (design) |
 | [translation.md](translation.md) | The pivot language, the provider SPI, and the Vancetope event behind it |
