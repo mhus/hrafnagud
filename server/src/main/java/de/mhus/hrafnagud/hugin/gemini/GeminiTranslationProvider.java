@@ -6,7 +6,9 @@ import de.mhus.hrafnagud.hugin.translate.TranslatedText;
 import de.mhus.hrafnagud.hugin.translate.TranslationException;
 import de.mhus.hrafnagud.hugin.translate.TranslationProvider;
 import de.mhus.hrafnagud.settings.Settings;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.exception.NonRetriableException;
+import dev.langchain4j.exception.RateLimitException;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.request.ResponseFormat;
 import dev.langchain4j.model.chat.request.ResponseFormatType;
@@ -147,16 +149,23 @@ public class GeminiTranslationProvider implements TranslationProvider {
         String prompt = prompt(title, summary, targetLanguage);
         ChatResponse response;
         try {
-            response = client().chat(dev.langchain4j.data.message.UserMessage.from(prompt));
+            response = client().chat(UserMessage.from(prompt));
+        } catch (RateLimitException e) {
+            // Not a failure of this article, and on a free tier not even
+            // unusual. langchain4j does not surface Retry-After, so the wait
+            // is the configured cooldown rather than a number invented here.
+            throw TranslationException.throttled(
+                    "gemini rate-limited the request: " + e.getMessage(), null, e);
         } catch (NonRetriableException e) {
             // A rejected key, an unknown model, a prompt the safety filter
             // refuses: asking again produces the same answer.
             throw TranslationException.permanent(
                     "gemini refused the request: " + e.getMessage(), e);
         } catch (RuntimeException e) {
-            // Everything else — timeouts, 5xx, rate limits — is worth another
-            // round. langchain4j has already classified these; re-deriving the
-            // judgement from a message string is how it gets it wrong.
+            // Everything else — timeouts, 5xx, a dropped connection — is worth
+            // another round. langchain4j has already classified these;
+            // re-deriving the judgement from a message string is how it gets
+            // it wrong.
             throw TranslationException.transient_(
                     "gemini call failed: " + e.getMessage(), e);
         }

@@ -390,6 +390,13 @@ nothing draining it — a legible state, and the startup log says so
 explicitly rather than leaving it to be discovered. `GET /api/v1/stats`
 reports `translationBacklog` for the same reason.
 
+**A rate limit is not a failure.** A `429` puts the article back in the queue
+with its attempt returned and pauses the whole worker for
+`hugin.translation.throttleCooldown` — on a free tier being throttled is the
+normal state, and charging articles for it would mark the backlog `FAILED`
+without anything having been translated. Both edges of the pause are in the log
+([translation.md](specs/translation.md) §5.1).
+
 Each run is recorded in `enrichments`, not on the article — so re-running with
 a better model adds a row instead of overwriting the comparison. The article
 carries a searchable copy of the newest one, which is a derived read model

@@ -130,6 +130,7 @@ public class Settings {
             SettingInt maxAttempts,
             SettingDuration retryDelay,
             SettingDuration claimLease,
+            SettingDuration throttleCooldown,
             SettingInt maxSourceChars) {
     }
 
@@ -313,6 +314,11 @@ public class Settings {
                 store.duration("hugin.translation.claimLease",
                         translationDefaults::getClaimLease,
                         "Lease held on a claimed article."),
+                store.duration("hugin.translation.throttleCooldown",
+                        translationDefaults::getThrottleCooldown,
+                        "How long the worker waits after a provider rate-limited it. Applies "
+                                + "to the whole worker: a provider that refused this call will "
+                                + "refuse the next nine, and finding that out costs ten leases."),
                 store.integer("hugin.translation.maxSourceChars",
                         translationDefaults::getMaxSourceChars,
                         "Longest source text handed to a provider in one go."));

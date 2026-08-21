@@ -120,6 +120,17 @@ public class HuginProperties {
         private Duration claimLease = Duration.ofMinutes(5);
 
         /**
+         * How long the worker waits after being rate-limited.
+         *
+         * <p>Applies to the whole worker, not to one article: a provider that
+         * refused this call will refuse the next nine in the same round, and
+         * claiming ten articles to find that out costs ten leases. A minute is
+         * the free tier's order of magnitude; a paid tier that hits this at all
+         * wants it shorter.
+         */
+        private Duration throttleCooldown = Duration.ofMinutes(1);
+
+        /**
          * Longest source text handed to a provider in one go. A provider
          * is typically a model call, and an article body arriving where a
          * teaser was expected is the case this guards against.

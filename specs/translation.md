@@ -245,6 +245,38 @@ rejected token four more times produces four more rejections. The provider says
 whether its failure is worth repeating, through
 `TranslationException.isRetryable()`; the queue does not second-guess it.
 
+### 5.1 Three outcomes, because a rate limit is not a failure
+
+A provider can end a call three ways, and the third one exists because of what
+a free tier does:
+
+| Outcome | The article | The worker |
+|---|---|---|
+| permanent | `FAILED` — whole budget spent at once | carries on |
+| retryable | one attempt spent, rescheduled with a doubling delay | carries on |
+| **throttled** | **rescheduled with its attempt given back** | **waits** |
+
+Throttled is `429`. Nothing was wrong with the article and nothing was even
+asked of the model, so charging it an attempt would be charging it for somebody
+else's quota — and with three attempts and a doubling delay, three rate limits
+would mark the entire backlog `FAILED` without a single translation having been
+attempted. On a free tier that is not a corner case; it is Tuesday. So the
+claim's attempt increment is undone (`ArticleService.deferTranslation`, which
+also refuses to touch an article whose status changed underneath it).
+
+**The wait is per worker, not per article.** A provider that refused this call
+will refuse the next nine in the same round, and claiming nine more articles to
+find that out costs nine leases. `TranslationService` holds the cooldown
+(`hugin.translation.throttleCooldown`, a minute by default) and the tick asks
+before it claims anything — waiting is the work. Both edges are logged once:
+entering the cooldown and coming out of it, because a worker that stopped and a
+worker that is merely idle look identical from outside.
+
+A provider may name its own wait, and then that wins over the setting. Google's
+client does not surface `Retry-After`, so for the Gemini path the configured
+cooldown is what is used — stated here because the code cannot make the header
+appear and pretending otherwise would be worse than the constant.
+
 `POST /api/v1/articles/{id}/translate` requeues one article.
 
 ## 6. The Vancetope side

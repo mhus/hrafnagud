@@ -309,6 +309,12 @@ hugin:
     maxAttempts: 3
     retryDelay: PT5M
     claimLease: PT5M
+    # How long the WHOLE worker waits after a 429. A rate limit is not a
+    # failure of the article — it goes back in the queue with its attempt
+    # returned — and one refused call means the next nine would be refused
+    # too, so the round stops instead of spending nine leases to hear it
+    # again. See specs/translation.md §5.1.
+    throttleCooldown: PT1M
     maxSourceChars: 8000
 
   # Direct model access — the provider that skips the brain. Off unless a key

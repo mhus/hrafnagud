@@ -954,6 +954,30 @@ public class ArticleService {
      * misconfigured would otherwise grow the backlog without bound, and
      * the status is what an operator reads to find out.
      */
+    /**
+     * Puts a claimed article back in the queue without charging it an attempt.
+     *
+     * <p>For the case where nothing was asked of the model: the provider was
+     * rate-limited, so this article was never actually tried. The claim already
+     * incremented the attempt counter — that is what makes a lease expire into
+     * a retry — so a deferral has to give it back, or a throttled worker would
+     * mark the whole backlog {@code FAILED} in three rounds without a single
+     * translation having been attempted.
+     *
+     * <p>Conditional on the article still being {@code PENDING}: a status that
+     * changed under us (an operator skipping it, a re-evaluation taking it out)
+     * wins over a worker rescheduling something it no longer owns.
+     */
+    public void deferTranslation(String articleId, Instant until) {
+        mongoTemplate.updateFirst(
+                Query.query(Criteria.where("_id").is(articleId)
+                        .and(F_TRANSLATION_STATUS).is(TranslationStatus.PENDING)),
+                new Update()
+                        .set(F_TRANSLATION_NEXT_ATTEMPT_AT, until)
+                        .inc("translationAttempts", -1),
+                ArticleDocument.class);
+    }
+
     public void recordTranslationFailure(String articleId, @Nullable String error,
             int attempts, Instant now) {
 

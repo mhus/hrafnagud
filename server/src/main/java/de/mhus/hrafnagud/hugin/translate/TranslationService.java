@@ -8,6 +8,7 @@ import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.hrafnagud.settings.Settings;
 import de.mhus.hrafnagud.munin.util.TextCleaner;
 import jakarta.annotation.PostConstruct;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -54,6 +55,16 @@ public class TranslationService {
 
     /** Last provider announced, so a runtime switch appears in the log once. */
     private final AtomicReference<@Nullable String> announced = new AtomicReference<>();
+
+    /**
+     * When the worker may talk to a provider again, after being rate-limited.
+     *
+     * <p>Held here rather than on the tick because the provider tells this
+     * class, and it is per worker rather than per article: a provider that
+     * refused this call will refuse the next nine in the same round, and
+     * claiming nine more articles to find that out costs nine leases.
+     */
+    private final AtomicReference<@Nullable Instant> cooldownUntil = new AtomicReference<>();
 
     public TranslationService(ArticleService articleService, EnrichmentService enrichmentService,
             Settings settings, ObjectProvider<TranslationProvider> providers) {
@@ -155,6 +166,39 @@ public class TranslationService {
         return provider() != null;
     }
 
+    /**
+     * Whether the worker is waiting out a rate limit.
+     *
+     * <p>Asked by the tick before it claims anything. The alternative — let the
+     * round run and have every article come back throttled — works, and costs a
+     * lease and a request per article to learn what the first one already said.
+     */
+    public boolean throttled(Instant now) {
+        Instant until = cooldownUntil.get();
+        if (until == null) {
+            return false;
+        }
+        if (now.isBefore(until)) {
+            return true;
+        }
+        // Expired: clear it so the next round is not told to wait again, and
+        // say so — a worker resuming is as much news as a worker stopping.
+        if (cooldownUntil.compareAndSet(until, null)) {
+            log.info("Translation resumes: the rate-limit cooldown has expired");
+        }
+        return false;
+    }
+
+    private void enterCooldown(Instant until, @Nullable String reason) {
+        Instant previous = cooldownUntil.getAndSet(until);
+        if (previous == null) {
+            log.info("Translation paused until {} — the provider is rate-limiting us ({})",
+                    until, reason);
+        } else {
+            log.debug("Translation cooldown extended to {}", until);
+        }
+    }
+
     /** Name of the chosen provider, or {@code null} when there is none. */
     public @Nullable String providerName() {
         TranslationProvider chosen = provider();
@@ -218,6 +262,17 @@ public class TranslationService {
             log.debug("Translated article {} into '{}' via {}", articleId, pivot, provider.name());
             return true;
         } catch (TranslationException e) {
+            if (e.isThrottled()) {
+                // Nothing was asked of the model, so nothing is charged to the
+                // article: it goes back in the queue with its attempt returned,
+                // and the whole worker waits.
+                Duration wait = e.getRetryAfter() == null
+                        ? config.throttleCooldown().value()
+                        : e.getRetryAfter();
+                articleService.deferTranslation(articleId, now.plus(wait));
+                enterCooldown(now.plus(wait), e.getMessage());
+                return false;
+            }
             // A permanent failure is charged the whole budget at once:
             // retrying a rejected token five times only produces five
             // rejections, and the queue should say so and move on.

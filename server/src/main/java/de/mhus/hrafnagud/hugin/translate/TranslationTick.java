@@ -57,6 +57,12 @@ public class TranslationTick {
         if (config.pivotLanguage().value().isBlank() || !translationService.isAvailable()) {
             return;
         }
+        if (translationService.throttled(Instant.now())) {
+            // Waiting is the work. Claiming a batch now would cost a lease per
+            // article to be told the same thing the last round was told.
+            log.trace("Translation tick: waiting out the provider's rate limit");
+            return;
+        }
         if (running.get() > 0) {
             log.trace("Translation tick still running — skipping this round");
             return;

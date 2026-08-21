@@ -141,6 +141,11 @@ class GeminiTranslationProviderTest {
         assertThatThrownBy(() -> throttled.translate("Title", null, "de"))
                 .isInstanceOf(TranslationException.class)
                 .extracting(e -> ((TranslationException) e).isRetryable()).isEqualTo(true);
+
+        // And distinguishable from an ordinary retryable failure: a rate limit
+        // means the article was never tried, so it must not be charged for it.
+        assertThatThrownBy(() -> throttled.translate("Title", null, "de"))
+                .extracting(e -> ((TranslationException) e).isThrottled()).isEqualTo(true);
     }
 
     /**
