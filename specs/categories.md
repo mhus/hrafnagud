@@ -116,9 +116,17 @@ questionable mapping needs to see what the publisher actually wrote.
 ### 3.1 Status is the queue
 
 Same mechanism as the two asynchronous pipelines that already exist
-([architecture.md](architecture.md) §4.1): a status field plus a partial index
-on the pending values, so the index stays proportional to the backlog rather
-than to the vocabulary. `nextAttemptAt` doubles as the claim lease (§4.2).
+([architecture.md](architecture.md) §4.1): a status field driving the work, and
+`nextAttemptAt` doubling as the claim lease (§4.2).
+
+The index is **not** partial here, unlike theirs — `category_queue_idx
+{ status: 1, nextAttemptAt: 1 }`, equality before range. Two reasons pointing
+the same way. This backlog is bounded by the vocabulary rather than by the news
+volume (§5), so a full index over some thousands of rows costs nothing worth
+saving. And the filter it would need, `status $in [NEW, GUESSED]`, is not among
+the expressions a partial index accepts before MongoDB 6.0 — the server refuses
+it at index *creation*, which makes it a boot failure rather than a slow query,
+and the cluster this deploys to runs 4.4.
 
 | Status | Meaning |
 |---|---|

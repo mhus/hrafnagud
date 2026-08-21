@@ -26,11 +26,23 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @Document(collection = "category_mappings")
 @CompoundIndexes({
         @CompoundIndex(name = "category_key_idx", def = "{ 'key': 1 }", unique = true),
-        // The queue. Partial, so it holds the backlog rather than the whole
-        // vocabulary — the same shape the content and translation queues use.
-        @CompoundIndex(name = "category_queue_idx", def = "{ 'nextAttemptAt': 1 }",
-                partialFilter = "{ 'status': { $in: ['NEW', 'GUESSED'] } }"),
-        @CompoundIndex(name = "category_status_idx", def = "{ 'status': 1 }")
+        // The queue: status first, then the due time — equality before range,
+        // which is the order the claim asks in.
+        //
+        // Not a partial index, unlike the content and translation queues, and
+        // for two reasons that point the same way. The backlog here is bounded
+        // by the vocabulary rather than by the news volume (see above), so a
+        // full index over 7,000 rows costs nothing worth saving. And the filter
+        // it would need — `status $in [NEW, GUESSED]` — is rejected outright by
+        // MongoDB before 6.0: `$in` is not among the expressions a partial
+        // index accepts there, and the server refuses at index *creation*, so
+        // it is a boot failure rather than a slow query. The cluster this
+        // deploys to runs 4.4.
+        //
+        // `{ status: 1 }` alone is gone with it: this index has it as a prefix,
+        // so the counts-by-status queries are served by the same one.
+        @CompoundIndex(name = "category_queue_idx",
+                def = "{ 'status': 1, 'nextAttemptAt': 1 }")
 })
 @Data
 @Builder
