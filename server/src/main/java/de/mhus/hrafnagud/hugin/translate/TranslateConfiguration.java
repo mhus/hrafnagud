@@ -1,5 +1,6 @@
 package de.mhus.hrafnagud.hugin.translate;
 
+import de.mhus.hrafnagud.hugin.BrainAddress;
 import de.mhus.vance.ode.ursa.UrsaEventClient;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
@@ -31,12 +32,23 @@ public class TranslateConfiguration {
      * {@link TranslationService} expects — it reports itself unavailable
      * and the queue simply goes unworked, which the startup log says out
      * loud.
+     *
+     * <p>The address is checked as well as the client, because the client
+     * exists even when the address is empty — see {@link BrainAddress}. Without
+     * that check the startup report claims a provider on an installation that
+     * has no brain, which is the one thing that report exists to prevent.
      */
     @Bean
     public @Nullable TranslationProvider odeTranslationProvider(
             ObjectProvider<UrsaEventClient> events,
+            @Value("${vance.ode.base-url:}") String baseUrl,
             @Value("${hrafnagud.translate.event:translate-article}") String eventName) {
 
+        if (!BrainAddress.isConfigured(baseUrl)) {
+            log.debug("No brain address (vance.ode.base-url is empty) — "
+                    + "Vancetope translation provider not wired");
+            return null;
+        }
         UrsaEventClient client = events.getIfAvailable();
         if (client == null) {
             log.debug("No UrsaEventClient — Vancetope translation provider not wired");

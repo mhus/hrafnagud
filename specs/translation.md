@@ -80,6 +80,20 @@ provider could be skipped with Ode fully configured — and the symptom would be
 a backlog that never drains, with nothing to point at. `TranslateConfiguration`
 asks an `ObjectProvider` instead, and `TranslateWiringTest` pins both states.
 
+**A present client is not a configured brain.** Ode's auto-configuration is
+conditional on the *presence* of `vance.ode.base-url`, and `application.yml`
+maps the operator's environment onto it as `${VANCE_BRAIN_URL:}` so the knob is
+documented next to the others. With the variable unset that property is present
+and empty, which Spring counts as configured: transport and event client get
+built around an empty URL. So the address is checked as well as the client
+(`BrainAddress`), or the startup report would announce
+`Translating into 'de' via vance-ode` on an installation with no brain — and the
+queue would drain into failures instead of standing still and saying so, which
+is the opposite of what that report is for. The same check guards
+[categories.md](categories.md)'s resolver, and the library-side fix — a
+condition that reads blank as absent — belongs in the next `vance-ode` release,
+since a published one is final.
+
 ## 3. One target, several languages that need no work
 
 `pivotLanguage` is a single value, not a list of targets.

@@ -328,6 +328,10 @@ hrafnagud:
 
 vance:
   ode:
+    # Empty means no brain, and is checked as such: Ode's own condition treats
+    # a present-but-empty value as configured, so the packages under hugin/ ask
+    # BrainAddress before they wire anything. Without that the startup report
+    # would claim a provider on an installation that has none.
     base-url: ${VANCE_BRAIN_URL:}
     tenant: ${VANCE_TENANT:}
     project: ${VANCE_PROJECT:_tenant}

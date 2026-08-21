@@ -80,6 +80,33 @@ class TranslateWiringTest {
     }
 
     /**
+     * The case that actually happens: {@code application.yml} maps the
+     * operator's environment as {@code ${VANCE_BRAIN_URL:}}, so with the
+     * variable unset the property is <em>present and empty</em> — which Ode's
+     * own condition counts as configured. The transport and the event client
+     * are built, and before this was checked the startup report announced
+     * "Translating into 'de' via vance-ode" on an installation with no brain.
+     */
+    @Test
+    void an_empty_brain_url_is_no_brain_url() {
+        runner.withPropertyValues("vance.ode.base-url=", "vance.ode.tenant=acme")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context.getBean(TranslationService.class).isAvailable()).isFalse();
+                    assertThat(context.getBean(TranslationService.class).providerName()).isNull();
+                });
+    }
+
+    /** The same for a variable somebody filled with a space. */
+    @Test
+    void a_blank_brain_url_is_no_brain_url() {
+        runner.withPropertyValues("vance.ode.base-url= ", "vance.ode.tenant=acme")
+                .run(context ->
+                        assertThat(context.getBean(TranslationService.class).isAvailable())
+                                .isFalse());
+    }
+
+    /**
      * The worker is a bean whether or not translation is switched on, and the
      * setting decides per round.
      *

@@ -210,6 +210,14 @@ the translation provider already uses (`OdeTranslationProvider` as the
 blueprint; the brain side is a kit, so prompt and model stay editable there).
 It answers with a Media Topic id, or with `NOT_A_TOPIC` / `IS_PLACE`.
 
+Stage 2 is Hugin's and therefore off by default (`hugin.category.enabled`),
+and it needs a brain address on top of that switch — a blank
+`vance.ode.base-url` counts as none, for the reason
+[translation.md](translation.md) §2.1 gives. Both states are said out loud at
+startup, because a stage that is off looks exactly like a vocabulary with
+nothing left to resolve, and the difference is whether somebody has to
+configure something.
+
 ## 5. Cost is bounded by the vocabulary, not the volume
 
 This is what makes stage 2 affordable where article translation is not. A
