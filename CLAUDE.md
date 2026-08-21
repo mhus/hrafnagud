@@ -91,6 +91,8 @@ de.mhus.hrafnagud.
     classify/   entscheidet über ein Brain, was eine Publisher-Kategorie bedeutet
   centauri/   serviert das Archiv als Centauri-Feed-Quelle (/ode/feed/**)
   zarniwoop/  beantwortet Research-Queries aus dem Archiv (/ode/search/**)
+  jaglan/     serviert das Archiv als gemounteten Dateibaum — Artikeltexte und
+              Bild-Bytes unter einem Pfad, der morgen dieselbe Datei bezeichnet
   facet/      Filter-Dimensionen, die centauri und zarniwoop teilen
   config/     die drei Property-Wurzeln: munin.*, hugin.*, hrafnagud.*
   settings/   die geltenden Werte — config plus die Overrides des Operators
@@ -108,10 +110,11 @@ dienen.
 ### Die eine harte Regel
 
 **Munin hat keine Abhängigkeit auf Vancetope.** Vancetope-zugewandt sind
-`hugin/` (ruft raus), `centauri/` und `zarniwoop/` (antworten) und `facet/`
-(deklariert für die zwei Antwortenden); alle importieren aus `munin`, keines
-wird von `munin` importiert. **`hugin/`, `centauri/`, `zarniwoop/` und `facet/`
-löschen muss einen kompilierenden Collector hinterlassen.**
+`hugin/` (ruft raus), `centauri/`, `zarniwoop/` und `jaglan/` (antworten) und
+`facet/` (deklariert für die Antwortenden); alle importieren aus `munin`,
+keines wird von `munin` importiert. **`hugin/`, `centauri/`, `zarniwoop/`,
+`jaglan/` und `facet/` löschen muss einen kompilierenden Collector
+hinterlassen.**
 
 Das war früher der Modulgraph, heute ist es `ModuleBoundaryTest` — der liest
 die Sources unter `munin/`, `api/`, `settings/` und `config/` und verbietet

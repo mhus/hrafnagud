@@ -28,6 +28,8 @@ de.mhus.hrafnagud.
               image of hugin: that half calls a brain, this one answers one.
   zarniwoop/  Answers Vancetope research queries out of the archive. Same data as
               centauri, opposite question: a ranked answer, not a timeline.
+  jaglan/     Serves the archive as a mounted file tree — article texts and image
+              bytes under a path that means the same file tomorrow.
   facet/      What both of those let a reader filter by, declared once.
   config/     The property roots: munin.*, hugin.*, hrafnagud.*
   settings/   The values in force — config plus whatever an operator overrode.
@@ -523,6 +525,7 @@ that a single list stopped being readable:
 | [collection](specs/collection.md) | Source identity, deduplication, URL normalisation, adaptive polling, source lists, language provenance |
 | [content-extraction](specs/content-extraction.md) | The four-rung ladder, images, script-aware word counts, the fixture corpus |
 | [images](specs/images.md) | Keeping the bytes of an article's images: optional and per-image, the URL-derived address, what it costs per month |
+| [jaglan](specs/jaglan.md) | The archive as a mounted file tree, why an hour is the partition, and why a path is rejected rather than repaired |
 | [enrichments](specs/enrichments.md) | Why a processing result is a document and not a field |
 | [settings](specs/settings.md) | Operational values in the database, what stays a start-up property, and when a change takes effect |
 | [translation](specs/translation.md) | The pivot language, the two providers and why the choice is a setting, the Vancetope event, the nested timeouts |
