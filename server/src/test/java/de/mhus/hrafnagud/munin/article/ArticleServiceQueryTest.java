@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import de.mhus.hrafnagud.api.filter.FilterDecision;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.TestSettings;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import java.time.Instant;
 import java.util.List;
@@ -47,7 +48,7 @@ class ArticleServiceQueryTest {
                 new de.mhus.hrafnagud.munin.place.PlaceRegistry(),
                 mock(de.mhus.hrafnagud.munin.category.CategoryMappingService.class),
                 mock(de.mhus.hrafnagud.munin.filter.ArticleFilterService.class),
-                properties);
+                TestSettings.of(properties));
         when(mongoTemplate.find(any(Query.class), eq(ArticleDocument.class)))
                 .thenReturn(List.of());
     }

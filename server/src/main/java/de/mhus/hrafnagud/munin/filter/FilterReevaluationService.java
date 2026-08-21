@@ -4,7 +4,7 @@ import de.mhus.hrafnagud.api.filter.FilterOutcomes;
 import de.mhus.hrafnagud.api.filter.FilterReevaluationReport;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleService;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
 import de.mhus.hrafnagud.munin.source.SourceService;
 import java.time.Instant;
 import java.util.HashMap;
@@ -33,16 +33,16 @@ public class FilterReevaluationService {
     private final ArticleFilterService filterService;
     private final FilterRuleRegistry registry;
     private final SourceService sourceService;
-    private final MuninProperties.Filter config;
+    private final MuninSettings.Filter config;
 
     public FilterReevaluationService(ArticleService articleService,
             ArticleFilterService filterService, FilterRuleRegistry registry,
-            SourceService sourceService, MuninProperties properties) {
+            SourceService sourceService, MuninSettings settings) {
         this.articleService = articleService;
         this.filterService = filterService;
         this.registry = registry;
         this.sourceService = sourceService;
-        this.config = properties.getFilter();
+        this.config = settings.getFilter();
     }
 
     /**
@@ -52,8 +52,8 @@ public class FilterReevaluationService {
      */
     public FilterReevaluationReport reevaluate(@Nullable Instant since, @Nullable Integer max) {
         Instant runStartedAt = Instant.now();
-        int cap = max == null || max <= 0 || max > config.getMaxPerRun()
-                ? config.getMaxPerRun()
+        int cap = max == null || max <= 0 || max > config.maxPerRun().value()
+                ? config.maxPerRun().value()
                 : max;
 
         // Loaded once for the whole run rather than per article. The profile
@@ -69,7 +69,7 @@ public class FilterReevaluationService {
         boolean capped = false;
 
         while (examined < cap) {
-            int batch = (int) Math.min(config.getBatchSize(), cap - examined);
+            int batch = (int) Math.min(config.batchSize().value(), cap - examined);
             List<ArticleDocument> articles =
                     articleService.nextForPolicy(since, runStartedAt, batch);
             if (articles.isEmpty()) {

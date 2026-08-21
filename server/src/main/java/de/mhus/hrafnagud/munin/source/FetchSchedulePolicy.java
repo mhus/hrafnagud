@@ -2,6 +2,7 @@ package de.mhus.hrafnagud.munin.source;
 
 import de.mhus.hrafnagud.api.source.FetchOutcome;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -30,6 +31,12 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Pure and stateless, so the behaviour can be tested without a database
  * or a clock.
+ *
+ * <p>The bounds are read per call rather than captured, because they are
+ * settings: widening a ceiling has to reach a running collector. What it
+ * reaches is the <em>next</em> scheduling of each source — the poll times
+ * already written stay as they are until that source comes round again, which
+ * is why a change looks gradual rather than instant.
  */
 public final class FetchSchedulePolicy {
 
@@ -38,26 +45,34 @@ public final class FetchSchedulePolicy {
     /** Multiplier applied to the interval after a poll that yielded nothing. */
     private static final double IDLE_GROWTH = 1.5;
 
-    private final MuninProperties.Feed config;
-    private final Map<String, FetchProfile> profiles = new LinkedHashMap<>();
-    private final FetchProfile defaultProfile;
+    private final MuninSettings.Feed config;
+
+    /**
+     * The named interval classes. Structure rather than a knob: adding one is
+     * a deployment, so it stays a property while the bounds it falls back to
+     * are settings.
+     */
+    private final Map<String, MuninProperties.Profile> configuredProfiles;
 
     /** Names already complained about, so an unknown one warns once, not per poll. */
     private final Set<String> unknownReported = ConcurrentHashMap.newKeySet();
 
-    public FetchSchedulePolicy(MuninProperties.Feed config) {
+    public FetchSchedulePolicy(MuninSettings.Feed config,
+            Map<String, MuninProperties.Profile> configuredProfiles) {
         this.config = config;
-        this.defaultProfile = new FetchProfile(FetchProfile.DEFAULT_NAME,
-                config.getDefaultInterval(), config.getMinInterval(), config.getMaxInterval());
-        config.getProfiles().forEach((name, profile) -> profiles.put(name,
-                new FetchProfile(name,
-                        value(profile.getDefaultInterval(), config.getDefaultInterval()),
-                        value(profile.getMinInterval(), config.getMinInterval()),
-                        value(profile.getMaxInterval(), config.getMaxInterval()))));
+        this.configuredProfiles = configuredProfiles;
     }
 
     private static Duration value(@Nullable Duration configured, Duration fallback) {
         return configured == null ? fallback : configured;
+    }
+
+    /** The unnamed profile: the bounds as they stand right now. */
+    private FetchProfile defaultProfile() {
+        return new FetchProfile(FetchProfile.DEFAULT_NAME,
+                config.defaultInterval().value(),
+                config.minInterval().value(),
+                config.maxInterval().value());
     }
 
     /**
@@ -70,26 +85,30 @@ public final class FetchSchedulePolicy {
      * per name.
      */
     public FetchProfile profile(@Nullable String name) {
+        FetchProfile fallback = defaultProfile();
         if (StringUtils.isBlank(name) || FetchProfile.DEFAULT_NAME.equals(name)) {
-            return defaultProfile;
+            return fallback;
         }
-        FetchProfile profile = profiles.get(name);
-        if (profile != null) {
-            return profile;
+        MuninProperties.Profile configured = configuredProfiles.get(name);
+        if (configured != null) {
+            return new FetchProfile(name,
+                    value(configured.getDefaultInterval(), fallback.defaultInterval()),
+                    value(configured.getMinInterval(), fallback.minInterval()),
+                    value(configured.getMaxInterval(), fallback.maxInterval()));
         }
         if (unknownReported.add(name)) {
             log.warn("Unknown fetch profile '{}' — falling back to the default ({}–{}). "
                             + "Configure it under munin.feed.profiles.{}",
-                    name, defaultProfile.minInterval(), defaultProfile.maxInterval(), name);
+                    name, fallback.minInterval(), fallback.maxInterval(), name);
         }
-        return defaultProfile;
+        return fallback;
     }
 
     /** Profile names this build knows, for diagnostics and the API. */
     public Map<String, FetchProfile> profiles() {
         Map<String, FetchProfile> all = new LinkedHashMap<>();
-        all.put(FetchProfile.DEFAULT_NAME, defaultProfile);
-        all.putAll(profiles);
+        all.put(FetchProfile.DEFAULT_NAME, defaultProfile());
+        configuredProfiles.keySet().forEach(name -> all.put(name, profile(name)));
         return all;
     }
 
@@ -103,7 +122,7 @@ public final class FetchSchedulePolicy {
      */
     public long nextIntervalSeconds(long currentSeconds, FetchOutcome outcome, int newArticles,
             int consecutiveFailures) {
-        return nextIntervalSeconds(defaultProfile, currentSeconds, outcome, newArticles,
+        return nextIntervalSeconds(defaultProfile(), currentSeconds, outcome, newArticles,
                 consecutiveFailures);
     }
 
@@ -119,7 +138,7 @@ public final class FetchSchedulePolicy {
             return backoffSeconds(profile, current, consecutiveFailures);
         }
 
-        if (newArticles >= config.getBusyThreshold()) {
+        if (newArticles >= config.busyThreshold().value()) {
             // The feed may have rolled over between polls, so entries could
             // have been missed. Close the gap quickly.
             return profile.clamp(Math.max(current / 2, profile.minIntervalSeconds()));
@@ -146,7 +165,7 @@ public final class FetchSchedulePolicy {
         // Never more often than a healthy source of the same class: with a
         // weekly profile, a 24-hour failure cap would poll a broken blog seven
         // times as often as a working one, which is the wrong way round.
-        long cap = Math.max(config.getMaxFailureInterval().getSeconds(),
+        long cap = Math.max(config.maxFailureInterval().value().getSeconds(),
                 profile.maxIntervalSeconds());
         int exponent = Math.min(Math.max(consecutiveFailures, 1), 16);
         long candidate = currentSeconds;
@@ -158,7 +177,7 @@ public final class FetchSchedulePolicy {
 
     /** Interval a newly created source starts with. */
     public long initialIntervalSeconds(@Nullable Long requested) {
-        return initialIntervalSeconds(defaultProfile, requested);
+        return initialIntervalSeconds(defaultProfile(), requested);
     }
 
     /** The same, for a source of a named class. */
@@ -170,11 +189,11 @@ public final class FetchSchedulePolicy {
 
     /** Forces a value into the default profile's window. */
     public long clampToBounds(long seconds) {
-        return defaultProfile.clamp(seconds);
+        return defaultProfile().clamp(seconds);
     }
 
     /** Lease length used when claiming a source for polling. */
     public Duration claimLease() {
-        return config.getClaimLease();
+        return config.claimLease().value();
     }
 }

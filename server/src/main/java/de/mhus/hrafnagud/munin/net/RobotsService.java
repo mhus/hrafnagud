@@ -1,6 +1,6 @@
 package de.mhus.hrafnagud.munin.net;
 
-import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Instant;
@@ -36,8 +36,8 @@ public class RobotsService {
     private static final int MAX_CACHED_ORIGINS = 20_000;
 
     private final HttpFetcher fetcher;
-    private final MuninProperties.Content config;
-    private final String agentToken;
+    private final MuninSettings.Content config;
+    private final MuninSettings.Http httpConfig;
 
     private final Map<String, CachedRules> cache = Collections.synchronizedMap(
             new LinkedHashMap<>(1024, 0.75f, true) {
@@ -50,10 +50,10 @@ public class RobotsService {
     private record CachedRules(RobotsRules rules, Instant fetchedAt) {
     }
 
-    public RobotsService(HttpFetcher fetcher, MuninProperties properties) {
+    public RobotsService(HttpFetcher fetcher, MuninSettings settings) {
         this.fetcher = fetcher;
-        this.config = properties.getContent();
-        this.agentToken = productToken(properties.getHttp().getUserAgent());
+        this.config = settings.getContent();
+        this.httpConfig = settings.getHttp();
     }
 
     /**
@@ -63,7 +63,7 @@ public class RobotsService {
      * wrong reason.
      */
     public boolean isAllowed(String url, Instant now) {
-        if (!config.isRespectRobots()) {
+        if (!config.respectRobots().value()) {
             return true;
         }
         URI uri;
@@ -86,7 +86,8 @@ public class RobotsService {
 
     private RobotsRules rulesFor(String origin, Instant now) {
         CachedRules cached = cache.get(origin);
-        if (cached != null && cached.fetchedAt().plus(config.getRobotsCacheTtl()).isAfter(now)) {
+        if (cached != null
+                && cached.fetchedAt().plus(config.robotsCacheTtl().value()).isAfter(now)) {
             return cached.rules();
         }
         RobotsRules rules = load(origin);
@@ -98,7 +99,8 @@ public class RobotsService {
         HttpFetchResult result = fetcher.get(origin + "/robots.txt");
         if (result.isSuccess()) {
             try {
-                return RobotsRules.parse(result.bodyAsText(), agentToken);
+                return RobotsRules.parse(result.bodyAsText(),
+                        productToken(httpConfig.userAgent().value()));
             } catch (RuntimeException e) {
                 log.trace("RobotsService: unparseable robots.txt at {}: {}", origin, e.toString());
                 return RobotsRules.ALLOW_ALL;

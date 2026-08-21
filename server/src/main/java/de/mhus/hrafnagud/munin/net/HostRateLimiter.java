@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -25,14 +26,27 @@ public class HostRateLimiter {
     /** Host to the most recently granted slot, in epoch millis. */
     private final Map<String, Long> slots = new ConcurrentHashMap<>();
 
-    private final long intervalMillis;
+    /**
+     * The spacing, read per call rather than captured.
+     *
+     * <p>A supplier rather than a number because this is the control an
+     * operator reaches for while a publisher is complaining, and waiting for a
+     * restart to widen it defeats the purpose. A supplier also keeps this class
+     * free of the settings machinery, so it stays testable with a lambda.
+     */
+    private final Supplier<Duration> minHostInterval;
+
+    public HostRateLimiter(Supplier<Duration> minHostInterval) {
+        this.minHostInterval = minHostInterval;
+    }
+
+    private long intervalMillis() {
+        return Math.max(0, minHostInterval.get().toMillis());
+    }
 
     /** Entries untouched for this long are dropped by {@link #evictStale}. */
-    private final long staleMillis;
-
-    public HostRateLimiter(Duration minHostInterval) {
-        this.intervalMillis = Math.max(0, minHostInterval.toMillis());
-        this.staleMillis = Math.max(intervalMillis * 100, Duration.ofHours(1).toMillis());
+    private long staleMillis() {
+        return Math.max(intervalMillis() * 100, Duration.ofHours(1).toMillis());
     }
 
     /**
@@ -42,6 +56,7 @@ public class HostRateLimiter {
      *         caller must abandon the request rather than retry
      */
     public void acquire(String host) throws InterruptedException {
+        long intervalMillis = intervalMillis();
         if (intervalMillis <= 0 || host.isEmpty()) {
             return;
         }
@@ -61,7 +76,7 @@ public class HostRateLimiter {
      * would otherwise only ever grow.
      */
     public int evictStale() {
-        long cutoff = System.currentTimeMillis() - staleMillis;
+        long cutoff = System.currentTimeMillis() - staleMillis();
         int removed = 0;
         for (Iterator<Map.Entry<String, Long>> it = slots.entrySet().iterator(); it.hasNext(); ) {
             if (it.next().getValue() < cutoff) {

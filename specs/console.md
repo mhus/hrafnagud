@@ -12,21 +12,23 @@ putting them behind a button that a mis-click reaches is a different decision
 from showing what is going on. Should they ever be wanted here, they arrive
 with a confirmation step and a reason, not as a convenience.
 
-**One subsystem is an exception**, written down rather than quietly taken: the
-Kataloge view (§4) can switch a catalogue on or off and re-read it now. The
-line is not "no writes" but *which* subsystem the console operates — both
-actions are reversible with the same click and neither destroys anything,
-whereas deleting an article or editing a source costs data. Switching a
-catalogue on is also the point: catalogues ship disabled, so this is where a
-fresh installation is told what to collect.
+**Two subsystems are exceptions**, written down rather than quietly taken. The
+Kataloge view (§4) can switch a catalogue on or off and re-read it now, and the
+Einstellungen view (§4a) can change an operational value. The line is not "no
+writes" but *which* subsystem the console operates — every one of those actions
+is reversible with the same click and none destroys anything, whereas deleting
+an article or editing a source costs data. Switching a catalogue on is also the
+point: catalogues ship disabled, so this is where a fresh installation is told
+what to collect.
 
 ## 2. Shape
 
 Static HTML and plain JavaScript at `classpath:/console/`, served at
 `/console/` with `/` redirecting there. No build step, no bundler, no
-framework: the console reads five endpoints and renders four views, and a
-framework would be more machinery to install than the code it replaced. It has
-to stay readable to whoever is debugging an ingest problem at the time.
+framework: the console reads a handful of endpoints and renders one view per
+subsystem, and a framework would be more machinery to install than the code it
+replaced. It has to stay readable to whoever is debugging an ingest problem at
+the time.
 
 Bootstrap 5 comes from a CDN. That is the one deliberate trade in it: the
 console needs internet access in the *browser* even where hrafnagud itself has
@@ -105,6 +107,8 @@ imported from now on: rows already in the registry keep the class they were
 created with, and a dropdown that silently did not apply to them would be
 worse than one that explains itself.
 
+**Einstellungen** (§4a) — see below.
+
 **Articles** — what was collected, filtered by source, language, **origin**,
 body state, text and time window. The origin column and filter read the
 publisher's place path: picking *Asia* finds every article from an Asian
@@ -116,6 +120,32 @@ not: the publisher's seat, not the subject. See [geo.md](geo.md). The detail dia
 judged: the extracted body verbatim, its word count, the language and how it
 was determined, the translation if one exists, and the error strings when a
 step failed.
+
+### 4a. Einstellungen
+
+One row per declared setting, grouped by the section of its key, edited in
+place. There is nothing behind a row that the row does not already show — key,
+what it does, the value, the default, which of the two is in force — so a
+dialog would only add a click.
+
+Three things it shows that a bare list of values would not:
+
+- **Where the value comes from.** *Konfiguration* or *geändert* plus the time,
+  because "did somebody change this" is the question an operator actually
+  arrives with, and the answer has to outlive whoever made the change.
+- **The default, next to the current value.** That is what makes
+  *Zurücksetzen* a decision rather than a guess; it deletes the override and
+  the configured value takes over again.
+- **What is not here.** The page says in one line that start-up values — tick
+  cadences, proxy, token, the Vancetope endpoint switches — live in the
+  configuration. Without it, their absence reads as a broken page rather than
+  as a boundary (see [settings.md](settings.md) §3).
+
+Booleans render as a select rather than a text field. They are what an operator
+comes here to change in a hurry — *stop fetching bodies* — and a free-text box
+that accepts `ture` and keeps the old value is the wrong thing to hand somebody
+in that moment. The API refuses it either way; the select makes it
+unavailable.
 
 ## 5. Two API details the console had to respect
 
@@ -150,8 +180,11 @@ whoever wrote it.
 
 ## 7. Where it stops
 
-- **Read-only apart from a catalogue's switch, its interval class and
-  re-read** (§1).
+- **Read-only apart from a catalogue's switch, its interval class and re-read,
+  a category mapping, a filter rule, and an operational value** (§1).
+- **Settings have no history in the view.** A changed value shows when it was
+  written, not what it was before or who wrote it — the record does not exist
+  (see [settings.md](settings.md) §7).
 - **No charts.** A time series of ingest volume would answer "how much" better
   than a 24-hour figure does, and it needs a metrics store; the actuator
   already exposes Prometheus.

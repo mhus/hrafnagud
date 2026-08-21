@@ -12,9 +12,9 @@ import com.rometools.rome.io.XmlReader;
 import de.mhus.hrafnagud.api.source.FetchOutcome;
 import de.mhus.hrafnagud.api.source.SourceType;
 import de.mhus.hrafnagud.munin.article.ArticleCandidate;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
 import de.mhus.hrafnagud.munin.net.HttpFetchResult;
 import de.mhus.hrafnagud.munin.net.HttpFetcher;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
 import de.mhus.hrafnagud.munin.util.TextCleaner;
 import de.mhus.hrafnagud.munin.util.UrlNormalizer;
@@ -57,7 +57,7 @@ import org.springframework.stereotype.Component;
 public class RssSourceReader implements SourceReader {
 
     private final HttpFetcher fetcher;
-    private final MuninProperties properties;
+    private final MuninSettings settings;
 
     @Override
     public SourceType type() {
@@ -117,7 +117,7 @@ public class RssSourceReader implements SourceReader {
     }
 
     private SourceReadResult toResult(SyndFeed feed, HttpFetchResult response) {
-        MuninProperties.Feed config = properties.getFeed();
+        MuninSettings.Feed config = settings.getFeed();
         Instant now = Instant.now();
 
         // RSS declares the language once for the whole channel and Atom
@@ -138,7 +138,7 @@ public class RssSourceReader implements SourceReader {
         int invalid = 0;
         int taken = 0;
         for (SyndEntry entry : feed.getEntries()) {
-            if (taken >= config.getMaxItemsPerFeed()) {
+            if (taken >= config.maxItemsPerFeed().value()) {
                 break;
             }
             Optional<ArticleCandidate> candidate = toCandidate(entry, config, feedLanguage, now);
@@ -160,7 +160,7 @@ public class RssSourceReader implements SourceReader {
      * to fetch, and without a title there is nothing to show. Everything
      * else may be missing.
      */
-    private Optional<ArticleCandidate> toCandidate(SyndEntry entry, MuninProperties.Feed config,
+    private Optional<ArticleCandidate> toCandidate(SyndEntry entry, MuninSettings.Feed config,
             @Nullable String feedLanguage, Instant now) {
 
         String rawLink = linkOf(entry);
@@ -176,7 +176,7 @@ public class RssSourceReader implements SourceReader {
 
         String rawBody = bodyOf(entry);
         String summary = TextCleaner.truncate(TextCleaner.stripHtml(rawBody),
-                config.getMaxSummaryChars());
+                config.maxSummaryChars().value());
 
         return Optional.of(ArticleCandidate.builder()
                 .url(url.get())
@@ -188,7 +188,7 @@ public class RssSourceReader implements SourceReader {
                 .imageUrl(imageOf(entry, rawBody))
                 .guid(StringUtils.trimToNull(StringUtils.abbreviate(entry.getUri(), 500)))
                 .publishedAt(TextCleaner.sanitizePublished(dateOf(entry), now,
-                        config.getMaxFutureSkew().getSeconds()))
+                        config.maxFutureSkew().value().getSeconds()))
                 .declaredLanguage(feedLanguage)
                 .categories(categoriesOf(entry))
                 .build());

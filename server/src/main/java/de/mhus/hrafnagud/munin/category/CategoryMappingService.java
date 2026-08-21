@@ -1,8 +1,8 @@
 package de.mhus.hrafnagud.munin.category;
 
 import de.mhus.hrafnagud.api.category.CategoryMappingStatus;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -47,16 +47,16 @@ public class CategoryMappingService {
     private final MongoTemplate mongoTemplate;
     private final CategoryMatcher matcher;
     private final TopicRegistry topics;
-    private final MuninProperties.Category config;
+    private final MuninSettings.Category config;
 
     public CategoryMappingService(CategoryMappingRepository repository,
             MongoTemplate mongoTemplate, CategoryMatcher matcher, TopicRegistry topics,
-            MuninProperties properties) {
+            MuninSettings settings) {
         this.repository = repository;
         this.mongoTemplate = mongoTemplate;
         this.matcher = matcher;
         this.topics = topics;
-        this.config = properties.getCategory();
+        this.config = settings.getCategory();
     }
 
     // ─── Lookup ───
@@ -175,7 +175,7 @@ public class CategoryMappingService {
             // Above the threshold it counts as resolved; below it is a guess
             // that stage two still has to settle. The single-word rule sits
             // deliberately below — see CategoryMatcher.
-            status = confidence >= config.getAcceptConfidence()
+            status = confidence >= config.acceptConfidence().value()
                     ? CategoryMappingStatus.RESOLVED
                     : CategoryMappingStatus.GUESSED;
         }
@@ -209,7 +209,7 @@ public class CategoryMappingService {
 
     /** Claims up to {@code limit} pending mappings, leasing each. */
     public List<CategoryMappingDocument> claimDue(Instant now, int limit) {
-        Instant leaseUntil = now.plus(config.getClaimLease());
+        Instant leaseUntil = now.plus(config.claimLease().value());
         List<CategoryMappingDocument> claimed = new ArrayList<>();
         for (int i = 0; i < limit; i++) {
             // Most used first, so the model's attention goes where it changes
@@ -277,7 +277,7 @@ public class CategoryMappingService {
         if (mapping == null) {
             return;
         }
-        boolean exhausted = mapping.getAttempts() >= config.getMaxAttempts();
+        boolean exhausted = mapping.getAttempts() >= config.maxAttempts().value();
         Update update = new Update()
                 .set("lastError", error)
                 .set("updatedAt", now);
@@ -287,7 +287,7 @@ public class CategoryMappingService {
             // the answer.
             update.set(F_STATUS, CategoryMappingStatus.FAILED).unset(F_NEXT_ATTEMPT_AT);
         } else {
-            update.set(F_NEXT_ATTEMPT_AT, now.plus(config.getRetryDelay()));
+            update.set(F_NEXT_ATTEMPT_AT, now.plus(config.retryDelay().value()));
         }
         mongoTemplate.updateFirst(Query.query(Criteria.where(F_KEY).is(key)), update,
                 CategoryMappingDocument.class);

@@ -1,6 +1,7 @@
 package de.mhus.hrafnagud.munin.net;
 
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
 import de.mhus.hrafnagud.munin.util.Slugs;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -45,20 +46,30 @@ public class HttpFetcher {
 
     private final HttpClient client;
     private final HostRateLimiter rateLimiter;
-    private final MuninProperties.Http config;
 
-    public HttpFetcher(MuninProperties properties) {
-        this.config = properties.getHttp();
-        this.rateLimiter = new HostRateLimiter(config.getMinHostInterval());
+    /**
+     * Per-request behaviour, read at the moment of the request.
+     *
+     * <p>What the client is built from — the proxy and the connect timeout —
+     * cannot be among these: the client is one shared object, created here and
+     * used for the rest of the process. Changing either means a restart, which
+     * is why they stay properties. See {@code specs/settings.md} §3.
+     */
+    private final MuninSettings.Http config;
 
+    public HttpFetcher(MuninProperties properties, MuninSettings settings) {
+        this.config = settings.getHttp();
+        this.rateLimiter = new HostRateLimiter(() -> config.minHostInterval().value());
+
+        MuninProperties.Http startup = properties.getHttp();
         HttpClient.Builder builder = HttpClient.newBuilder()
-                .connectTimeout(config.getConnectTimeout())
+                .connectTimeout(startup.getConnectTimeout())
                 // NORMAL follows redirects but refuses an HTTPS→HTTP
                 // downgrade, which is the behaviour we want and would
                 // otherwise have to implement by hand.
                 .followRedirects(HttpClient.Redirect.NORMAL);
 
-        MuninProperties.Proxy proxy = config.getProxy();
+        MuninProperties.Proxy proxy = startup.getProxy();
         proxySelector(proxy).ifPresentOrElse(
                 selector -> {
                     builder.proxy(selector);
@@ -128,8 +139,8 @@ public class HttpFetcher {
 
         HttpRequest.Builder request = HttpRequest.newBuilder(uri)
                 .GET()
-                .timeout(config.getReadTimeout())
-                .header("User-Agent", config.getUserAgent())
+                .timeout(config.readTimeout().value())
+                .header("User-Agent", config.userAgent().value())
                 .header("Accept-Encoding", "identity");
         if (StringUtils.isNotBlank(etag)) {
             request.header("If-None-Match", etag);
@@ -155,7 +166,7 @@ public class HttpFetcher {
             throws IOException {
         byte[] body = response.statusCode() == 304
                 ? new byte[0]
-                : readBounded(response.body(), config.getMaxBodyBytes());
+                : readBounded(response.body(), config.maxBodyBytes().value());
 
         String contentTypeHeader = header(response, "content-type");
         return HttpFetchResult.builder()
@@ -250,6 +261,6 @@ public class HttpFetcher {
 
     /** Configured request timeout — used by callers that size their own pools. */
     public Duration readTimeout() {
-        return config.getReadTimeout();
+        return config.readTimeout().value();
     }
 }

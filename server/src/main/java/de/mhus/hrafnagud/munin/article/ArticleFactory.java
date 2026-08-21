@@ -59,19 +59,21 @@ public final class ArticleFactory {
      */
     public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
             LanguageResolver.Resolution language, ContentStatus contentStatus, Instant now) {
-        return build(candidate, source, language, contentStatus, "", List.of(), now);
+        return build(candidate, source, language, contentStatus, TranslationLanguages.DORMANT,
+                List.of(), now);
     }
 
     /**
      * Assembles the document to insert, queued for translation.
      *
-     * @param pivotLanguage the one language everything is normalised
-     *                      into; empty disables translation entirely
+     * @param translation which languages need translating and which do not;
+     *                    {@link TranslationLanguages#DORMANT} disables translation
+     *                    entirely
      */
     public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
             LanguageResolver.Resolution language, ContentStatus contentStatus,
-            String pivotLanguage, Instant now) {
-        return build(candidate, source, language, contentStatus, pivotLanguage, List.of(), now);
+            TranslationLanguages translation, Instant now) {
+        return build(candidate, source, language, contentStatus, translation, List.of(), now);
     }
 
     /**
@@ -87,8 +89,8 @@ public final class ArticleFactory {
      */
     public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
             LanguageResolver.Resolution language, ContentStatus contentStatus,
-            String pivotLanguage, List<String> originPlaceIds, Instant now) {
-        return build(candidate, source, language, contentStatus, pivotLanguage,
+            TranslationLanguages translation, List<String> originPlaceIds, Instant now) {
+        return build(candidate, source, language, contentStatus, translation,
                 originPlaceIds, List.of(), now);
     }
 
@@ -100,10 +102,10 @@ public final class ArticleFactory {
      */
     public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
             LanguageResolver.Resolution language, ContentStatus contentStatus,
-            String pivotLanguage, List<String> originPlaceIds, List<String> topicIds,
+            TranslationLanguages translation, List<String> originPlaceIds, List<String> topicIds,
             Instant now) {
 
-        return build(candidate, source, language, contentStatus, pivotLanguage, originPlaceIds,
+        return build(candidate, source, language, contentStatus, translation, originPlaceIds,
                 topicIds, FilterOutcomes.unfiltered(), now);
     }
 
@@ -122,11 +124,11 @@ public final class ArticleFactory {
      */
     public static ArticleDocument build(ArticleCandidate candidate, SourceDocument source,
             LanguageResolver.Resolution language, ContentStatus contentStatus,
-            String pivotLanguage, List<String> originPlaceIds, List<String> topicIds,
+            TranslationLanguages translation, List<String> originPlaceIds, List<String> topicIds,
             FilterOutcomes filters, Instant now) {
 
         TranslationStatus translationStatus = initialTranslationStatus(
-                pivotLanguage, language.language(), filters.translation());
+                translation, language.language(), filters.translation());
         return ArticleDocument.builder()
                 .translationStatus(translationStatus)
                 .contentPolicy(filters.content().decision())
@@ -173,34 +175,27 @@ public final class ArticleFactory {
     /**
      * Whether the article needs translating at all.
      *
-     * <p>An article already in the pivot language is {@code SKIPPED}, not
-     * queued — a model asked to translate German into German can only
-     * return what it was given, at full price.
+     * <p>Which languages are exempt is {@link TranslationLanguages}'s question —
+     * the pivot language and whatever else the reader can already read. What
+     * belongs here is the <em>order</em>: a denied article is {@code SKIPPED}
+     * whatever its language, so the filter is asked first and a denied article
+     * never reaches the language check.
      *
-     * <p>An <em>unknown</em> source language is queued. Without knowing
-     * what it is we cannot rule it out, and a provider handed text that is
-     * already in the target returns it unchanged; the cost of being wrong
-     * that way is one call, while skipping wrongly loses the translation
-     * silently.
-     *
-     * <p>A denied article is {@code SKIPPED} whatever its language, and the
-     * order matters: the filter is asked first, so a denied article never
-     * reaches the language check. That is also why this method is the single
-     * place the status is derived — ingest and re-evaluation both call it, and
-     * two implementations that agreed on the day they were written would not
-     * stay agreed.
+     * <p>This is the single place the status is derived. Ingest and
+     * re-evaluation both call it, and two implementations that agreed on the
+     * day they were written would not stay agreed — a live run once put four
+     * thousand articles into a queue nothing could ever have worked, because
+     * one of the two branches decided for itself.
      */
-    static TranslationStatus initialTranslationStatus(String pivotLanguage,
-            @Nullable String articleLanguage, FilterOutcome policy) {
+    static TranslationStatus initialTranslationStatus(TranslationLanguages translation,
+            @Nullable String articleLanguage, FilterOutcome filter) {
 
-        if (policy.denied()) {
+        if (filter.denied()) {
             return TranslationStatus.SKIPPED;
         }
-        String pivot = TextCleaner.normalizeLanguage(pivotLanguage);
-        if (pivot == null) {
-            return TranslationStatus.SKIPPED;
-        }
-        return pivot.equals(articleLanguage) ? TranslationStatus.SKIPPED : TranslationStatus.PENDING;
+        return translation.needsTranslation(articleLanguage)
+                ? TranslationStatus.PENDING
+                : TranslationStatus.SKIPPED;
     }
 
     /**

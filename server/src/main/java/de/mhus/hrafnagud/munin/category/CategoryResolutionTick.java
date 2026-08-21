@@ -1,12 +1,12 @@
 package de.mhus.hrafnagud.munin.category;
 
-import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.munin.settings.WorkerSwitch;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -23,25 +23,29 @@ import org.springframework.stereotype.Component;
  * resolved, this tick finds nothing to do for days.
  */
 @Component
-@ConditionalOnProperty(name = "munin.category.enabled", havingValue = "true")
 @Slf4j
 public class CategoryResolutionTick {
 
     private final CategoryMappingService mappingService;
     private final ObjectProvider<CategoryResolver> resolverProvider;
-    private final MuninProperties.Category config;
+    private final MuninSettings.Category config;
+    private final WorkerSwitch enabled;
     private final AtomicInteger running = new AtomicInteger();
 
     public CategoryResolutionTick(CategoryMappingService mappingService,
-            ObjectProvider<CategoryResolver> resolverProvider, MuninProperties properties) {
+            ObjectProvider<CategoryResolver> resolverProvider, MuninSettings settings) {
         this.mappingService = mappingService;
         this.resolverProvider = resolverProvider;
-        this.config = properties.getCategory();
+        this.config = settings.getCategory();
+        this.enabled = new WorkerSwitch("Category resolution", config.enabled());
     }
 
     @Scheduled(fixedDelayString = "${munin.category.tickInterval:PT30S}",
             initialDelayString = "${munin.category.initialDelay:PT40S}")
     public void tick() {
+        if (!enabled.isOn()) {
+            return;
+        }
         CategoryResolver resolver = resolverProvider.getIfAvailable();
         if (resolver == null || running.get() > 0) {
             return;
@@ -63,7 +67,7 @@ public class CategoryResolutionTick {
      */
     int runRound(CategoryResolver resolver, Instant now) {
         List<CategoryMappingDocument> claimed =
-                mappingService.claimDue(now, config.getBatchSize());
+                mappingService.claimDue(now, config.batchSize().value());
         int decided = 0;
         for (CategoryMappingDocument mapping : claimed) {
             try {

@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.TestSettings;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -37,7 +38,7 @@ class SourceListRefreshTickTest {
     void setUp() {
         listService = mock(SourceListService.class);
         properties = new MuninProperties();
-        tick = new SourceListRefreshTick(listService, properties);
+        tick = new SourceListRefreshTick(listService, properties, TestSettings.of(properties));
     }
 
     @Test

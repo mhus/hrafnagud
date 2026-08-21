@@ -12,6 +12,7 @@ import de.mhus.hrafnagud.api.enrichment.EnrichmentType;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleService;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.TestSettings;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentDocument;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import java.time.Instant;
@@ -45,8 +46,8 @@ class TranslationServiceTest {
     }
 
     private TranslationService serviceWith(@Nullable TranslationProvider provider) {
-        return new TranslationService(articleService, enrichmentService, properties,
-                objectProviderOf(provider));
+        return new TranslationService(articleService, enrichmentService,
+                TestSettings.of(properties), objectProviderOf(provider));
     }
 
     private static ObjectProvider<TranslationProvider> objectProviderOf(

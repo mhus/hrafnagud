@@ -10,6 +10,7 @@ import de.mhus.hrafnagud.munin.config.MuninProperties;
 import de.mhus.hrafnagud.munin.error.BadRequestException;
 import de.mhus.hrafnagud.munin.error.ConflictException;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
 import de.mhus.hrafnagud.munin.util.Slugs;
 import de.mhus.hrafnagud.munin.util.UrlNormalizer;
 import java.time.Duration;
@@ -64,10 +65,13 @@ public class SourceService {
     private final FetchSchedulePolicy schedulePolicy;
 
     public SourceService(SourceRepository repository, MongoTemplate mongoTemplate,
-            MuninProperties properties) {
+            MuninProperties properties, MuninSettings settings) {
         this.repository = repository;
         this.mongoTemplate = mongoTemplate;
-        this.schedulePolicy = new FetchSchedulePolicy(properties.getFeed());
+        // The policy holds handles rather than numbers, so one instance for the
+        // life of the service still sees a changed bound on its next call.
+        this.schedulePolicy = new FetchSchedulePolicy(
+                settings.getFeed(), properties.getFeed().getProfiles());
     }
 
     /** Interval classes this instance knows, for diagnostics and the API. */

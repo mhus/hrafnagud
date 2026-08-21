@@ -173,7 +173,7 @@ class ArticleFactoryTest {
 
         ArticleDocument article = ArticleFactory.build(candidate(), source,
                 new LanguageResolver.Resolution("en", LanguageSource.SOURCE),
-                ContentStatus.PENDING, "",
+                ContentStatus.PENDING, TranslationLanguages.DORMANT,
                 List.of("m49:001", "m49:142", "m49:035", "iso:SG"), Instant.now());
 
         assertThat(article.getOriginCountry()).isEqualTo("SG");
@@ -188,7 +188,7 @@ class ArticleFactoryTest {
 
         ArticleDocument article = ArticleFactory.build(candidate(), source,
                 new LanguageResolver.Resolution("en", LanguageSource.SOURCE),
-                ContentStatus.PENDING, "", List.of(), Instant.now());
+                ContentStatus.PENDING, TranslationLanguages.DORMANT, List.of(), Instant.now());
 
         assertThat(article.getOriginCountry()).isNull();
         assertThat(article.getOriginPlaceIds()).isEmpty();

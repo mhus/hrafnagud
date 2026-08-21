@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import de.mhus.hrafnagud.api.catalog.CatalogCreateRequest;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.TestSettings;
 import de.mhus.hrafnagud.munin.sourcelist.SourceListService;
 import java.time.Instant;
 import java.util.List;
@@ -39,7 +40,7 @@ class SourceCatalogServiceCreateTest {
         service = new SourceCatalogService(repository, mock(MongoTemplate.class),
                 mock(SourceListService.class),
                 List.of(new GithubOpmlReader(null, null)),
-                new MuninProperties());
+                TestSettings.defaults());
     }
 
     @Test

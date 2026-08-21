@@ -47,6 +47,7 @@
             <li class="nav-item"><a class="nav-link" href="#" data-view="categories">Kategorien</a></li>
             <li class="nav-item"><a class="nav-link" href="#" data-view="filter">Filter</a></li>
             <li class="nav-item"><a class="nav-link" href="#" data-view="catalogs">Kataloge</a></li>
+            <li class="nav-item"><a class="nav-link" href="#" data-view="settings">Einstellungen</a></li>
         </ul>
 
         <span id="conn" class="badge text-bg-secondary">nicht verbunden</span>
@@ -307,6 +308,39 @@
             die falsche Antwort ist.
         </p>
         <div id="catalog-cards" class="row g-3"></div>
+    </section>
+
+    <!-- ─── Einstellungen ─────────────────────────────────────────── -->
+    <section id="view-settings" class="d-none">
+        <p class="text-body-secondary small">
+            Betriebswerte, die im Lauf geändert werden können. Ein Wert ohne
+            eigenen Eintrag kommt aus der Konfiguration
+            (<code>application.yml</code> bzw. <code>HRAFNAGUD_*</code>); wird
+            hier einer gesetzt, gilt er stattdessen. <em>Zurücksetzen</em> löscht
+            ihn wieder und der konfigurierte Wert übernimmt.
+        </p>
+        <p class="text-body-secondary small">
+            Nicht hier: was beim Start gelesen wird — Tick-Takte, Proxy,
+            API-Token, <code>installBundled</code> und die Schalter der
+            Vancetope-Endpunkte. Die stehen in der Konfiguration, weil ein Wert
+            an dieser Stelle einer wäre, den niemand mehr liest.
+        </p>
+
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead><tr>
+                    <th>Einstellung</th><th style="width: 14rem">Wert</th>
+                    <th>Default</th><th>Herkunft</th><th></th>
+                </tr></thead>
+                <tbody id="tbody-settings"></tbody>
+            </table>
+        </div>
+        <p class="text-body-secondary small mb-0">
+            Schalter und Stückzahlen greifen im nächsten Durchlauf. Die
+            Intervall-Grenzen greifen, wenn eine Quelle das nächste Mal
+            eingeplant wird — bereits vergebene Abholzeiten bleiben stehen, bis
+            die jeweilige Quelle wieder dran war.
+        </p>
     </section>
 
 </main>

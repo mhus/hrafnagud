@@ -1,11 +1,12 @@
 package de.mhus.hrafnagud.munin.sourcelist;
 
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.munin.settings.WorkerSwitch;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -19,23 +20,31 @@ import org.springframework.stereotype.Component;
  * at the same time.
  */
 @Component
-@ConditionalOnProperty(name = "munin.source-list.enabled", havingValue = "true",
-        matchIfMissing = true)
 @Slf4j
 public class SourceListRefreshTick {
 
     private final SourceListService listService;
-    private final MuninProperties.SourceList config;
+    private final MuninSettings.SourceList config;
+    private final WorkerSwitch enabled;
+
+    /** The tick cadence, which is read once by the scheduler and so stays a property. */
+    private final MuninProperties.SourceList cadence;
     private final AtomicInteger running = new AtomicInteger();
 
-    public SourceListRefreshTick(SourceListService listService, MuninProperties properties) {
+    public SourceListRefreshTick(SourceListService listService, MuninProperties properties,
+            MuninSettings settings) {
         this.listService = listService;
-        this.config = properties.getSourceList();
+        this.config = settings.getSourceList();
+        this.cadence = properties.getSourceList();
+        this.enabled = new WorkerSwitch("Source-list refresh", config.enabled());
     }
 
     @Scheduled(fixedDelayString = "${munin.source-list.tickInterval:PT5M}",
             initialDelayString = "${munin.source-list.initialDelay:PT20S}")
     public void tick() {
+        if (!enabled.isOn()) {
+            return;
+        }
         if (running.get() > 0) {
             log.trace("Source-list tick still running — skipping this round");
             return;
@@ -66,13 +75,14 @@ public class SourceListRefreshTick {
         // sources, and a round that never ends is a round that never releases
         // its leases.
         int refreshed = 0;
-        while (refreshed < config.getMaxPerRound()) {
+        while (refreshed < config.maxPerRound().value()) {
             // Deliberately the round's own clock, not a fresh one per batch: a
             // list that becomes due while the round is running belongs to the
             // next round, and re-reading the clock here would let a long round
             // keep finding new work and never finish.
             List<SourceListDocument> claimed = listService.claimDue(now,
-                    Math.min(config.getBatchSize(), config.getMaxPerRound() - refreshed));
+                    Math.min(config.batchSize().value(),
+                            config.maxPerRound().value() - refreshed));
             if (claimed.isEmpty()) {
                 break;
             }
@@ -86,17 +96,17 @@ public class SourceListRefreshTick {
             }
             refreshed += claimed.size();
         }
-        if (refreshed >= config.getMaxPerRound()) {
+        if (refreshed >= config.maxPerRound().value()) {
             // Said out loud, because the alternative is an operator watching a
             // number climb and not knowing whether it has stopped.
             log.info("Source-list round hit the {}-list cap; more are due and the next "
-                    + "round continues", config.getMaxPerRound());
+                    + "round continues", config.maxPerRound().value());
         }
         return refreshed;
     }
 
     /** Configured refresh cadence — surfaced for diagnostics. */
     public long tickIntervalSeconds() {
-        return config.getTickInterval().getSeconds();
+        return cadence.getTickInterval().getSeconds();
     }
 }

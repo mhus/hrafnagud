@@ -6,13 +6,13 @@ import de.mhus.hrafnagud.api.filter.FilterDecision;
 import de.mhus.hrafnagud.api.filter.FilterOutcome;
 import de.mhus.hrafnagud.api.filter.FilterOutcomes;
 import de.mhus.hrafnagud.munin.category.CategoryMappingService;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
 import de.mhus.hrafnagud.munin.filter.ArticleFilterService;
 import de.mhus.hrafnagud.munin.filter.FilterSubject;
 import de.mhus.hrafnagud.munin.lang.LanguageResolver;
 import de.mhus.hrafnagud.munin.place.PlaceRegistry;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -98,8 +98,8 @@ public class ArticleService {
     private final ArticleContentRepository contentRepository;
     private final MongoTemplate mongoTemplate;
     private final EnrichmentService enrichmentService;
-    private final MuninProperties.Content contentConfig;
-    private final MuninProperties.Translation translationConfig;
+    private final MuninSettings.Content contentConfig;
+    private final MuninSettings.Translation translationConfig;
     private final PlaceRegistry placeRegistry;
     private final CategoryMappingService categoryMappingService;
     private final ArticleFilterService articleFilterService;
@@ -107,7 +107,7 @@ public class ArticleService {
     public ArticleService(ArticleRepository repository, ArticleContentRepository contentRepository,
             EnrichmentService enrichmentService, MongoTemplate mongoTemplate,
             PlaceRegistry placeRegistry, CategoryMappingService categoryMappingService,
-            ArticleFilterService articleFilterService, MuninProperties properties) {
+            ArticleFilterService articleFilterService, MuninSettings settings) {
         this.repository = repository;
         this.contentRepository = contentRepository;
         this.enrichmentService = enrichmentService;
@@ -115,8 +115,21 @@ public class ArticleService {
         this.placeRegistry = placeRegistry;
         this.categoryMappingService = categoryMappingService;
         this.articleFilterService = articleFilterService;
-        this.contentConfig = properties.getContent();
-        this.translationConfig = properties.getTranslation();
+        this.contentConfig = settings.getContent();
+        this.translationConfig = settings.getTranslation();
+    }
+
+    /**
+     * The translation decision as it stands right now.
+     *
+     * <p>Built per call rather than held: both halves of it — the pivot
+     * language and the languages that need no translation — are settings, and a
+     * copy taken in the constructor is exactly what used to make changing them
+     * a restart.
+     */
+    private TranslationLanguages translationLanguages() {
+        return TranslationLanguages.of(translationConfig.pivotLanguage().value(),
+                translationConfig.readableLanguages().value());
     }
 
     /** What one ingest call did. */
@@ -165,7 +178,7 @@ public class ArticleService {
 
         ArticleDocument document = ArticleFactory.build(candidate, source, language,
                 filters.content().denied() ? ContentStatus.SKIPPED : contentStatus,
-                translationConfig.getPivotLanguage(), originPlaceIds, topicIds, filters, now);
+                translationLanguages(), originPlaceIds, topicIds, filters, now);
 
         IngestOutcome outcome;
         try {
@@ -606,7 +619,7 @@ public class ArticleService {
      * being retried forever.
      */
     public List<ArticleDocument> claimContentDue(Instant now, int limit) {
-        Instant leaseUntil = now.plus(contentConfig.getClaimLease());
+        Instant leaseUntil = now.plus(contentConfig.claimLease().value());
         List<ArticleDocument> claimed = new ArrayList<>();
         for (int i = 0; i < limit; i++) {
             Query query = Query.query(Criteria.where(F_CONTENT_STATUS).is(ContentStatus.PENDING)
@@ -668,7 +681,7 @@ public class ArticleService {
                 .set("contentError", StringUtils.abbreviate(
                         StringUtils.defaultString(error, status.name()), 500));
 
-        boolean exhausted = attempts >= contentConfig.getMaxAttempts();
+        boolean exhausted = attempts >= contentConfig.maxAttempts().value();
         if (status != ContentStatus.PENDING || exhausted) {
             update.set(F_CONTENT_STATUS,
                     status == ContentStatus.PENDING ? ContentStatus.FAILED : status);
@@ -676,7 +689,7 @@ public class ArticleService {
             // article would keep it in the partial index forever.
             update.unset(F_CONTENT_NEXT_ATTEMPT_AT);
         } else {
-            long delaySeconds = contentConfig.getRetryDelay().getSeconds()
+            long delaySeconds = contentConfig.retryDelay().value().getSeconds()
                     * (1L << Math.min(attempts, 6));
             update.set(F_CONTENT_NEXT_ATTEMPT_AT, now.plusSeconds(delaySeconds));
         }
@@ -795,7 +808,7 @@ public class ArticleService {
      */
     private QueueMove translationQueueMove(ArticleDocument article, FilterOutcome policy) {
         TranslationStatus target = ArticleFactory.initialTranslationStatus(
-                translationConfig.getPivotLanguage(), article.getLanguage(), policy);
+                translationLanguages(), article.getLanguage(), policy);
         TranslationStatus current = article.getTranslationStatus();
 
         if (target == TranslationStatus.SKIPPED && current == TranslationStatus.PENDING) {
@@ -868,7 +881,7 @@ public class ArticleService {
      * expires rather than pinning it.
      */
     public List<ArticleDocument> claimTranslationDue(Instant now, int limit) {
-        Instant leaseUntil = now.plus(translationConfig.getClaimLease());
+        Instant leaseUntil = now.plus(translationConfig.claimLease().value());
         List<ArticleDocument> claimed = new ArrayList<>();
         for (int i = 0; i < limit; i++) {
             Query query = Query.query(
@@ -947,11 +960,11 @@ public class ArticleService {
         Update update = new Update().set("translationError",
                 StringUtils.abbreviate(StringUtils.defaultString(error, "translation failed"), 500));
 
-        if (attempts >= translationConfig.getMaxAttempts()) {
+        if (attempts >= translationConfig.maxAttempts().value()) {
             update.set(F_TRANSLATION_STATUS, TranslationStatus.FAILED);
             update.unset(F_TRANSLATION_NEXT_ATTEMPT_AT);
         } else {
-            long delaySeconds = translationConfig.getRetryDelay().getSeconds()
+            long delaySeconds = translationConfig.retryDelay().value().getSeconds()
                     * (1L << Math.min(attempts, 6));
             update.set(F_TRANSLATION_NEXT_ATTEMPT_AT, now.plusSeconds(delaySeconds));
         }

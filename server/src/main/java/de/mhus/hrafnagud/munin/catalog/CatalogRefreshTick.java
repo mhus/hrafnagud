@@ -1,11 +1,12 @@
 package de.mhus.hrafnagud.munin.catalog;
 
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.munin.settings.WorkerSwitch;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -23,23 +24,31 @@ import org.springframework.stereotype.Component;
  * reconciliation passes in flight over overlapping sets would buy nothing.
  */
 @Component
-@ConditionalOnProperty(name = "munin.catalog.enabled", havingValue = "true",
-        matchIfMissing = true)
 @Slf4j
 public class CatalogRefreshTick {
 
     private final SourceCatalogService catalogService;
-    private final MuninProperties.Catalog config;
+    private final MuninSettings.Catalog config;
+    private final WorkerSwitch enabled;
+
+    /** The tick cadence, which is read once by the scheduler and so stays a property. */
+    private final MuninProperties.Catalog cadence;
     private final AtomicInteger running = new AtomicInteger();
 
-    public CatalogRefreshTick(SourceCatalogService catalogService, MuninProperties properties) {
+    public CatalogRefreshTick(SourceCatalogService catalogService, MuninProperties properties,
+            MuninSettings settings) {
         this.catalogService = catalogService;
-        this.config = properties.getCatalog();
+        this.config = settings.getCatalog();
+        this.cadence = properties.getCatalog();
+        this.enabled = new WorkerSwitch("Catalogue refresh", config.enabled());
     }
 
     @Scheduled(fixedDelayString = "${munin.catalog.tickInterval:PT15M}",
             initialDelayString = "${munin.catalog.initialDelay:PT30S}")
     public void tick() {
+        if (!enabled.isOn()) {
+            return;
+        }
         if (running.get() > 0) {
             log.trace("Catalog tick still running — skipping this round");
             return;
@@ -73,6 +82,6 @@ public class CatalogRefreshTick {
 
     /** Configured refresh cadence — surfaced for diagnostics. */
     public long tickIntervalSeconds() {
-        return config.getTickInterval().getSeconds();
+        return cadence.getTickInterval().getSeconds();
     }
 }

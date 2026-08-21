@@ -131,7 +131,7 @@ Details, configuration surface and the reasoning behind the layout:
 `http://localhost:9800/` opens a small operator console, one view per
 subsystem: an overview that says whether collection is alive, the source
 registry with its failures, the articles with what was extracted from them, the
-category mappings, the filter rules, and the catalogues.
+category mappings, the filter rules, the catalogues, and the settings.
 
 ```yaml
 munin:
@@ -148,7 +148,8 @@ to reach the page that asks for a token is a loop, not a security measure.
 **Mostly read-only, and the exceptions are chosen rather than accumulated.**
 What the console can change is what an operator has to change while looking at
 the data, and what a mis-click cannot destroy: switch a catalogue on or off and
-re-read it, settle a category mapping by hand, write and re-apply filter rules.
+re-read it, settle a category mapping by hand, write and re-apply filter rules,
+turn an operational value up or down.
 No article deletion, no source editing, no re-queueing a body — those exist in
 the API and are one `curl` away. Putting an operation behind a button is a
 different decision from showing what is going on, and it is made one operation
@@ -157,6 +158,35 @@ at a time.
 Bootstrap comes from a CDN, so the console needs internet access even where
 hrafnagud does not. That is the one trade in it: ~60 KB of JAR against a
 dependency on `cdn.jsdelivr.net` being reachable from the browser.
+
+## Settings
+
+**Operational values live in the database and can be changed while the service
+runs** — the worker switches, the batch sizes, the retry budgets, the interval
+bounds, the thresholds. `application.yml` and the `HRAFNAGUD_*` environment stay
+the layer underneath: a value with no stored override comes from there, and
+deleting an override is the way back to it.
+
+```bash
+curl localhost:9800/api/v1/settings                     # value, default, and which is in force
+curl -X PUT localhost:9800/api/v1/settings/munin.content.enabled \
+     -H 'Content-Type: application/json' -d '{"value":"true"}'
+curl -X DELETE localhost:9800/api/v1/settings/munin.content.enabled
+```
+
+The keys are the property names unchanged, so `munin.feed.batchSize` in the YAML
+is the default for the setting of that name. Values are checked against the
+declared type before they are stored, and a key this build does not declare is a
+404 rather than a row nothing reads. The console edits the same list under
+**Einstellungen**.
+
+Switches and counts take effect at the start of the next round; the interval
+bounds apply the next time a source is rescheduled, so poll times already
+written stay as they are. **Start-up values are deliberately not settings** —
+tick cadences, the proxy, the console switch, the Vancetope endpoint switches,
+`installBundled` — because nothing would read them after boot. Nor are secrets:
+the API token and the Ode keys stay in the environment. The reasoning for both:
+[settings.md](specs/settings.md).
 
 ## Data model
 
@@ -170,6 +200,7 @@ dependency on `cdn.jsdelivr.net` being reachable from the browser.
 | `enrichments` | results of processing steps over an article — one document per run, append-only |
 | `category_mappings` | what each publisher category was decided to mean, once for the whole archive |
 | `filter_rules` | accept/deny rules deciding which articles are worth fetching and translating |
+| `settings` | operational values an operator has changed — one document per override, absent means "as configured" |
 
 Every article carries the place path of the publisher it first arrived through
 (`originPlaceIds`, world → region → sub-region → country from UN M.49 and ISO
@@ -179,10 +210,14 @@ what an article is *about* is a different field that does not exist yet, and
 conflating the two is the mistake [geo.md](specs/geo.md) exists to prevent.
 
 Body fetching is off by default (`munin.content.enabled`). Turning it on
-works through whatever has accumulated, since ingest queues everything:
+works through whatever has accumulated, since ingest queues everything — at
+start-up, or while it runs:
 
 ```bash
 java -jar server/target/hrafnagud.jar --munin.content.enabled=true
+
+curl -X PUT localhost:9800/api/v1/settings/munin.content.enabled \
+     -H 'Content-Type: application/json' -d '{"value":"true"}'
 ```
 
 `POST /api/v1/articles/{id}/fetch-content` requeues one article with a fresh
@@ -245,20 +280,38 @@ Off by default, and it takes two switches — `enabled` runs the worker,
 munin:
   translation:
     enabled: true               # the worker; off by default
-    pivotLanguage: de           # what gets queued, decided at ingest
+    pivotLanguage: de           # the one target, decided at ingest
+    readableLanguages: en       # languages that need no translation at all
     translateSummary: true      # titles alone cost a tenth of the text
 ```
 
 Separate on purpose: pausing translation by clearing the pivot language would
 mark every article ingested meanwhile as `SKIPPED`, silently and for good.
 With `enabled: false` the queue keeps filling and resumes when you switch the
-worker back on — the startup log says which of the four states you are in.
+worker back on — the startup log says which of the four states you are in, and
+the log says so again whenever the switch changes.
+
+Both are [settings](#settings): they can be changed while the service runs, and
+the worker picks the change up on its next round. A new pivot language applies
+to articles arriving from then on — the ones already stored keep their decision
+until the filter is re-evaluated.
 
 One pivot language, not a list of targets. Everything downstream — search,
-rating, clustering — reads one language, and an article already in it is
-marked `SKIPPED` at ingest rather than queued. Translating into a second
-language is a presentation concern and belongs wherever it is displayed,
-not in the archive.
+rating, clustering — reads one language. Translating into a *second* language is
+a presentation concern and belongs wherever it is displayed, not in the archive.
+
+**One target does not mean one exempt language.** `readableLanguages` lists the
+languages that need no translation at all — with `pivotLanguage: de` and
+`readableLanguages: en`, both German and English articles are marked `SKIPPED`
+at ingest and only the rest is queued. That is the difference between paying for
+the half of the archive you could already read and not paying for it. The pivot
+is always exempt and need not be repeated; an article whose language is
+*unknown* is queued anyway, because the cost of being wrong that way is one call
+that returns the text unchanged.
+
+Both are read at ingest, so a change applies to articles arriving from then on.
+For the ones already stored, `POST /api/v1/filter/reevaluate` asks the same
+function and moves them out of the queue — or back in.
 
 Title and teaser go out in **one** call. At realistic volume the recipe
 prompt dominates the token bill — roughly five times the length of the
@@ -387,6 +440,7 @@ that a single list stopped being readable:
 | [collection](specs/collection.md) | Source identity, deduplication, URL normalisation, adaptive polling, source lists, language provenance |
 | [content-extraction](specs/content-extraction.md) | The four-rung ladder, images, script-aware word counts, the fixture corpus |
 | [enrichments](specs/enrichments.md) | Why a processing result is a document and not a field |
+| [settings](specs/settings.md) | Operational values in the database, what stays a start-up property, and when a change takes effect |
 | [translation](specs/translation.md) | The pivot language, the provider SPI, the Vancetope event, the nested timeouts |
 | [feed-source](specs/feed-source.md) | Serving the archive: streams, cursor, declared capabilities and the two declined ones |
 | [research-source](specs/research-source.md) | Relevance search, searching translation and original, the two contract rules |
@@ -414,6 +468,11 @@ Named rather than left to be discovered:
   a service whose user base is the person running it, and not enough for
   anything with several operators. Empty — the default — means no check at
   all: right on a loopback binding, wrong on a reachable port.
+- **Settings have no history.** A changed value carries the time it was
+  written and nothing else — not the previous value and not who wrote it. The
+  log line for the write is the only trace, and it is not queryable. Nor is
+  anything validated beyond its type: `minInterval` above `maxInterval` is
+  accepted and behaves as you would expect.
 - **No retention policy.** At ten thousand articles a day the archive grows
   quickly and nothing prunes it yet. A TTL or archival tier is needed before
   this runs for months.

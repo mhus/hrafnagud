@@ -5,10 +5,10 @@ import de.mhus.hrafnagud.api.catalog.CatalogRefreshReport;
 import de.mhus.hrafnagud.api.catalog.CatalogUpdateRequest;
 import de.mhus.hrafnagud.api.catalog.MissingListPolicy;
 import de.mhus.hrafnagud.api.source.FetchOutcome;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
 import de.mhus.hrafnagud.munin.error.BadRequestException;
 import de.mhus.hrafnagud.munin.error.ConflictException;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
 import de.mhus.hrafnagud.munin.sourcelist.SourceListCandidate;
 import de.mhus.hrafnagud.munin.sourcelist.SourceListService;
 import de.mhus.hrafnagud.munin.util.Slugs;
@@ -55,18 +55,18 @@ public class SourceCatalogService {
     private final SourceCatalogRepository repository;
     private final MongoTemplate mongoTemplate;
     private final SourceListService listService;
-    private final MuninProperties.Catalog config;
-    private final MuninProperties.SourceList listConfig;
+    private final MuninSettings.Catalog config;
+    private final MuninSettings.SourceList listConfig;
     private final Map<String, CatalogReader> readers = new LinkedHashMap<>();
 
     public SourceCatalogService(SourceCatalogRepository repository, MongoTemplate mongoTemplate,
             SourceListService listService, List<CatalogReader> readerBeans,
-            MuninProperties properties) {
+            MuninSettings settings) {
         this.repository = repository;
         this.mongoTemplate = mongoTemplate;
         this.listService = listService;
-        this.config = properties.getCatalog();
-        this.listConfig = properties.getSourceList();
+        this.config = settings.getCatalog();
+        this.listConfig = settings.getSourceList();
         for (CatalogReader reader : readerBeans) {
             readers.put(reader.type(), reader);
         }
@@ -148,7 +148,7 @@ public class SourceCatalogService {
                         ? MissingListPolicy.DISABLE
                         : request.getMissingListPolicy())
                 .refreshIntervalSeconds(request.getRefreshIntervalSeconds() == null
-                        ? config.getDefaultInterval().getSeconds()
+                        ? config.defaultInterval().value().getSeconds()
                         : Math.max(300, request.getRefreshIntervalSeconds()))
                 // Due immediately, so registering a catalogue shows within one
                 // tick whether it resolves at all.
@@ -243,7 +243,7 @@ public class SourceCatalogService {
 
     /** Claims up to {@code limit} catalogues that are due, leasing each. */
     public List<SourceCatalogDocument> claimDue(Instant now, int limit) {
-        Instant leaseUntil = now.plus(config.getClaimLease());
+        Instant leaseUntil = now.plus(config.claimLease().value());
         List<SourceCatalogDocument> claimed = new ArrayList<>();
         for (int i = 0; i < limit; i++) {
             Query query = Query.query(Criteria.where(F_ENABLED).is(true)
@@ -314,7 +314,7 @@ public class SourceCatalogService {
 
         CatalogEntryFilter filter = CatalogEntryFilter.of(catalog);
         long listInterval = catalog.getListRefreshIntervalSeconds() == null
-                ? listConfig.getDefaultInterval().getSeconds()
+                ? listConfig.defaultInterval().value().getSeconds()
                 : catalog.getListRefreshIntervalSeconds();
 
         int created = 0;
@@ -391,7 +391,7 @@ public class SourceCatalogService {
 
         int failures = outcome.successful() ? 0 : catalog.getConsecutiveFailures() + 1;
         long interval = catalog.getRefreshIntervalSeconds() <= 0
-                ? config.getDefaultInterval().getSeconds()
+                ? config.defaultInterval().value().getSeconds()
                 : catalog.getRefreshIntervalSeconds();
         // Directories change slowly and a failing one is usually failing for
         // everybody; back off hard, but never past a week.

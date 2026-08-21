@@ -17,6 +17,21 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * crawled; the fastest configuration that still works is not the right one,
  * because the cost of being wrong is a block that no retry policy recovers
  * from.
+ *
+ * <h2>This is the default layer, not the value</h2>
+ * Most of what is below is read through
+ * {@link de.mhus.hrafnagud.munin.settings.MuninSettings}, which puts whatever
+ * an operator has stored in the database in front of it. So these fields are
+ * what a value <em>falls back to</em>: they still come from
+ * {@code application.yml} and the {@code HRAFNAGUD_*} environment as before,
+ * and removing an override is what returns a setting to them.
+ *
+ * <p>Read straight from here — because nothing could read them any later — are
+ * the values consumed while the service starts: the tick cadences, the proxy
+ * and connect timeout behind the shared HTTP client, the language detector's
+ * model configuration, {@link Catalog#installBundled}, {@link Api} in full, and
+ * {@link Feed#profiles}. {@code specs/settings.md} §3 is that boundary written
+ * down.
  */
 @ConfigurationProperties(prefix = "munin")
 @Data
@@ -32,6 +47,26 @@ public class MuninProperties {
     private final Category category = new Category();
     private final Filter filter = new Filter();
     private final Api api = new Api();
+    private final Settings settings = new Settings();
+
+    /**
+     * The settings layer itself, which can only be configured from here — a
+     * setting that decided how settings are read would be a loop.
+     */
+    @Data
+    public static class Settings {
+
+        /**
+         * How often stored overrides are re-read.
+         *
+         * <p>Everything written through the API is visible at once, so this
+         * only matters for a value changed straight in the database and for a
+         * second instance the deployment is not supposed to have. The
+         * collection holds one small document per changed value, which is why
+         * polling it is cheaper than being clever about it.
+         */
+        private Duration refreshInterval = Duration.ofSeconds(30);
+    }
 
     /** Shared HTTP behaviour for feed, list and article requests. */
     @Data
@@ -347,6 +382,20 @@ public class MuninProperties {
          * different job, and one field cannot honestly be both.
          */
         private String pivotLanguage = "";
+
+        /**
+         * Languages that need no translation, as BCP-47 primary subtags.
+         *
+         * <p>An article in one of these is marked {@code SKIPPED} at ingest
+         * rather than queued. {@link #pivotLanguage} always counts as one of
+         * them — translating German into German costs a call and returns what
+         * it was given — so this list is for the <em>other</em> languages a
+         * reader here can already read.
+         *
+         * <p>Empty is the honest default: it says nothing about what anybody
+         * reads, and translates everything that is not already the pivot.
+         */
+        private List<String> readableLanguages = new ArrayList<>();
 
         /**
          * Whether the teaser is translated alongside the title.

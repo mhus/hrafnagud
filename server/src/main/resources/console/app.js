@@ -1233,11 +1233,125 @@ function defList(rows) {
         + '<dd class="col-sm-9">' + value + '</dd>').join('') + '</dl>';
 }
 
+// ── settings ────────────────────────────────────────────────────────────
+//
+// One row per declared setting, grouped by the section of its key. The value
+// is edited in place: there is nothing to look at behind a row that the row
+// does not already show, so a dialog would only add a click.
+//
+// Every string here — key, description, value — comes from the API and goes
+// through esc(). The values are ours rather than a publisher's, but the rule
+// does not get exceptions, because the next value that looks ours might not be.
+
+async function loadSettings() {
+    clearError();
+    const settings = await api('/settings');
+    const tbody = document.getElementById('tbody-settings');
+
+    if (!settings.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-body-secondary">'
+            + 'Keine Einstellungen deklariert.</td></tr>';
+        return;
+    }
+
+    let section = null;
+    const rows = [];
+    for (const setting of settings) {
+        const current = sectionOf(setting.key);
+        if (current !== section) {
+            section = current;
+            rows.push('<tr class="table-light"><th colspan="5" class="small">'
+                + esc(section) + '</th></tr>');
+        }
+        rows.push(settingRow(setting));
+    }
+    tbody.innerHTML = rows.join('');
+
+    tbody.querySelectorAll('[data-save]').forEach(button =>
+        button.addEventListener('click', () =>
+            saveSetting(button.dataset.save).catch(showError)));
+    tbody.querySelectorAll('[data-reset]').forEach(button =>
+        button.addEventListener('click', () =>
+            resetSetting(button.dataset.reset).catch(showError)));
+    tbody.querySelectorAll('[data-key]').forEach(input =>
+        input.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                saveSetting(input.dataset.key).catch(showError);
+            }
+        }));
+}
+
+/** `munin.source-list.batchSize` → `munin.source-list`. */
+function sectionOf(key) {
+    const parts = key.split('.');
+    return parts.slice(0, parts.length - 1).join('.');
+}
+
+function settingRow(setting) {
+    const overridden = setting.source === 'DATABASE';
+    return '<tr>'
+        + '<td><code>' + esc(setting.key.split('.').pop()) + '</code>'
+        + '<div class="small text-body-secondary">' + esc(setting.description) + '</div></td>'
+        + '<td>' + settingInput(setting) + '</td>'
+        + '<td class="small text-body-secondary"><code>'
+            + esc(setting.defaultValue || '—') + '</code></td>'
+        + '<td class="small">' + (overridden
+            ? '<span class="badge text-bg-primary">geändert</span>'
+              + (setting.updatedAt
+                  ? ' <span class="text-body-secondary">' + esc(absolute(setting.updatedAt))
+                    + '</span>'
+                  : '')
+            : '<span class="text-body-secondary">Konfiguration</span>') + '</td>'
+        + '<td class="text-end text-nowrap">'
+        + '<button class="btn btn-sm btn-outline-primary" data-save="' + esc(setting.key)
+            + '">Speichern</button> '
+        + (overridden
+            ? '<button class="btn btn-sm btn-outline-secondary" data-reset="'
+              + esc(setting.key) + '">Zurücksetzen</button>'
+            : '')
+        + '</td></tr>';
+}
+
+/**
+ * A select for a switch, a text box for everything else.
+ *
+ * <p>Booleans are the values an operator comes here to change in a hurry —
+ * "stop fetching bodies" — and a free-text field that accepts `ture` and then
+ * silently keeps the old value would be the wrong thing to hand somebody in
+ * that moment. The API refuses it either way; this makes it unavailable.
+ */
+function settingInput(setting) {
+    const key = esc(setting.key);
+    if (setting.type === 'BOOLEAN') {
+        const on = setting.value === 'true';
+        return '<select class="form-select form-select-sm" data-key="' + key + '">'
+            + '<option value="true"' + (on ? ' selected' : '') + '>an</option>'
+            + '<option value="false"' + (on ? '' : ' selected') + '>aus</option>'
+            + '</select>';
+    }
+    return '<input class="form-control form-control-sm" data-key="' + key
+        + '" value="' + esc(setting.value) + '">';
+}
+
+async function saveSetting(key) {
+    const input = document.querySelector('[data-key="' + CSS.escape(key) + '"]');
+    await api('/settings/' + encodeURIComponent(key), null, 'PUT', { value: input.value });
+    showNote(key + ' gespeichert.');
+    await loadSettings();
+}
+
+async function resetSetting(key) {
+    await api('/settings/' + encodeURIComponent(key), null, 'DELETE');
+    showNote(key + ' folgt wieder der Konfiguration.');
+    await loadSettings();
+}
+
 // ── views ───────────────────────────────────────────────────────────────
 
 function showView(name) {
     for (const view of ['overview', 'sources', 'articles', 'categories', 'filter',
-            'catalogs']) {
+            'catalogs', 'settings']) {
         document.getElementById('view-' + view).classList.toggle('d-none', view !== name);
     }
     document.querySelectorAll('#tabs .nav-link').forEach(tab =>
@@ -1357,7 +1471,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function currentView() {
     const view = location.hash.slice(1);
-    return ['overview', 'sources', 'articles', 'categories', 'filter', 'catalogs']
+    return ['overview', 'sources', 'articles', 'categories', 'filter', 'catalogs', 'settings']
             .includes(view)
             ? view : 'overview';
 }
@@ -1369,6 +1483,7 @@ function reloadCurrentView() {
         : view === 'categories' ? () => loadCategories(categoriesPage)
         : view === 'filter' ? loadFilterRules
         : view === 'catalogs' ? loadCatalogs
+        : view === 'settings' ? loadSettings
         : loadStats;
     load().catch(showError);
 }

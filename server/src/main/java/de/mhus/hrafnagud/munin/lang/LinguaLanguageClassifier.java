@@ -5,6 +5,7 @@ import com.github.pemistahl.lingua.api.Language;
 import com.github.pemistahl.lingua.api.LanguageDetector;
 import com.github.pemistahl.lingua.api.LanguageDetectorBuilder;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -33,24 +34,33 @@ import org.springframework.stereotype.Component;
 @Slf4j
 public class LinguaLanguageClassifier implements LanguageClassifier {
 
-    private final MuninProperties.Language config;
+    private final MuninSettings.Language config;
+
+    /**
+     * What the detector itself is built from. Start-up only: the models are
+     * loaded once and hold their n-grams in memory for the life of the
+     * process, so switching accuracy mode or narrowing the language set is a
+     * restart rather than a knob.
+     */
+    private final MuninProperties.Language model;
 
     /** Guarded by {@link #lock}; built on first {@link #detect} call. */
     private volatile @Nullable LanguageDetector detector;
 
     private final Object lock = new Object();
 
-    public LinguaLanguageClassifier(MuninProperties properties) {
-        this.config = properties.getLanguage();
+    public LinguaLanguageClassifier(MuninProperties properties, MuninSettings settings) {
+        this.config = settings.getLanguage();
+        this.model = properties.getLanguage();
     }
 
     @Override
     public @Nullable String detect(String text) {
-        if (!config.isEnabled()) {
+        if (!config.enabled().value()) {
             return null;
         }
         String value = StringUtils.trimToEmpty(text);
-        if (value.length() < config.getMinChars()) {
+        if (value.length() < config.minChars().value()) {
             return null;
         }
         Language detected = detector().detectLanguageOf(value);
@@ -71,15 +81,15 @@ public class LinguaLanguageClassifier implements LanguageClassifier {
                 long start = System.currentTimeMillis();
                 detector = build();
                 log.info("Language detector ready in {} ms (lowAccuracy={})",
-                        System.currentTimeMillis() - start, config.isLowAccuracyMode());
+                        System.currentTimeMillis() - start, model.isLowAccuracyMode());
             }
             return detector;
         }
     }
 
     private LanguageDetector build() {
-        LanguageDetectorBuilder builder = builderFor(config.getLanguages());
-        if (config.isLowAccuracyMode()) {
+        LanguageDetectorBuilder builder = builderFor(model.getLanguages());
+        if (model.isLowAccuracyMode()) {
             builder = builder.withLowAccuracyMode();
         }
         return builder.build();

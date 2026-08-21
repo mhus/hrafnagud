@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import de.mhus.hrafnagud.api.source.FetchOutcome;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.TestSettings;
 import java.time.Duration;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -18,8 +20,7 @@ class FetchSchedulePolicyTest {
 
     @BeforeEach
     void setUp() {
-        MuninProperties.Feed config = new MuninProperties().getFeed();
-        policy = new FetchSchedulePolicy(config);
+        policy = new FetchSchedulePolicy(TestSettings.defaults().getFeed(), Map.of());
     }
 
     @Test
@@ -190,7 +191,9 @@ class FetchSchedulePolicyTest {
         sparse.setMaxInterval(Duration.ofDays(7));
         properties.getFeed().getProfiles().put("slow", sparse);
 
-        FetchProfile profile = new FetchSchedulePolicy(properties.getFeed()).profile("slow");
+        FetchProfile profile = new FetchSchedulePolicy(
+                TestSettings.of(properties).getFeed(), properties.getFeed().getProfiles())
+                .profile("slow");
 
         assertThat(profile.maxIntervalSeconds()).isEqualTo(Duration.ofDays(7).getSeconds());
         assertThat(profile.minIntervalSeconds()).isEqualTo(MIN);
@@ -204,6 +207,7 @@ class FetchSchedulePolicyTest {
         blog.setMinInterval(Duration.ofHours(6));
         blog.setMaxInterval(Duration.ofDays(7));
         properties.getFeed().getProfiles().put("blog", blog);
-        return new FetchSchedulePolicy(properties.getFeed());
+        return new FetchSchedulePolicy(
+                TestSettings.of(properties).getFeed(), properties.getFeed().getProfiles());
     }
 }

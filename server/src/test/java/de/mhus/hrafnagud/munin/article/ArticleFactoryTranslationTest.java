@@ -20,6 +20,11 @@ class ArticleFactoryTranslationTest {
     private static final Instant NOW = Instant.parse("2026-08-19T12:00:00Z");
 
     private static ArticleDocument build(String articleLanguage, String pivot) {
+        return build(articleLanguage, pivot, List.of());
+    }
+
+    private static ArticleDocument build(String articleLanguage, String pivot,
+            List<String> readable) {
         LanguageSource source = articleLanguage == null
                 ? LanguageSource.UNKNOWN : LanguageSource.DETECTED;
         return ArticleFactory.build(
@@ -27,7 +32,7 @@ class ArticleFactoryTranslationTest {
                         .title("Title").build(),
                 SourceDocument.builder().name("src").build(),
                 new LanguageResolver.Resolution(articleLanguage, source),
-                ContentStatus.PENDING, pivot, NOW);
+                ContentStatus.PENDING, TranslationLanguages.of(pivot, readable), NOW);
     }
 
     @Test
@@ -46,6 +51,46 @@ class ArticleFactoryTranslationTest {
 
         assertThat(article.getTranslationStatus()).isEqualTo(TranslationStatus.SKIPPED);
         assertThat(article.getTranslationNextAttemptAt()).isNull();
+    }
+
+    @Test
+    void an_article_in_a_readable_language_is_skipped() {
+        // The point of the list: a reader comfortable in English gains
+        // nothing from an English article translated into German.
+        ArticleDocument article = build("en", "de", List.of("en"));
+
+        assertThat(article.getTranslationStatus()).isEqualTo(TranslationStatus.SKIPPED);
+        assertThat(article.getTranslationNextAttemptAt()).isNull();
+    }
+
+    @Test
+    void a_language_outside_the_list_is_still_queued() {
+        assertThat(build("fr", "de", List.of("en")).getTranslationStatus())
+                .isEqualTo(TranslationStatus.PENDING);
+    }
+
+    @Test
+    void readable_languages_are_normalised_like_everything_else() {
+        // `EN` in the setting and `en` on the article are the same language;
+        // a set that compared them literally would silently never match.
+        assertThat(build("en", "de", List.of("EN", "fr-FR")).getTranslationStatus())
+                .isEqualTo(TranslationStatus.SKIPPED);
+        assertThat(build("fr", "de", List.of("EN", "fr-FR")).getTranslationStatus())
+                .isEqualTo(TranslationStatus.SKIPPED);
+    }
+
+    @Test
+    void an_unknown_language_is_queued_even_with_a_readable_list() {
+        // The list says which languages need no work, not that an article
+        // nobody could classify needs none.
+        assertThat(build(null, "de", List.of("en")).getTranslationStatus())
+                .isEqualTo(TranslationStatus.PENDING);
+    }
+
+    @Test
+    void a_readable_list_without_a_pivot_language_still_translates_nothing() {
+        assertThat(build("fr", "", List.of("en")).getTranslationStatus())
+                .isEqualTo(TranslationStatus.SKIPPED);
     }
 
     @Test
@@ -87,7 +132,8 @@ class ArticleFactoryTranslationTest {
                         .title("Title").build(),
                 SourceDocument.builder().name("src").build(),
                 new LanguageResolver.Resolution(articleLanguage, LanguageSource.DETECTED),
-                ContentStatus.PENDING, pivot, List.of(), List.of(), filters, NOW);
+                ContentStatus.PENDING, TranslationLanguages.of(pivot, List.of()),
+                List.of(), List.of(), filters, NOW);
     }
 
     private static FilterOutcomes denyTranslation() {

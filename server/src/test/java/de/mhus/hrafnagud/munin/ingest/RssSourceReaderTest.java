@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import de.mhus.hrafnagud.api.source.FetchOutcome;
 import de.mhus.hrafnagud.munin.article.ArticleCandidate;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.TestSettings;
 import de.mhus.hrafnagud.munin.net.HttpFetchResult;
 import de.mhus.hrafnagud.munin.net.HttpFetcher;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
@@ -35,7 +36,7 @@ class RssSourceReaderTest {
 
     @BeforeEach
     void setUp() {
-        reader = new RssSourceReader(fetcher, new MuninProperties());
+        reader = new RssSourceReader(fetcher, TestSettings.defaults());
     }
 
     private static SourceDocument source() {

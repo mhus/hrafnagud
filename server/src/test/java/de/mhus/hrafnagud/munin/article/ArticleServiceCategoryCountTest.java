@@ -16,6 +16,7 @@ import de.mhus.hrafnagud.api.filter.FilterOutcome;
 import de.mhus.hrafnagud.api.filter.FilterOutcomes;
 import de.mhus.hrafnagud.munin.category.CategoryMappingService;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.TestSettings;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import de.mhus.hrafnagud.munin.filter.ArticleFilterService;
 import de.mhus.hrafnagud.munin.lang.LanguageResolver;
@@ -69,7 +70,7 @@ class ArticleServiceCategoryCountTest {
                 new PlaceRegistry(),
                 categories,
                 filters,
-                new MuninProperties());
+                TestSettings.defaults());
     }
 
     @Test

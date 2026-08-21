@@ -9,15 +9,17 @@ because they control different things:
 
 | Setting | Controls | Default |
 |---|---|---|
-| `munin.translation.pivotLanguage` | what gets **queued**, decided at ingest | empty — nothing is ever queued |
-| `munin.translation.enabled` | whether the **worker** exists at all | `false` — `TranslationTick` is not even a bean |
+| `munin.translation.pivotLanguage` | what everything is translated **into**, and what gets queued — decided at ingest | empty — nothing is ever queued |
+| `munin.translation.readableLanguages` | which other languages need **no** translation | empty — only the pivot is exempt |
+| `munin.translation.enabled` | whether the **worker** runs | `false` — the tick returns immediately |
 
 ```yaml
 munin:
   translation:
     enabled: true
-    pivotLanguage: de
-    translateSummary: true    # titles alone cost a tenth of the text
+    pivotLanguage: de          # the one target
+    readableLanguages: en      # plus: an English article needs no work
+    translateSummary: true     # titles alone cost a tenth of the text
 ```
 
 Two switches rather than one because the failure they guard against is
@@ -26,6 +28,10 @@ worker with no pivot language idles harmlessly. Collapsing them into one flag
 would mean an operator who wants to pause translation has to clear the pivot
 language, and clearing it makes every article ingested meanwhile `SKIPPED` —
 silently and permanently, because nothing revisits that decision.
+
+All three are [settings](settings.md): they can be changed while the service
+runs. The worker picks a change up on its next round; the two language values
+are read at ingest, so they apply to articles arriving from then on.
 
 The worker being off by default follows the same rule as the body fetch: both
 spend somebody else's resources — publisher bandwidth there, model time and
@@ -74,29 +80,88 @@ provider could be skipped with Ode fully configured — and the symptom would be
 a backlog that never drains, with nothing to point at. `TranslateConfiguration`
 asks an `ObjectProvider` instead, and `TranslateWiringTest` pins both states.
 
-## 3. One pivot language
+## 3. One target, several languages that need no work
 
 `pivotLanguage` is a single value, not a list of targets.
 
 Everything downstream — search, rating, clustering, embeddings — reads one
-language. A list multiplies the work by the number of languages to serve a need
-nobody downstream has. Translating into a second language is a *presentation*
-concern and belongs wherever it is displayed.
+language. A list of targets multiplies the work by the number of languages to
+serve a need nobody downstream has. Translating into a second language is a
+*presentation* concern and belongs wherever it is displayed.
 
-**The decision is made at ingest.** `ArticleFactory.initialTranslationStatus`
-sets `SKIPPED` for an article already in the pivot language, so it is never
-queued and then discovered to be a no-op:
+**One target does not mean one exempt language.** `readableLanguages` is the
+list of languages that need no translation at all, and it exists because a
+reader is rarely monolingual: with `pivotLanguage: de` and nothing else, an
+archive whose reader is comfortable in English pays a model to translate every
+English article into German — half the archive, for nothing. Listing `en` marks
+those `SKIPPED` at ingest instead.
 
-| Pivot | Article language | Status |
-|---|---|---|
-| unset | anything | `SKIPPED` |
-| `de` | `de` | `SKIPPED` |
-| `de` | `en` | `PENDING` |
-| `de` | unknown | `PENDING` |
+The pivot is always exempt and does not have to be repeated in the list — a
+model asked to translate German into German can only return what it was given,
+at full price.
+
+**The decision is made at ingest**, in `TranslationLanguages.needsTranslation`
+via the one function that derives the status
+(`ArticleFactory.initialTranslationStatus`), so an article is never queued and
+then discovered to be a no-op:
+
+| Pivot | Readable | Article language | Status |
+|---|---|---|---|
+| unset | anything | anything | `SKIPPED` |
+| `de` | — | `de` | `SKIPPED` |
+| `de` | — | `en` | `PENDING` |
+| `de` | `en` | `en` | `SKIPPED` |
+| `de` | `en` | `fr` | `PENDING` |
+| `de` | anything | unknown | `PENDING` |
+
+An **unknown** language is queued whatever the list says. The list says which
+languages need no work, not that an article nobody could classify needs none;
+a provider handed text already in the target returns it unchanged, so being
+wrong that way costs one call, while skipping wrongly loses the translation
+silently.
+
+Both values are normalised to their BCP-47 primary subtag before comparison, on
+both sides — `de-DE` in the setting and `de` on the article are the same
+language, and a set that compared them literally would silently never match.
+A list entry that is not a language tag is **refused** by the API rather than
+dropped: a typo here has no visible effect other than a translation bill.
 
 That makes the backlog the count of actual work. Measured on a live run: 60
 German articles from a German source produced **zero** model calls, while 25
 English ones were queued and translated.
+
+### 3.1 Why this is not a filter rule
+
+The filter can already match on language, so `DENY translation WHERE
+language = en` would keep English articles out of the queue. It is the wrong
+tool, and the difference is visible to a reader.
+
+A filter decision records what the archive judged **not worth paying for**, and
+the `accepted` facet serves it as `accepted:no` on both Vancetope-facing
+surfaces ([filter.md](filter.md) §6, [feed-source.md](feed-source.md)). An
+article in a language the reader already understands is fully in scope and
+merely needs no work. Expressing the second as the first would make that facet
+say the archive discarded something it did not.
+
+The two also compose the way you would want: the filter is asked first, so a
+denied article never reaches the language check.
+
+### 3.2 Changing the languages later
+
+Both values are settings, and both are read at ingest — so a change applies to
+articles arriving from then on. Stored articles keep the status they were given
+until something revisits it, and the thing that revisits it is the filter
+re-evaluation:
+
+```bash
+curl -X POST 'localhost:9800/api/v1/filter/reevaluate?days=30'
+```
+
+That path asks the same `initialTranslationStatus`, so adding `en` to
+`readableLanguages` and re-evaluating takes the already-queued English articles
+*out* of the queue, and removing it puts them back in. A queue only moves when
+the decision actually flips, so a finished translation survives a run
+([filter.md](filter.md) §7).
 
 ## 4. Title and teaser are one unit of work
 
@@ -207,6 +272,11 @@ brain fault and is not.
 - **Full-text is not translated.** Only title and teaser. Bodies are an order
   of magnitude more tokens, and the case for them is a reader who wants to read
   the article rather than triage it.
-- **No significance gate.** Every non-pivot article is queued. Translating only
-  what matters requires knowing what matters, which is an enrichment that does
-  not exist yet.
+- **No significance gate.** Every article in a language that is neither the
+  pivot nor readable is queued. Translating only what matters requires knowing
+  what matters, which is an enrichment that does not exist yet.
+- **A readable language does not shorten the archive's own record.** The
+  article keeps its language and its own title; `readableLanguages` only means
+  no enrichment is produced for it. A reader asking the feed for one of those
+  articles gets it in its own language, which is what it would have got anyway
+  while the translation was pending.

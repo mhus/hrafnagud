@@ -5,6 +5,8 @@ import static org.mockito.Mockito.mock;
 
 import de.mhus.hrafnagud.munin.article.ArticleService;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.munin.settings.TestSettings;
 import de.mhus.vance.ode.core.VanceOdeCoreAutoConfiguration;
 import de.mhus.vance.ode.ursa.UrsaEventClient;
 import de.mhus.vance.ode.ursa.VanceOdeUrsaAutoConfiguration;
@@ -37,15 +39,18 @@ class TranslateWiringTest {
     static class StubMuninBeans {
         @Bean ArticleService articleService() { return mock(ArticleService.class); }
         @Bean MuninProperties muninProperties() { return new MuninProperties(); }
+        @Bean MuninSettings muninSettings(MuninProperties properties) {
+            return TestSettings.of(properties);
+        }
         @Bean de.mhus.hrafnagud.munin.enrichment.EnrichmentService enrichmentService() {
             return mock(de.mhus.hrafnagud.munin.enrichment.EnrichmentService.class);
         }
         @Bean TranslationService translationService(ArticleService articles,
                 de.mhus.hrafnagud.munin.enrichment.EnrichmentService enrichments,
-                MuninProperties properties,
+                MuninSettings settings,
                 org.springframework.beans.factory.ObjectProvider<TranslationProvider> provider) {
             // Same construction the production @Service uses.
-            return new TranslationService(articles, enrichments, properties, provider);
+            return new TranslationService(articles, enrichments, settings, provider);
         }
     }
 
@@ -75,17 +80,24 @@ class TranslateWiringTest {
     }
 
     /**
-     * The worker is a bean only when it is switched on. Off is the default,
-     * because a translation spends model time somebody pays for.
+     * The worker is a bean whether or not translation is switched on, and the
+     * setting decides per round.
+     *
+     * <p>It used to be {@code @ConditionalOnProperty}, which made switching
+     * translation on a restart of the collector. Off is still the default —
+     * a translation spends model time somebody pays for — but "off" now means
+     * a round that returns immediately rather than a bean that does not exist.
+     * The switch itself is {@code WorkerSwitch}; what is pinned down here is
+     * that the bean no longer depends on it.
      */
     @Test
-    void the_worker_does_not_exist_unless_it_is_enabled() {
+    void the_worker_exists_whether_or_not_it_is_switched_on() {
         ApplicationContextRunner withTick = runner.withUserConfiguration(TickConfig.class);
 
         withTick.run(context ->
-                assertThat(context).doesNotHaveBean(TranslationTick.class));
+                assertThat(context).hasSingleBean(TranslationTick.class));
         withTick.withPropertyValues("munin.translation.enabled=false").run(context ->
-                assertThat(context).doesNotHaveBean(TranslationTick.class));
+                assertThat(context).hasSingleBean(TranslationTick.class));
         withTick.withPropertyValues("munin.translation.enabled=true").run(context ->
                 assertThat(context).hasSingleBean(TranslationTick.class));
     }

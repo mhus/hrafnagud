@@ -7,12 +7,12 @@ import de.mhus.hrafnagud.api.source.SourceListCreateRequest;
 import de.mhus.hrafnagud.api.source.SourceListRefreshReport;
 import de.mhus.hrafnagud.api.source.SourceListType;
 import de.mhus.hrafnagud.api.source.SourceListUpdateRequest;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
 import de.mhus.hrafnagud.munin.error.BadRequestException;
 import de.mhus.hrafnagud.munin.error.ConflictException;
 import de.mhus.hrafnagud.munin.error.NotFoundException;
 import de.mhus.hrafnagud.munin.net.HttpFetchResult;
 import de.mhus.hrafnagud.munin.net.HttpFetcher;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
 import de.mhus.hrafnagud.munin.source.SourceCandidate;
 import de.mhus.hrafnagud.munin.source.SourceMergePolicy;
 import de.mhus.hrafnagud.munin.source.SourceService;
@@ -61,19 +61,17 @@ public class SourceListService {
     private final MongoTemplate mongoTemplate;
     private final SourceService sourceService;
     private final HttpFetcher fetcher;
-    private final MuninProperties.SourceList config;
-    private final MuninProperties.Feed feedConfig;
+    private final MuninSettings.SourceList config;
     private final Map<SourceListType, SourceListParser> parsers = new EnumMap<>(SourceListType.class);
 
     public SourceListService(SourceListRepository repository, MongoTemplate mongoTemplate,
             SourceService sourceService, HttpFetcher fetcher, List<SourceListParser> parserBeans,
-            MuninProperties properties) {
+            MuninSettings settings) {
         this.repository = repository;
         this.mongoTemplate = mongoTemplate;
         this.sourceService = sourceService;
         this.fetcher = fetcher;
-        this.config = properties.getSourceList();
-        this.feedConfig = properties.getFeed();
+        this.config = settings.getSourceList();
         for (SourceListParser parser : parserBeans) {
             parsers.put(parser.type(), parser);
         }
@@ -131,7 +129,7 @@ public class SourceListService {
                         ? MissingSourcePolicy.DISABLE
                         : request.getMissingSourcePolicy())
                 .refreshIntervalSeconds(request.getRefreshIntervalSeconds() == null
-                        ? config.getDefaultInterval().getSeconds()
+                        ? config.defaultInterval().value().getSeconds()
                         : Math.max(60, request.getRefreshIntervalSeconds()))
                 // Due immediately, so adding a list shows within one tick
                 // whether it parses.
@@ -394,7 +392,7 @@ public class SourceListService {
 
     /** Claims up to {@code limit} lists that are due, leasing each. */
     public List<SourceListDocument> claimDue(Instant now, int limit) {
-        Instant leaseUntil = now.plus(config.getClaimLease());
+        Instant leaseUntil = now.plus(config.claimLease().value());
         List<SourceListDocument> claimed = new ArrayList<>();
         for (int i = 0; i < limit; i++) {
             Query query = Query.query(Criteria.where(F_ENABLED).is(true)
@@ -458,7 +456,7 @@ public class SourceListService {
 
         ParsedSourceList parsed;
         try {
-            parsed = parser.parse(response.bodyAsText(), config.getMaxEntries());
+            parsed = parser.parse(response.bodyAsText(), config.maxEntries().value());
         } catch (SourceListParseException e) {
             SourceListRefreshReport report = SourceListRefreshReport.builder()
                     .outcome(FetchOutcome.PARSE_ERROR)
@@ -537,7 +535,7 @@ public class SourceListService {
 
         int failures = outcome.successful() ? 0 : list.getConsecutiveFailures() + 1;
         long interval = list.getRefreshIntervalSeconds() <= 0
-                ? config.getDefaultInterval().getSeconds()
+                ? config.defaultInterval().value().getSeconds()
                 : list.getRefreshIntervalSeconds();
         // Directories change slowly; a failing one is retried on a doubling
         // delay but never more than a day out.

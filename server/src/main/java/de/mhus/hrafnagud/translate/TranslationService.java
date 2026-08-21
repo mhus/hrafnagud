@@ -3,9 +3,9 @@ package de.mhus.hrafnagud.translate;
 import de.mhus.hrafnagud.api.enrichment.EnrichmentType;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleService;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentDocument;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
 import de.mhus.hrafnagud.munin.util.TextCleaner;
 import jakarta.annotation.PostConstruct;
 import java.time.Instant;
@@ -31,14 +31,14 @@ public class TranslationService {
 
     private final ArticleService articleService;
     private final EnrichmentService enrichmentService;
-    private final MuninProperties.Translation config;
+    private final MuninSettings.Translation config;
     private final @Nullable TranslationProvider provider;
 
     public TranslationService(ArticleService articleService, EnrichmentService enrichmentService,
-            MuninProperties properties, ObjectProvider<TranslationProvider> provider) {
+            MuninSettings settings, ObjectProvider<TranslationProvider> provider) {
         this.articleService = articleService;
         this.enrichmentService = enrichmentService;
-        this.config = properties.getTranslation();
+        this.config = settings.getTranslation();
         // ObjectProvider rather than a @Nullable parameter: the provider
         // bean may be absent entirely, or present-but-null when Ode is on
         // the classpath unconfigured. Both mean the same thing here.
@@ -55,19 +55,20 @@ public class TranslationService {
      */
     @PostConstruct
     void reportConfiguration() {
-        if (config.getPivotLanguage().isBlank()) {
+        if (config.pivotLanguage().value().isBlank()) {
             log.info("Translation is off — no munin.translation.pivotLanguage configured");
-        } else if (!config.isEnabled()) {
+        } else if (!config.enabled().value()) {
             log.warn("Pivot language '{}' is configured but munin.translation.enabled is false"
                             + " — articles will queue and nothing will translate them.",
-                    config.getPivotLanguage());
+                    config.pivotLanguage().value());
         } else if (!isAvailable()) {
             log.warn("Pivot language '{}' is configured but no provider is wired — articles "
                             + "will queue and nothing will translate them. "
                             + "Set vance.ode.base-url to use a Vancetope brain.",
-                    config.getPivotLanguage());
+                    config.pivotLanguage().value());
         } else {
-            log.info("Translating into '{}' via {}", config.getPivotLanguage(), providerName());
+            log.info("Translating into '{}' via {}",
+                    config.pivotLanguage().value(), providerName());
         }
     }
 
@@ -90,21 +91,22 @@ public class TranslationService {
         if (provider == null) {
             return false;
         }
-        String pivot = TextCleaner.normalizeLanguage(config.getPivotLanguage());
+        String pivot = TextCleaner.normalizeLanguage(config.pivotLanguage().value());
         if (pivot == null) {
             return false;
         }
         String articleId = StringUtils.defaultString(article.getId());
 
-        String title = TextCleaner.truncate(article.getTitle(), config.getMaxSourceChars());
+        String title = TextCleaner.truncate(article.getTitle(), config.maxSourceChars().value());
         if (StringUtils.isBlank(title)) {
             // Nothing to translate and nothing a retry would change.
             articleService.recordTranslationFailure(articleId,
-                    "article has no title to translate", config.getMaxAttempts(), now);
+                    "article has no title to translate", config.maxAttempts().value(), now);
             return false;
         }
-        String summary = config.isTranslateSummary() && StringUtils.isNotBlank(article.getSummary())
-                ? TextCleaner.truncate(article.getSummary(), config.getMaxSourceChars())
+        String summary = config.translateSummary().value()
+                        && StringUtils.isNotBlank(article.getSummary())
+                ? TextCleaner.truncate(article.getSummary(), config.maxSourceChars().value())
                 : null;
 
         try {
@@ -141,7 +143,7 @@ public class TranslationService {
             // rejections, and the queue should say so and move on.
             int attempts = e.isRetryable()
                     ? article.getTranslationAttempts()
-                    : config.getMaxAttempts();
+                    : config.maxAttempts().value();
             articleService.recordTranslationFailure(articleId, e.getMessage(), attempts, now);
             log.info("Translation of article {} failed ({}): {}", articleId,
                     e.isRetryable() ? "will retry" : "giving up", e.getMessage());

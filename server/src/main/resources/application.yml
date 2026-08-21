@@ -58,7 +58,30 @@ info:
       Place hierarchy derived from UN M49 (https://unstats.un.org/unsd/methodology/m49/)
       joined to ISO 3166-1 alpha-2.
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Most of what follows is the DEFAULT for a setting of the same name, not the
+# last word on it. An operator can override any of these while the service runs
+# — through /api/v1/settings or the console's Einstellungen view — and the
+# override then wins until it is deleted. So an unexpected value at runtime is
+# answered by looking at that list, where each entry says whether it comes from
+# here or from the database.
+#
+# Read only at start-up, and therefore NOT settings: every tickInterval and
+# initialDelay (they are baked into @Scheduled), http.connectTimeout and
+# http.proxy.* (baked into the shared HTTP client), api.* (the console switch
+# decides whether a surface exists at all; the token is a secret and stays in
+# the environment), catalog.installBundled (only applies to an empty database),
+# language.lowAccuracyMode and language.languages (the detector is built once),
+# feed.profiles (structure, not a number), and settings.refreshInterval itself.
+# Reasoning and the full boundary: specs/settings.md.
+# ─────────────────────────────────────────────────────────────────────────────
 munin:
+  # How often stored overrides are re-read. Writes through the API are visible
+  # at once; this is for a value changed straight in the database. Not itself a
+  # setting — that would be a loop.
+  settings:
+    refreshInterval: PT30S
+
   # Catalogues — the layer that discovers source lists, so the archive fills
   # itself. Catalogue → source lists → sources, each refreshed on its own
   # schedule; nothing here needs a button.
@@ -214,9 +237,21 @@ munin:
     # starts filling a backlog — make sure something is wired to work it
     # (see vance.ode below), or the queue grows with nothing draining it.
     #
+    # readableLanguages below is the other half of the decision: languages
+    # that need no translation at all. The pivot is always one of them, so
+    # list only the OTHER languages a reader here can already read —
+    # `pivotLanguage: de` plus `readableLanguages: [en]` translates neither
+    # German nor English and queues everything else. An empty list means
+    # every non-German article is translated, which for a bilingual reader
+    # is paying for half the archive twice.
+    #
     # One language, not a list: this is the step that lets later stages —
     # keywords, clustering, embeddings — work in a single language.
     pivotLanguage: ${HRAFNAGUD_PIVOT_LANGUAGE:}
+    # Comma-separated BCP-47 primary subtags, e.g. `en` or `en,fr`. An
+    # article whose language is unknown is translated anyway — see
+    # specs/translation.md §3.
+    readableLanguages: ${HRAFNAGUD_READABLE_LANGUAGES:}
     # Title and teaser go in one call either way; switching this off saves
     # the teaser's tokens but not a request.
     translateSummary: true

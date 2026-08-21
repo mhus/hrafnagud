@@ -3,7 +3,8 @@ package de.mhus.hrafnagud.munin.content;
 import de.mhus.hrafnagud.api.article.ContentStatus;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleService;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.munin.settings.WorkerSwitch;
 import jakarta.annotation.PreDestroy;
 import java.time.Instant;
 import java.util.List;
@@ -15,34 +16,35 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
  * Works through the body-fetch queue.
  *
- * <p>Only registered when {@code munin.content.enabled} is true. Fetching
- * publisher pages is opt-in, so with the default configuration this bean
- * does not exist rather than existing and doing nothing — which keeps the
- * "is it crawling?" question answerable from the bean graph.
+ * <p>{@code munin.content.enabled} is off by default and is checked at the
+ * start of each round rather than deciding whether this bean exists. Fetching
+ * publisher pages stays opt-in either way; what changes is that turning it on
+ * is a setting rather than a restart, and that the answer to "is it crawling?"
+ * comes from the log and the settings screen instead of from the bean graph.
  */
 @Component
-@ConditionalOnProperty(name = "munin.content.enabled", havingValue = "true")
 @Slf4j
 public class ContentFetchTick {
 
     private final ArticleService articleService;
     private final ContentFetchService fetchService;
-    private final MuninProperties.Content config;
+    private final MuninSettings.Content config;
+    private final WorkerSwitch enabled;
     private final ExecutorService executor;
     private final AtomicInteger running = new AtomicInteger();
 
     public ContentFetchTick(ArticleService articleService, ContentFetchService fetchService,
-            MuninProperties properties) {
+            MuninSettings settings) {
         this.articleService = articleService;
         this.fetchService = fetchService;
-        this.config = properties.getContent();
+        this.config = settings.getContent();
+        this.enabled = new WorkerSwitch("Body fetching", config.enabled());
         this.executor = Executors.newThreadPerTaskExecutor(
                 Thread.ofVirtual().name("munin-content-", 0).factory());
     }
@@ -50,6 +52,9 @@ public class ContentFetchTick {
     @Scheduled(fixedDelayString = "${munin.content.tickInterval:PT15S}",
             initialDelayString = "${munin.content.initialDelay:PT30S}")
     public void tick() {
+        if (!enabled.isOn()) {
+            return;
+        }
         if (running.get() > 0) {
             log.trace("Content tick still running — skipping this round");
             return;
@@ -71,7 +76,7 @@ public class ContentFetchTick {
      */
     int runRound(Instant now) {
         List<ArticleDocument> claimed =
-                articleService.claimContentDue(now, config.getBatchSize());
+                articleService.claimContentDue(now, config.batchSize().value());
         if (claimed.isEmpty()) {
             return 0;
         }

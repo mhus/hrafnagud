@@ -2,12 +2,12 @@ package de.mhus.hrafnagud.translate;
 
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleService;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
+import de.mhus.hrafnagud.munin.settings.WorkerSwitch;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -29,26 +29,30 @@ import org.springframework.stereotype.Component;
  * rather than a silence.
  */
 @Component
-@ConditionalOnProperty(name = "munin.translation.enabled", havingValue = "true")
 @Slf4j
 public class TranslationTick {
 
     private final ArticleService articleService;
     private final TranslationService translationService;
-    private final MuninProperties.Translation config;
+    private final MuninSettings.Translation config;
+    private final WorkerSwitch enabled;
     private final AtomicInteger running = new AtomicInteger();
 
     public TranslationTick(ArticleService articleService, TranslationService translationService,
-            MuninProperties properties) {
+            MuninSettings settings) {
         this.articleService = articleService;
         this.translationService = translationService;
-        this.config = properties.getTranslation();
+        this.config = settings.getTranslation();
+        this.enabled = new WorkerSwitch("Translation", config.enabled());
     }
 
     @Scheduled(fixedDelayString = "${munin.translation.tickInterval:PT20S}",
             initialDelayString = "${munin.translation.initialDelay:PT30S}")
     public void tick() {
-        if (config.getPivotLanguage().isBlank() || !translationService.isAvailable()) {
+        if (!enabled.isOn()) {
+            return;
+        }
+        if (config.pivotLanguage().value().isBlank() || !translationService.isAvailable()) {
             return;
         }
         if (running.get() > 0) {
@@ -72,7 +76,7 @@ public class TranslationTick {
      */
     int runRound(Instant now) {
         List<ArticleDocument> claimed =
-                articleService.claimTranslationDue(now, config.getBatchSize());
+                articleService.claimTranslationDue(now, config.batchSize().value());
         if (claimed.isEmpty()) {
             return 0;
         }

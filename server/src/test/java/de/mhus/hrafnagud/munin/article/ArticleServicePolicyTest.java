@@ -12,6 +12,7 @@ import de.mhus.hrafnagud.api.filter.FilterDecision;
 import de.mhus.hrafnagud.api.filter.FilterOutcome;
 import de.mhus.hrafnagud.api.filter.FilterOutcomes;
 import de.mhus.hrafnagud.munin.config.MuninProperties;
+import de.mhus.hrafnagud.munin.settings.TestSettings;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import java.time.Instant;
 import org.bson.Document;
@@ -57,7 +58,7 @@ class ArticleServicePolicyTest {
                 new de.mhus.hrafnagud.munin.place.PlaceRegistry(),
                 mock(de.mhus.hrafnagud.munin.category.CategoryMappingService.class),
                 mock(de.mhus.hrafnagud.munin.filter.ArticleFilterService.class),
-                properties);
+                TestSettings.of(properties));
     }
 
     private static FilterOutcomes translation(FilterDecision decision, String rule) {

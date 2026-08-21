@@ -5,10 +5,10 @@ import de.mhus.hrafnagud.munin.article.ArticleContentDocument;
 import de.mhus.hrafnagud.munin.article.ArticleDocument;
 import de.mhus.hrafnagud.munin.article.ArticleImage;
 import de.mhus.hrafnagud.munin.article.ArticleService;
-import de.mhus.hrafnagud.munin.config.MuninProperties;
 import de.mhus.hrafnagud.munin.net.HttpFetchResult;
 import de.mhus.hrafnagud.munin.net.HttpFetcher;
 import de.mhus.hrafnagud.munin.net.RobotsService;
+import de.mhus.hrafnagud.munin.settings.MuninSettings;
 import de.mhus.hrafnagud.munin.util.TextCleaner;
 import java.time.Instant;
 import java.util.Locale;
@@ -39,16 +39,16 @@ public class ContentFetchService {
     private final RobotsService robotsService;
     private final ContentExtractor extractor;
     private final ArticleService articleService;
-    private final MuninProperties.Content config;
+    private final MuninSettings.Content config;
 
     public ContentFetchService(HttpFetcher fetcher, RobotsService robotsService,
             ContentExtractor extractor, ArticleService articleService,
-            MuninProperties properties) {
+            MuninSettings settings) {
         this.fetcher = fetcher;
         this.robotsService = robotsService;
         this.extractor = extractor;
         this.articleService = articleService;
-        this.config = properties.getContent();
+        this.config = settings.getContent();
     }
 
     /**
@@ -100,7 +100,7 @@ public class ContentFetchService {
             return ContentStatus.PENDING;
         }
 
-        if (extracted.getWordCount() < config.getMinWordCount()) {
+        if (extracted.getWordCount() < config.minWordCount().value()) {
             // Too little text to be an article. If the page also carries
             // paywall markers we know why, and retrying is pointless;
             // otherwise it may be a rendering quirk worth one more attempt.
@@ -117,7 +117,7 @@ public class ContentFetchService {
         ExtractedImage lead = extracted.leadImage();
         ArticleContentDocument content = ArticleContentDocument.builder()
                 .articleId(articleId)
-                .text(TextCleaner.truncate(extracted.getText(), config.getMaxTextChars()))
+                .text(TextCleaner.truncate(extracted.getText(), config.maxTextChars().value()))
                 .wordCount(extracted.getWordCount())
                 .extractedTitle(extracted.getTitle())
                 .imageUrl(lead == null ? null : lead.getUrl())
