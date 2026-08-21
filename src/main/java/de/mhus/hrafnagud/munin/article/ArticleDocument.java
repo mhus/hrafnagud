@@ -97,16 +97,15 @@ import org.springframework.data.mongodb.core.mapping.Language;
         // equality field also happens to be the textbook shape for
         // equality-then-sort.
         //
-        // A name per key pattern, and this is the third of them. Two are
-        // retired and nothing creates them any more: `translation_queue_idx`
-        // ({ translationNextAttemptAt: 1 }) went with the switch to LIFO, and
-        // `translation_lifo_idx` ({ firstSeenAt: -1 }) went when the pattern
-        // gained its leading status field — that one was rejected by the
-        // cluster before it existed there, but a permissive local MongoDB 8
-        // did create it, and re-declaring a name over a different pattern is
-        // error 86 (IndexKeySpecsConflict) on any database that holds it.
-        // MongoIndexCompatibilityTest keeps the retired names out.
-        @CompoundIndex(name = "translation_status_lifo_idx",
+        // The name stays what it was when this pattern went out, and that is
+        // the subtle half of the renaming rule: a name follows a *changing*
+        // pattern, in the commit that changes it. Renaming afterwards, once
+        // every database already holds this pattern under this name, is the
+        // mirror-image failure — same keys, different name, error 85 — and it
+        // fails on exactly the databases the rename was meant to protect. The
+        // older `translation_queue_idx { translationNextAttemptAt: 1 }` is
+        // retired and listed in MongoIndexCompatibilityTest.
+        @CompoundIndex(name = "translation_lifo_idx",
                 def = "{ 'translationStatus': 1, 'firstSeenAt': -1 }",
                 partialFilter = "{ 'translationStatus': 'PENDING' }"),
         // Re-evaluating the filter rules walks the archive oldest-examined

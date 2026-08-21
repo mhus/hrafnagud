@@ -42,13 +42,14 @@ import org.springframework.data.mongodb.core.mapping.Document;
         // `{ status: 1 }` alone is gone with it: this index has it as a prefix,
         // so the counts-by-status queries are served by the same one.
         //
-        // A new name, because the key pattern is new. `category_queue_idx` was
-        // `{ nextAttemptAt: 1 }`, and re-declaring a name over a different
-        // pattern is error 86 (IndexKeySpecsConflict) — refused at creation, so
-        // a boot failure on every database that already has the old one, and
-        // never on a fresh schema. The stale index stays behind costing write
-        // rate until somebody drops it; that is the cheap half of the trade.
-        @CompoundIndex(name = "category_status_queue_idx",
+        // The name is unchanged although the pattern changed under it, which
+        // looks like a violation of the renaming rule and is the case that
+        // shows what the rule actually says. A rename belongs in the commit
+        // that changes the pattern; by now every database holds this pattern
+        // under this name, so renaming would be same-keys-different-name —
+        // error 85, and on every one of them. See ArticleDocument's
+        // translation_lifo_idx for the same reasoning.
+        @CompoundIndex(name = "category_queue_idx",
                 def = "{ 'status': 1, 'nextAttemptAt': 1 }")
 })
 @Data

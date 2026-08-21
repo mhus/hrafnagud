@@ -186,7 +186,7 @@ beim **Anlegen eines Index** ablehnt, und `auto-index-creation` macht daraus
 einen Startfehler statt einer langsamen Query — sichtbar nur auf einer
 Datenbank, die schon existiert, also nie auf dem Laptop.
 
-Zwei Regeln, beide von `MongoIndexCompatibilityTest` geprüft, damit sie nicht
+Drei Regeln, alle von `MongoIndexCompatibilityTest` geprüft, damit sie nicht
 erinnert werden müssen:
 
 - **Partial-Filter nur mit Gleichheit, `$exists: true`, Range-Operatoren,
@@ -197,29 +197,52 @@ erinnert werden müssen:
   nicht, ein anderer Partial-Filter auch nicht (Fehler 85). Der schmalere Index
   bekommt ein eigenes Muster — mit dem Feld voran, das sein Filter festnagelt
   (`ArticleDocument.translation_lifo_idx`).
+- **Ein ausgemusterter Index-Name wird nicht wiederverwendet.** Die Liste steht
+  in `MongoIndexCompatibilityTest.RETIRED_NAMES`; sie zu ergänzen ist Teil der
+  Änderung, die ein Muster ändert.
 
-Eine dritte Regel prüft **kein** Test, weil sie nicht im Code steht, sondern
-zwischen Code und einer bestehenden Datenbank:
+Und eine vierte, die **kein** Test prüfen kann, weil sie nicht im Code steht,
+sondern zwischen Code und einer bestehenden Datenbank:
 
-- **Ändert sich das Key-Muster eines Index, ändert sich sein Name mit.**
-  Gleicher Name plus anderes Muster ist Fehler 86 (`IndexKeySpecsConflict`) —
-  und zwar auf *jeder* Datenbank, die den alten Index schon hat, während ein
-  frisches Schema tadellos startet. Der statische Test ist dabei grün, der
-  Boot gegen eine leere DB auch; sichtbar wird es erst beim Start gegen echte
-  Daten. Ein alter Index mit eigenem Namen bleibt dagegen einfach liegen und
-  kostet nur Schreibrate, bis ihn jemand absichtlich dropt.
+- **Ändert sich das Key-Muster eines Index, ändert sich sein Name mit — in
+  demselben Commit.** Gleicher Name plus anderes Muster ist Fehler 86
+  (`IndexKeySpecsConflict`), auf *jeder* Datenbank, die den alten Index schon
+  hat, während ein frisches Schema tadellos startet. Der statische Test ist
+  dabei grün, der Boot gegen eine leere DB auch; sichtbar wird es erst beim
+  Start gegen echte Daten.
 
-  Aufräumen ohne Raten: eine leere DB mit dem aktuellen Stand befüllen und
-  gegen die bestehende diffen — das ist der deklarierte Stand, gegen den man
-  vergleichen will.
+  **Der Nachsatz „in demselben Commit" ist der teure Teil.** Nachträglich
+  umbenennen — ein Muster aufräumen, das vor Releases unter seinem alten Namen
+  rausging — ist der gespiegelte Fehler: die Datenbanken tragen dann das neue
+  Muster unter dem alten Namen, ein neuer Name über denselben Keys ist Fehler
+  85, und zwar auf genau den Maschinen, die die Umbenennung schützen sollte.
+  `translation_lifo_idx` und `category_queue_idx` sind beide so umbenannt und
+  wieder zurückgenommen worden. Ein Muster, das unter einem Namen deployed ist,
+  behält ihn.
+
+  Ein alter Index mit eigenem Namen bleibt dagegen einfach liegen und kostet
+  nur Schreibrate, bis ihn jemand absichtlich dropt. Wo zwei Datenbanken
+  auseinanderlaufen, ist `dropIndex` auf der Seite mit dem alten Stand die
+  Lösung — nicht ein neuer Name, der immer nur eine der beiden bedienen kann.
+
+  **Lokal ist kein Beleg über minnie.** Der Laptop fährt ein aktuelles Mongo,
+  minnie fährt 4.4; die Versionen akzeptieren Unterschiedliches, also können
+  die Index-Stände unabhängig voneinander driften. Vor jeder Deployment, die
+  eine Index-Annotation angefasst hat, denselben Dump gegen **beide** fahren:
+
+  ```bash
+  # gegen localhost und gegen minnie, dann sortieren und diffen
+  mongosh "<uri>" --quiet --eval '
+    db.getCollectionNames().sort().forEach(c => db.getCollection(c).getIndexes().forEach(
+      i => print(c+"|"+i.name+"|"+JSON.stringify(i.key))))'
+  ```
+
+  Was der deklarierte Stand ist, sagt eine leere DB, die die aktuelle App
+  einmal befüllt hat — auf 4.4, nicht auf dem lokalen Mongo:
 
   ```bash
   docker run -d --rm --name mongo44 -p 27044:27017 \
     -e MONGO_INITDB_ROOT_USERNAME=root -e MONGO_INITDB_ROOT_PASSWORD=example mongo:4.4
-  # App einmal dagegen starten, dann in beiden DBs:
-  #   db.getCollectionNames().forEach(c => db.getCollection(c).getIndexes().forEach(
-  #     i => print(c+"|"+i.name+"|"+JSON.stringify(i.key))))
-  # sortieren, comm/diff — was nur links steht, ist Altlast.
   ```
 
 Der Java-Treiber trägt 4.4 (sein Minimum wird gerade *auf* 4.4 gehoben), wir

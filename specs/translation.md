@@ -312,15 +312,16 @@ the price of a head that may never be reached. That trade is the operator's to
 make; what is not available is having neither.
 
 The index follows the ordering:
-`translation_status_lifo_idx { translationStatus: 1, firstSeenAt: -1 }`, partial
-on `PENDING` ([architecture.md](architecture.md) §4.1). Two things about it were
-learned the hard way, and each cost a name. It needs its own *key pattern*,
-because `{ firstSeenAt: -1 }` is already `seen_idx` and a second index on the
-same keys is rejected at creation whatever its options say (error 85). And a new
-pattern needs a new *name*, because reusing one over different keys is refused
-just as flatly (error 86) — which is how `translation_queue_idx` and then
-`translation_lifo_idx` were both retired. Every one of these is a boot failure,
-and only on a database that already holds the old index.
+`translation_lifo_idx { translationStatus: 1, firstSeenAt: -1 }`, partial on
+`PENDING` ([architecture.md](architecture.md) §4.1). Three things about it were
+learned the hard way, in this order. It needs a new *name* rather than a new
+definition under `translation_queue_idx`, because reusing a name over different
+keys is error 86. It needs its own *key pattern*, because `{ firstSeenAt: -1 }`
+is already `seen_idx` and a second index on the same keys is error 85 whatever
+the options say. And once that pattern had shipped under this name, renaming it
+again — which a later cleanup tried — is error 85 in the other direction, so the
+name it shipped with is the name it keeps. Every one of these is a boot failure,
+and only on a database that already holds the index in question.
 
 `POST /api/v1/articles/{id}/translate` requeues one article.
 

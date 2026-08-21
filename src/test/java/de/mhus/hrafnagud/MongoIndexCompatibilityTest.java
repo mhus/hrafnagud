@@ -60,23 +60,22 @@ class MongoIndexCompatibilityTest {
      *
      * <p>This is the one rule that lives between the code and a database rather
      * than inside the code, so the list is the part of the database the test is
-     * allowed to know. A pattern change therefore costs one line here plus a
-     * new name in the annotation, which is exactly the gesture the rule asks
-     * for. The retired index itself stays behind costing write rate until
-     * somebody drops it by hand; {@code CLAUDE.md} has the diffing recipe.
+     * allowed to know. The retired index itself stays behind costing write rate
+     * until somebody drops it by hand; {@code CLAUDE.md} has the diffing recipe.
+     *
+     * <p><b>A name is retired in the same change that alters its pattern, never
+     * afterwards.</b> Once the new pattern is live under the old name — which,
+     * for anything already deployed, it is — a rename is the mirror-image
+     * failure: same keys, different name, error 85, on precisely the databases
+     * the rename was supposed to spare. That was learned by doing it, and it is
+     * the reason this list is shorter than the history of pattern changes: a
+     * change that already shipped under its old name has to keep it.
      */
     private static final Map<String, String> RETIRED_NAMES = Map.of(
             // Went with the switch to LIFO ordering of the translation queue.
             "translation_queue_idx", "{ translationNextAttemptAt: 1 }",
-            // Went when that pattern gained its leading status field, to stop
-            // colliding with seen_idx. Rejected by the cluster before it
-            // existed there, but a permissive local MongoDB 8 created it.
-            "translation_lifo_idx", "{ firstSeenAt: -1 }",
-            // Went when the category queue dropped its partial filter and took
-            // the status into the key.
-            "category_queue_idx", "{ nextAttemptAt: 1 }",
-            // Folded into category_status_queue_idx, which has status as its
-            // prefix and serves the counts-by-status queries too.
+            // Folded into category_queue_idx, which has status as its prefix
+            // and serves the counts-by-status queries too.
             "category_status_idx", "{ status: 1 }");
 
     /** One declared index, as the annotation says it. */
@@ -154,7 +153,7 @@ class MongoIndexCompatibilityTest {
                         one a key of its own — leading with the field its \
                         partial filter pins is both unique and the right shape \
                         for equality-then-sort (see ArticleDocument's \
-                        translation_status_lifo_idx).""")
+                        translation_lifo_idx).""")
                 .isEmpty();
     }
 

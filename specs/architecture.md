@@ -148,7 +148,8 @@ on a database that already exists, so a fresh local run never sees it. A newer
 local MongoDB is more permissive about both, which is why
 `MongoIndexCompatibilityTest` checks the declarations instead of trusting a
 local boot. A third rule joins them below (§4.1): a name may not be reused over
-a new key pattern.
+a new key pattern — and, its other half, a shipped name may not be swapped for a
+new one either.
 
 ### 4.1 Queues are state fields, not queries
 
@@ -156,9 +157,9 @@ Both asynchronous pipelines — body fetching and translation — are driven by 
 status field on the article plus a partial index on the pending value:
 
 ```
-content_queue_idx           { contentNextAttemptAt: 1 }   partial: contentStatus = PENDING
-translation_status_lifo_idx { translationStatus: 1, firstSeenAt: -1 }
-                                                          partial: translationStatus = PENDING
+content_queue_idx      { contentNextAttemptAt: 1 }   partial: contentStatus = PENDING
+translation_lifo_idx   { translationStatus: 1, firstSeenAt: -1 }
+                                                    partial: translationStatus = PENDING
 ```
 
 The two queues are ordered differently on purpose. Body fetching takes the
@@ -178,21 +179,25 @@ at creation time, which makes it a boot failure on every database that already
 has `seen_idx` — so a partial index over an existing key pattern needs a key of
 its own.
 
-Three names are retired and no longer created. An existing deployment still has
+Two names are retired and no longer created. An existing deployment still has
 them — `auto-index-creation` adds indexes and never drops them — and each can be
-dropped by hand; nothing queries any of them:
+dropped by hand; nothing queries either:
 
 ```
 translation_queue_idx  { translationNextAttemptAt: 1 }   went with the LIFO switch
-translation_lifo_idx   { firstSeenAt: -1 }               went when the status led the key
-category_queue_idx     { nextAttemptAt: 1 }              went when the status led the key
-category_status_idx    { status: 1 }                     folded into the one above it
+category_status_idx    { status: 1 }                     folded into category_queue_idx
 ```
 
-#### Renaming an index is part of changing it
+They are a list in `MongoIndexCompatibilityTest`, not only a paragraph here:
+re-declaring one fails the build. That is as far as a static check reaches — it
+cannot know what a server holds, so it knows instead what this project has ever
+created.
+
+#### Renaming an index is part of changing it — in the same change
 
 That asymmetry — created but never dropped — has a consequence sharp enough to
-be a rule: **if an index's key pattern changes, its name changes with it.**
+be a rule: **if an index's key pattern changes, its name changes with it, in the
+commit that changes the pattern.**
 
 Reusing the name is error 86, `IndexKeySpecsConflict`, on every database that
 already holds the old definition, while a fresh schema starts perfectly. A boot
@@ -200,26 +205,39 @@ against an empty database creates the new definition unopposed, so it surfaces
 only when starting against real data — which, on the way to a deployment, means
 it surfaces in the deployment.
 
-Which is why the retired names above are not only documentation: they are a list
-in `MongoIndexCompatibilityTest`, and re-declaring one fails the build. That is
-as far as a static check reaches — it cannot know what a server holds, so it
-knows instead what this project has ever created. A pattern change therefore
-costs one line in that list plus a new name in the annotation, which is exactly
-the gesture the rule asks for.
+**The second clause is not decoration, and it was learned by getting it wrong.**
+Renaming *afterwards* — tidying up a pattern that shipped under its old name
+some releases ago — is the mirror-image failure: the databases now hold the new
+pattern under the old name, so a new name over the same keys is error 85,
+`IndexOptionsConflict`, on exactly the machines the rename was meant to spare.
+Both `translation_lifo_idx` and `category_queue_idx` were renamed that way in a
+cleanup pass and both had to be put back. A pattern that has already been
+deployed under a name keeps that name; the rule applies at the moment of change
+and not later.
 
 An old index left under its own name is the cheap failure by comparison: it
 lingers, costs write throughput, and is dropped when somebody gets round to it.
-
-`translation_lifo_idx` is on the list for a reason worth stating: the cluster
-never created it, because the pattern it had then collided with `seen_idx` and
-was refused with error 85. A local MongoDB 8 was permissive enough to create it,
-so the database that would fail to boot on the reused name is a developer's, not
-the deployment's — the mirror image of the usual case, and the same rule.
 
 The reference for "what should exist" is a database the current code just
 created. Filling an empty one and diffing the two index sets by
 `collection|name|keys` is how leftovers get found without guessing, and it is
 worth doing before a deployment that touched an index annotation.
+
+**And "the other side" of that diff is the target, not the laptop.** The two
+databases drift independently — a permissive MongoDB 8 accepts index changes
+that 4.4 refuses, so an annotation can have migrated locally and not on the
+server, or the reverse. Reading the local index set and concluding anything
+about the deployment is the mistake that produced the rename described above.
+One command, run against **both**:
+
+```javascript
+db.getCollectionNames().sort().forEach(c => db.getCollection(c).getIndexes().forEach(
+  i => print(c + "|" + i.name + "|" + JSON.stringify(i.key))))
+```
+
+Where they disagree, the fix is a `dropIndex` on the side holding the stale
+definition — not a new name in the annotation, which can only satisfy one of
+them at a time.
 
 The partial filter is what keeps the index proportional to the *backlog*
 rather than to the archive — the difference between thousands of entries and
