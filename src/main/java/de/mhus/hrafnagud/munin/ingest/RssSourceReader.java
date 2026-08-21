@@ -66,7 +66,9 @@ public class RssSourceReader implements SourceReader {
 
     @Override
     public SourceReadResult read(SourceDocument source) {
-        HttpFetchResult response = fetcher.get(source.getUrl(), source.getHttpEtag(),
+        // effectiveUrl, not url: a feed that moved permanently is polled at
+        // its new location while keeping the identity its source list knows.
+        HttpFetchResult response = fetcher.get(source.effectiveUrl(), source.getHttpEtag(),
                 source.getHttpLastModified());
 
         if (response.isNotModified()) {
@@ -75,6 +77,7 @@ public class RssSourceReader implements SourceReader {
                     .httpStatus(response.getStatus())
                     .etag(response.getEtag())
                     .lastModified(response.getLastModified())
+                    .movedTo(response.getMovedTo())
                     .build();
         }
         if (!response.isSuccess()) {
@@ -133,7 +136,8 @@ public class RssSourceReader implements SourceReader {
                 .feedLanguage(feedLanguage)
                 .feedTitle(TextCleaner.truncate(TextCleaner.stripHtml(feed.getTitle()), 500))
                 .etag(response.getEtag())
-                .lastModified(response.getLastModified());
+                .lastModified(response.getLastModified())
+                .movedTo(response.getMovedTo());
 
         int invalid = 0;
         int taken = 0;

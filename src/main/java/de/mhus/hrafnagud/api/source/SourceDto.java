@@ -37,6 +37,15 @@ public class SourceDto {
     /** Feed URL in normalised form — this is the source's true identity. */
     private String url = "";
 
+    /**
+     * Where the feed is currently fetched from, when a permanent redirect
+     * moved it. Absent means "the same as {@link #url}".
+     *
+     * <p>Read-only: it is resolved by the ingest loop, not configured.
+     * Editing {@link #url} discards it.
+     */
+    private @Nullable String fetchUrl;
+
     /** Publisher's home page, when the feed declares one. */
     private @Nullable String siteUrl;
 

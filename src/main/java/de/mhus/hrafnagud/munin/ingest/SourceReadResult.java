@@ -36,6 +36,12 @@ public class SourceReadResult {
 
     @Nullable String lastModified;
 
+    /**
+     * New home of this feed, when a permanent redirect moved it. Null on
+     * every ordinary read.
+     */
+    @Nullable String movedTo;
+
     @Nullable String error;
 
     static SourceReadResult failure(FetchOutcome outcome, int status, String error) {

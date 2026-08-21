@@ -335,4 +335,75 @@ class RssSourceReaderTest {
         assertThat(result.getCandidates()).singleElement()
                 .satisfies(c -> assertThat(c.getTitle()).isEqualTo("Politik für Bürger"));
     }
+
+    // ─── Where the feed is fetched from ───
+
+    private static final String FEED = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <rss version="2.0"><channel><title>T</title><item>
+              <title>Eins</title>
+              <link>https://example.com/a</link>
+              <pubDate>Tue, 18 Aug 2026 09:00:00 GMT</pubDate>
+            </item></channel></rss>
+            """;
+
+    private static HttpFetchResult.HttpFetchResultBuilder feedResponse() {
+        return HttpFetchResult.builder()
+                .status(200)
+                .body(FEED.getBytes(StandardCharsets.UTF_8))
+                .contentType("application/rss+xml");
+    }
+
+    @Test
+    void read_withAResolvedLocation_pollsThatAndNotTheIdentity() {
+        SourceDocument moved = SourceDocument.builder()
+                .name("example-abc123")
+                .url("https://example.com/rss")
+                .fetchUrl("https://www.example.com/rss/")
+                .build();
+        when(fetcher.get(eq("https://www.example.com/rss/"), any(), any()))
+                .thenReturn(feedResponse().finalUrl("https://www.example.com/rss/").build());
+
+        SourceReadResult result = reader.read(moved);
+
+        // The identity is never requested — if it were, the mock would have
+        // no answer for it and the read would fail instead.
+        assertThat(result.getOutcome()).isEqualTo(FetchOutcome.OK);
+        assertThat(result.getCandidates()).hasSize(1);
+    }
+
+    @Test
+    void read_passesAPermanentRedirectOn() {
+        when(fetcher.get(eq("https://example.com/rss"), any(), any()))
+                .thenReturn(feedResponse()
+                        .finalUrl("https://www.example.com/rss/")
+                        .movedTo("https://www.example.com/rss/")
+                        .build());
+
+        assertThat(reader.read(source()).getMovedTo()).isEqualTo("https://www.example.com/rss/");
+    }
+
+    @Test
+    void read_notModified_passesAPermanentRedirectOn() {
+        // A 304 from the new location still says where that location is.
+        when(fetcher.get(eq("https://example.com/rss"), any(), any()))
+                .thenReturn(HttpFetchResult.builder()
+                        .status(304)
+                        .body(new byte[0])
+                        .finalUrl("https://www.example.com/rss/")
+                        .movedTo("https://www.example.com/rss/")
+                        .build());
+
+        SourceReadResult result = reader.read(source());
+
+        assertThat(result.getOutcome()).isEqualTo(FetchOutcome.NOT_MODIFIED);
+        assertThat(result.getMovedTo()).isEqualTo("https://www.example.com/rss/");
+    }
+
+    @Test
+    void read_ordinaryFetch_reportsNoMove() {
+        respondWith(FEED);
+
+        assertThat(reader.read(source()).getMovedTo()).isNull();
+    }
 }

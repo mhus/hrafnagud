@@ -12,6 +12,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 import org.jspecify.annotations.Nullable;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
@@ -69,6 +70,26 @@ public class SourceDocument {
 
     /** Normalised feed URL — the source's identity. Unique. */
     private String url = "";
+
+    /**
+     * Where the feed is actually fetched from, when a permanent redirect
+     * moved it. Null — the normal case — means {@link #url}.
+     *
+     * <p>This is deliberately <em>not</em> a rewrite of {@link #url}, and the
+     * reason is the source list. A list entry is matched to its source by
+     * URL, so a rewritten identity is a source the list can no longer find:
+     * the next refresh would create a second source for the old URL, and the
+     * reconciliation step would disable the repaired one for no longer being
+     * in a list it never left. The refresh after that would try the same
+     * rewrite again and hit the unique index. Splitting identity from
+     * location makes all of it a non-event — the list keeps matching on a
+     * field nothing in the ingest path writes.
+     *
+     * <p>It is also how the rewrite stays reversible: cleared on any failed
+     * poll (see {@code SourceService#clearFetchUrl}), so a location that
+     * goes stale costs one redirect, not a dead source.
+     */
+    private @Nullable String fetchUrl;
 
     private @Nullable String siteUrl;
 
@@ -159,4 +180,15 @@ public class SourceDocument {
      */
     @Version
     private @Nullable Long version;
+
+    /**
+     * The URL to poll: the resolved location when one is known, the identity
+     * otherwise.
+     *
+     * <p>Every fetch of this source goes through here, so that "which of the
+     * two URLs" is answered in one place rather than at each reader.
+     */
+    public String effectiveUrl() {
+        return StringUtils.isBlank(fetchUrl) ? url : fetchUrl;
+    }
 }

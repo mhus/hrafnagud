@@ -35,6 +35,35 @@ Without this, a publisher who starts appending a campaign parameter to its own
 feed link gets imported a second time — along with a second copy of its
 archive.
 
+### 2.1a A moved feed changes where it is fetched, never who it is
+
+`url` is the identity. `fetchUrl` is where the bytes come from, set when a
+permanent redirect resolved to somewhere else, and null in the normal case.
+Polling always goes through `SourceDocument.effectiveUrl()`.
+
+Rewriting `url` instead would look simpler and is a trap, because the identity
+is exactly what a source list matches on:
+
+| Refresh | With a rewritten `url` | With `fetchUrl` |
+|---|---|---|
+| 1 | List still names the old URL, finds no source for it → creates a **second** source, which fails the same way. The rewritten one is now absent from its list → the reconciliation step **disables** it. | List matches as always. Nothing happens. |
+| 2 | The new source resolves the same redirect, tries the same rewrite, and hits the unique index on `url`. | Nothing happens. |
+
+So the split is not tidiness, it is what keeps a repaired source repaired.
+
+Two consequences worth knowing:
+
+- **`fetchUrl` is dropped on the first failed poll.** A redirect is a statement
+  about today. Keeping a stale location means a source that fails until someone
+  notices; dropping a good one costs one extra redirect on the next poll. The
+  costs are not symmetric, so it goes immediately rather than after a counter.
+- **If a list carries both URLs, two sources end up polling one feed.** The
+  archive is unaffected — the second copy of each article is recognised as a
+  cross-source duplicate — and it is logged at INFO naming both sources. It is
+  not resolved automatically: the fix is to drop the stale list entry, which is
+  a decision about a list. Auto-disabling would not even hold, because a list
+  re-enables every source it still carries (§7.1).
+
 ### 2.2 Deduplication is a unique index
 
 `dedupKey` is a SHA-256 over the normalised article URL, and its index is
@@ -250,6 +279,33 @@ for **feeds** — a feed is published expressly to be polled.
 A proxy host configured without a valid port fails at **startup**, rather than
 quietly connecting directly. In an environment that requires the proxy, going
 direct breaks every fetch and the reason would be nowhere near the mistake.
+
+### 6.4 One redirect is repaired rather than followed
+
+Redirects are the client's business (`Redirect.NORMAL`) with exactly one
+exception: a hop from HTTPS down to plain HTTP. NORMAL refuses those, which is
+why it is chosen over ALWAYS — but on a real crawl it strands feeds that work
+in every browser. The shape is common: `https://host/feed` redirects to
+`http://www.host/feed/`, whose server redirects straight back up to HTTPS.
+
+So the downgrade is **skipped, not followed**: the target is retried with the
+scheme put back to HTTPS. If the publisher is HTTPS-capable — the case this
+exists for — that is the request their own chain would have arrived at. If they
+are genuinely HTTP-only, it fails and the source stays failing. A feed is never
+fetched over plaintext because a redirect asked for it.
+
+Only once per poll. The client follows whatever chain begins at the repaired
+URL, so a second manual hop could only serve a site bouncing between schemes,
+which no amount of retrying resolves.
+
+The result is remembered as `fetchUrl` (§2.1a) only for **301 and 308**, and
+only when the new location actually answered. 302, 303 and 307 mean "not here
+right now", and storing one would pin a feed to whatever host answered once.
+
+A redirect that could not be followed is reported as
+`HTTP 301 — redirect to http://… not followed`, not as a bare `HTTP 301`. The
+refusal is ours, and the short version sends whoever reads it to the wrong end
+of the connection.
 
 ## 7. Source lists
 

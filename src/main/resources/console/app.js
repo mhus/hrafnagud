@@ -531,6 +531,11 @@ async function showSourceDetail(name) {
         + defList([
             ['Name', esc(source.name)],
             ['Feed', link(source.url)],
+            // Only when it differs from the identity: a row saying "same as
+            // above" on every one of a few hundred sources is noise.
+            ...(source.fetchUrl ? [['Abruf von', link(source.fetchUrl)
+                + ' <span class="text-body-secondary small">(dauerhaft'
+                + ' umgeleitet)</span>']] : []),
             ['Website', link(source.siteUrl)],
             ['Typ', esc(source.type)],
             ['Zustand', source.enabled ? 'aktiv' : 'inaktiv'],

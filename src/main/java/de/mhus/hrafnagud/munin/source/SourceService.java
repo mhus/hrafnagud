@@ -51,6 +51,7 @@ public class SourceService {
 
     private static final String F_NAME = "name";
     private static final String F_URL = "url";
+    private static final String F_FETCH_URL = "fetchUrl";
     private static final String F_ENABLED = "enabled";
     private static final String F_NEXT_FETCH_AT = "nextFetchAt";
     private static final String F_ORIGIN_LIST = "originListName";
@@ -249,9 +250,12 @@ public class SourceService {
                     });
             source.setUrl(url);
             // The validators belong to the old URL and would produce a
-            // spurious 304 against the new one.
+            // spurious 304 against the new one. Same for a resolved
+            // location: it is where the *previous* URL redirected to, and
+            // keeping it would quietly ignore the edit that was just made.
             source.setHttpEtag(null);
             source.setHttpLastModified(null);
+            source.setFetchUrl(null);
             locked.add(SourceMergePolicy.FIELD_URL);
         }
         if (request.getSiteUrl() != null) {
@@ -576,6 +580,63 @@ public class SourceService {
         mongoTemplate.updateFirst(Query.query(Criteria.where(F_NAME).is(name)), update,
                 SourceDocument.class);
         return nextInterval;
+    }
+
+    /**
+     * Records where a feed moved to, so the next poll goes straight there.
+     *
+     * <p>Only {@code fetchUrl} is written. The source keeps its identity —
+     * see {@link SourceDocument#fetchUrl} for why that is not a detail but
+     * the whole point.
+     *
+     * <p>When another source already carries this URL <em>as</em> its
+     * identity, the two now poll one feed. That is logged rather than
+     * resolved: the archive is unaffected — the second copy of each article
+     * is recognised as a cross-source duplicate and dropped — and the fix is
+     * to drop the stale entry from the list, which is a decision about a
+     * list and not one an ingest loop should be taking. Disabling would not
+     * even hold: a list re-enables every source it still carries, unless a
+     * human locked the field.
+     */
+    public void recordMovedTo(String name, String movedTo, Instant now) {
+        Update update = new Update()
+                .set(F_FETCH_URL, movedTo)
+                .set(F_UPDATED_AT, now);
+        mongoTemplate.updateFirst(Query.query(Criteria.where(F_NAME).is(name)), update,
+                SourceDocument.class);
+
+        String alsoCollectedAs = repository.findByUrl(movedTo)
+                .map(SourceDocument::getName)
+                .filter(other -> !other.equals(name))
+                .orElse(null);
+        if (alsoCollectedAs == null) {
+            log.info("Source {} moved permanently — fetching from {} from now on",
+                    name, movedTo);
+        } else {
+            log.info("Source {} moved permanently to {}, which source {} already collects"
+                            + " — both now poll one feed; drop whichever list entry is stale",
+                    name, movedTo, alsoCollectedAs);
+        }
+    }
+
+    /**
+     * Forgets a resolved location, so the next poll starts from the identity
+     * again.
+     *
+     * <p>Called on any failed poll of a source that had one. A redirect is a
+     * statement about today, and the cost of being wrong in each direction is
+     * not symmetric: keeping a stale location means a source that fails until
+     * someone notices, while dropping a good one costs a single extra
+     * redirect on the next poll. So it goes at the first failure, without
+     * counting them.
+     */
+    public void clearFetchUrl(String name, Instant now) {
+        Update update = new Update()
+                .unset(F_FETCH_URL)
+                .set(F_UPDATED_AT, now);
+        mongoTemplate.updateFirst(Query.query(Criteria.where(F_NAME).is(name)), update,
+                SourceDocument.class);
+        log.debug("Source {}: dropped its resolved location after a failed poll", name);
     }
 
     /**

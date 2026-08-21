@@ -122,6 +122,18 @@ public class FeedIngestService {
                 created, read.getError(), read.getEtag(), read.getLastModified(),
                 source.getFetchIntervalSeconds(), now);
 
+        // Where the next poll should go. Both directions matter: a feed that
+        // moved is remembered so the redirect is walked once rather than
+        // hourly, and a remembered location that stops working is forgotten
+        // so the source falls back to its own identity instead of failing
+        // against a URL nobody configured.
+        if (read.getMovedTo() != null
+                && !read.getMovedTo().equals(source.getFetchUrl())) {
+            sourceService.recordMovedTo(source.getName(), read.getMovedTo(), now);
+        } else if (!read.getOutcome().successful() && source.getFetchUrl() != null) {
+            sourceService.clearFetchUrl(source.getName(), now);
+        }
+
         SourceFetchReport finished = report
                 // Counted with the entries the reader rejected: from the outside
                 // both are "the feed offered it and it is not in the archive".

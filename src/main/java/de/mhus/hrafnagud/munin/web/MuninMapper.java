@@ -40,6 +40,7 @@ public final class MuninMapper {
                 .title(source.getTitle())
                 .type(source.getType())
                 .url(source.getUrl())
+                .fetchUrl(source.getFetchUrl())
                 .siteUrl(source.getSiteUrl())
                 .enabled(source.isEnabled())
                 .language(source.getLanguage())

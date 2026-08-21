@@ -38,7 +38,30 @@ public class HttpFetchResult {
     /** URL after redirects — the one worth storing as the article's location. */
     String finalUrl;
 
-    /** Transport failure message, {@code null} when the request completed. */
+    /**
+     * Where this feed now lives, when a <em>permanent</em> redirect moved it
+     * and the new location answered.
+     *
+     * <p>Set only for 301 and 308. A 302, 303 or 307 says "not here right
+     * now", which is the publisher asking us not to remember it, and a
+     * caller that stored it anyway would pin a feed to whatever temporary
+     * host answered once.
+     *
+     * <p>Null on every ordinary fetch, including one that followed
+     * redirects: the client resolves those on its own and the caller has no
+     * decision to make. This field exists for the one case it cannot —
+     * see {@link HttpFetcher#repairTarget}.
+     */
+    @Nullable String movedTo;
+
+    /**
+     * Failure message, {@code null} when the response is one the caller can
+     * work with.
+     *
+     * <p>Usually a transport failure. Also set for a redirect that could not
+     * be followed, because "HTTP 301" alone sends an operator looking for a
+     * problem at the publisher when the refusal is ours.
+     */
     @Nullable String error;
 
     public boolean isSuccess() {
