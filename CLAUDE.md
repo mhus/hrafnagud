@@ -23,11 +23,12 @@ Satz Regeln für beide Codebasen.
   keine Task-Liste (siehe `specs/README.md`).
 - Planung / Brainstorming: `planning/` — Vorüberlegungen, Session-Exports,
   verworfene Wege. Was gebaut ist, wandert nach `specs/`, nicht hierhin.
-- Brain-Seite: `kits/` — Vancetope-Kits, die installiert werden, damit
-  `hugin/` etwas zum Rufen hat. Konvention ist `kits/<name>/kit.yaml`, damit
-  das Repo direkt als Kit-Quelle taugt. Ändert sich ein Payload in `hugin/`,
-  ändert sich das Kit im **selben** Commit — das ist der Grund, warum es hier
-  liegt und nicht in vance-kits.
+- Brain-Seite: `kits/` — Vancetope-Kits. Konvention ist `kits/<name>/kit.yaml`,
+  damit das Repo direkt als Kit-Quelle taugt. Ändert sich ein Payload in
+  `hugin/`, ändert sich das Kit im **selben** Commit — das ist der Grund, warum
+  es hier liegt und nicht in vance-kits. Seit August 2026 wird der Ordner
+  zusätzlich in die JAR kopiert und über `kit/` als Ode-Kit-Quelle serviert,
+  womit aus der Konvention ein Mechanismus wird (`specs/kits.md`).
 - Container-Build und Alt-Manifeste: `deploy/` (siehe unten)
 - Datengeneratoren: `scripts/` — z.B. `generate-mediatopics-tsv.py` für
   `src/main/resources/topics/iptc-mediatopics.tsv`
@@ -70,7 +71,7 @@ Satz Regeln für beide Codebasen.
 | HTML / OPML | jsoup |
 | Spracherkennung | Lingua |
 | Utility | Apache Commons (`StringUtils.isBlank(…)`) |
-| Vancetope-Anbindung | `de.mhus.vance.ode:vance-ode-{ursa,centauri,zarniwoop,jaglan}` |
+| Vancetope-Anbindung | `de.mhus.vance.ode:vance-ode-{ursa,centauri,zarniwoop,jaglan,kit}` |
 | Tests | JUnit 5, Mockito, AssertJ |
 | Console | statisches HTML + Vanilla-JS, kein Build-Step |
 
@@ -93,6 +94,8 @@ de.mhus.hrafnagud.
   zarniwoop/  beantwortet Research-Queries aus dem Archiv (/ode/search/**)
   jaglan/     serviert das Archiv als gemounteten Dateibaum — Artikeltexte und
               Bild-Bytes unter einem Pfad, der morgen dieselbe Datei bezeichnet
+  kit/        serviert die eigenen Kits, damit ein Projekt sich selbst gegen
+              das Archiv konfiguriert statt von Hand konfiguriert zu werden
   facet/      Filter-Dimensionen, die centauri und zarniwoop teilen
   config/     die drei Property-Wurzeln: munin.*, hugin.*, hrafnagud.*
   settings/   die geltenden Werte — config plus die Overrides des Operators
@@ -126,8 +129,8 @@ Test. Begründung: `specs/architecture.md` §2.1.
 
 Runtime-Schaltbarkeit gehört dazu und bleibt so: `hugin/*` ist inert bis
 `vance.ode.base-url` gesetzt ist (es ruft raus), `centauri`/`zarniwoop` sind
-**an, außer jemand schaltet sie ab** (sie antworten). `jaglan` ist **aus, bis
-jemand es einschaltet** — es liefert Dateiinhalte unter begehbaren Pfaden aus,
+**an, außer jemand schaltet sie ab** (sie antworten). `jaglan` und `kit` sind **aus, bis
+jemand sie einschaltet** — es liefert Dateiinhalte unter begehbaren Pfaden aus,
 ein unbewachter Pfad ist damit ein Fileserver und kein Lesezugriff auf
 zusammengesetzte Antworten (`specs/jaglan.md` §4.1).
 

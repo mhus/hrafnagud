@@ -1,0 +1,66 @@
+name: hrafnagud-archive
+description: |
+  Everything a Vancetope project needs in order to read hrafnagud's news
+  archive. The mirror image of the `translation` kit beside it: that one
+  configures a brain to answer this service, this one configures a project to
+  consume it.
+
+  Three surfaces, three questions, and a project usually wants all of them:
+
+    centauri.endpoint.hrafnagud   "what is new?"          — a timeline
+    research.endpoint.hrafnagud   "what is there about…?" — a ranked answer
+    jaglan.mount.hrafnagud        "give me these bytes"   — a file tree
+                                                            under _ext/
+
+  The research surface is keyed `research.endpoint.*` rather than
+  `zarniwoop.*`: on the reader's side the subsystem is the research layer,
+  and Zarniwoop is the contract it speaks.
+
+  ## Why this kit exists
+
+  Configuring those by hand is six settings, and getting one wrong produces
+  no error — an empty mount folder, or a research call that returns nothing.
+  The archive knows its own endpoint paths and its own keys, so it is the
+  right thing to ask.
+
+  ## What the addresses become
+
+  The base URL is not written here. It arrives as `{{ accessUrl }}` and is
+  filled in by the *reader*, using the address it actually reached this
+  service on — which is a different one locally than in a cluster, and not
+  something this service can know about itself.
+
+  ## What is deliberately absent
+
+  No recipes and no server-tool configs. Reading the archive is what the
+  three surfaces already are; a recipe would be an opinion about what to do
+  with the news, and that belongs to the project, not to the archive.
+
+  No `ai.provider.*` or `vault.*` settings — a provisioned kit is kept away
+  from those by `vance.kits.settingDenyKeys`, and rightly so.
+
+  ## About the keys
+
+  The three `apiKey` settings carry this service's actual keys, substituted
+  when the kit is built. A key that is not configured here is **omitted**
+  rather than shipped empty: a delivered PASSWORD value is written when none
+  exists and never touched again, so an empty one would install a permanent
+  blank.
+
+  That makes the token guarding this kit endpoint as valuable as the three
+  read keys together. It is meant to be: whoever may provision from the
+  archive is already trusted to read it.
+version: "1.0"
+artifact: false
+installable: true
+sealed: false
+hasEncryptedSecrets: false
+
+# The reader substitutes placeholders in these files. Everything else travels
+# verbatim — see specification/public/kits.md §12a.6 for why the host must not
+# do the substituting itself.
+render:
+  - settings/centauri.endpoint.hrafnagud.baseUrl.yaml
+  - settings/research.endpoint.hrafnagud.baseUrl.yaml
+  - settings/jaglan.mount.hrafnagud.baseUrl.yaml
+  - documents/skills/hrafnagud-archive/SKILL.md

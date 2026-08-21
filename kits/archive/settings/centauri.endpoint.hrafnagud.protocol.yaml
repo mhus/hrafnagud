@@ -1,0 +1,3 @@
+type: STRING
+value: "ode"
+description: "Speaks the Centauri Ode contract. Without .protocol the factory skips the endpoint entirely — which is the intended way to switch a source off."

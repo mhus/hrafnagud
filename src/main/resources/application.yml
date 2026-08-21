@@ -289,6 +289,16 @@ munin:
   jaglan:
     enabled: ${HRAFNAGUD_JAGLAN_ENABLED:false}
 
+  # Serves this service's own kits, so a Vancetope project can configure
+  # itself against the archive instead of being configured by hand: the
+  # endpoints, the file mount, and a skill that says what is in the archive.
+  #
+  # Off by default, and this one for the sharpest reason of the four: it hands
+  # out the API keys of the other surfaces. An unguarded path here gives away
+  # read access to everything.
+  kit:
+    enabled: ${HRAFNAGUD_KIT_ENABLED:false}
+
 # Vancetope binding (vance-ode). Everything here is inert until base-url
 # is set — no client, no translation provider, no outbound traffic. The
 # brain side is the `translation` kit: it defines the event, the script
@@ -422,6 +432,11 @@ vance:
       # Ceiling on what one request may cost, independent of what the
       # source declares it can serve.
       maxLimit: 200
+    kit:
+      path: ${HRAFNAGUD_KIT_PATH:/kit}
+      # Worth setting whenever the endpoint is on: what travels through it
+      # includes the keys to the feed, research and mount surfaces.
+      apiKey: ${HRAFNAGUD_KIT_API_KEY:}
     jaglan:
       path: ${HRAFNAGUD_JAGLAN_PATH:/ode/files}
       # The shared secret with the reader's mount configuration

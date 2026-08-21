@@ -195,6 +195,11 @@
             <artifactId>vance-ode-jaglan</artifactId>
             <version>${vance.ode.version}</version>
         </dependency>
+        <dependency>
+            <groupId>de.mhus.vance.ode</groupId>
+            <artifactId>vance-ode-kit</artifactId>
+            <version>${vance.ode.version}</version>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -209,6 +214,47 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!--
+                `kits/` into the jar, so the kits this service serves travel
+                inside the artifact that depends on them. That is the whole
+                point of them living here: a recipe and the code firing its
+                event ship as one thing, and a version skew between the two
+                becomes impossible rather than unlikely.
+
+                Copied rather than moved under src/main/resources, because
+                the directory is also a Vancetope kit source in its own right
+                — `kits/<name>/kit.yaml` is the convention that lets the
+                repository be cloned and used directly.
+
+                The two files beside the kit directories are excluded: they
+                describe the directory for a human and for a git-based kit
+                consumer, and nothing reads them at runtime.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>bundle-kits</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/kits</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/kits</directory>
+                                    <excludes>
+                                        <exclude>README.md</exclude>
+                                        <exclude>catalog.yaml</exclude>
+                                    </excludes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <!--
                 Publishes one build property per resolved dependency, named

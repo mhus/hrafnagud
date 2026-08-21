@@ -1,0 +1,3 @@
+type: STRING
+value: "{{ accessUrl }}/ode/files"
+description: "Where hrafnagud serves the archive as files. Substituted with the address this kit was actually fetched from. The tree appears under _ext/hrafnagud/."

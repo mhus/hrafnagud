@@ -1,0 +1,3 @@
+type: STRING
+value: "{{ accessUrl }}/ode/search"
+description: "Where hrafnagud answers research queries. Substituted with the address this kit was actually fetched from."

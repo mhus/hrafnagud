@@ -1,0 +1,3 @@
+type: STRING
+value: "ode"
+description: "Mount protocol. Required — a mount without it is skipped, which is the lever for switching it off without losing its configuration."

@@ -30,6 +30,8 @@ de.mhus.hrafnagud.
               centauri, opposite question: a ranked answer, not a timeline.
   jaglan/     Serves the archive as a mounted file tree — article texts and image
               bytes under a path that means the same file tomorrow.
+  kit/        Serves this service's own kits, so a project can configure itself
+              against the archive instead of being configured by hand.
   facet/      What both of those let a reader filter by, declared once.
   config/     The property roots: munin.*, hugin.*, hrafnagud.*
   settings/   The values in force — config plus whatever an operator overrode.
@@ -303,6 +305,33 @@ the ordinary document tools. Two things to know before enabling it:
 The tree is partitioned down to the minute, which is measured rather than
 chosen: [jaglan.md](specs/jaglan.md) §2 has the distribution that decided it.
 
+## Configuring a project against the archive
+
+`munin.kit.enabled` serves this service's own **kits** over
+`vance-ode-kit`, so a Vancetope project configures itself instead of being
+configured by hand:
+
+```bash
+curl localhost:9800/kit/capabilities
+```
+
+Two kits, opposite directions — `hrafnagud-translation` configures a brain to
+answer this service (the event, script and recipe that make `hugin.translation`
+work), `hrafnagud-archive` configures a project to read it (the six settings for
+the feed, research and mount surfaces, plus a skill that says what is in the
+archive).
+
+The kits live in [`kits/`](kits/) and are copied into the jar at build time,
+which is the point: a recipe and the code firing its event ship as one artifact,
+so they cannot drift apart. Addresses travel as `{{ accessUrl }}` and are filled
+in by the reader; API keys are filled in here, and a key that is not configured
+is omitted rather than shipped empty.
+
+**Off by default, and this endpoint most deliberately** — it hands out the keys
+to the other three surfaces, so an unguarded path gives away read access to the
+archive. `vance.ode.kit.apiKey` guards it; enabling without one logs a WARN
+naming what is exposed. Reasoning: [kits.md](specs/kits.md).
+
 ## Filter rules
 
 Fetching a body costs a request and translating costs tokens. Which articles are
@@ -562,6 +591,7 @@ that a single list stopped being readable:
 | [collection](specs/collection.md) | Source identity, deduplication, URL normalisation, adaptive polling, source lists, language provenance |
 | [content-extraction](specs/content-extraction.md) | The four-rung ladder, images, script-aware word counts, the fixture corpus |
 | [images](specs/images.md) | Keeping the bytes of an article's images: optional and per-image, the URL-derived address, what it costs per month |
+| [kits](specs/kits.md) | Serving this service's own kits, so a project configures itself against the archive |
 | [jaglan](specs/jaglan.md) | The archive as a mounted file tree, why an hour is the partition, and why a path is rejected rather than repaired |
 | [enrichments](specs/enrichments.md) | Why a processing result is a document and not a field |
 | [settings](specs/settings.md) | Operational values in the database, what stays a start-up property, and when a change takes effect |
@@ -602,6 +632,12 @@ Named rather than left to be discovered:
   this runs for months. With `munin.image.enabled` on, the growth is roughly
   ten GiB a month of image bytes on top, and nothing deletes those either —
   [images.md](specs/images.md) §4 has the measured numbers.
+- **The kit endpoint hands out the other surfaces' keys.** `hrafnagud-archive`
+  ships the feed, research and mount API keys in its bundle, so the kit token is
+  worth as much as all three together — one secret instead of two guarding each
+  other. Deliberate, off by default, and not exposed in any deployment today;
+  the trade and the two ways to split it are in
+  [planning/kit-secret-distribution.md](planning/kit-secret-distribution.md).
 - **Image copies have no backfill.** Copying is queued when a body is
   extracted, so articles whose bodies were fetched while `munin.image.enabled`
   was off keep their image list and have nothing queued. Re-queueing them from

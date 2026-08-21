@@ -61,6 +61,11 @@ class ModuleBoundaryTest {
             // renders them as files; Munin has no business knowing that
             // mount paths exist.
             "de.mhus.hrafnagud.jaglan",
+            // Kit: serves this service's own kits, so a project can configure
+            // itself against the archive. Reads nothing from munin today and
+            // still belongs on this side — it exists only because Vancetope
+            // has a kit contract.
+            "de.mhus.hrafnagud.kit",
             // Not one of the three, and still outward-facing: it declares
             // Munin's fields as Ode facets and therefore imports vance-ode. An
             // import of it from munin would smuggle the whole contract in
@@ -120,7 +125,7 @@ class ModuleBoundaryTest {
         assertThat(violations)
                 .as("""
                         Munin reaches outward. Deleting hugin/, centauri/, \
-                        zarniwoop/, jaglan/ and facet/ has to leave a \
+                        zarniwoop/, jaglan/, kit/ and facet/ has to leave a \
                         collector that still compiles — see \
                         specs/architecture.md §2.1. Move whatever needs a \
                         brain into hugin/ instead.""")
