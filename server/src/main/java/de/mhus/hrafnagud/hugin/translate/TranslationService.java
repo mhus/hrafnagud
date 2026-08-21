@@ -10,7 +10,10 @@ import de.mhus.hrafnagud.munin.util.TextCleaner;
 import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.jspecify.annotations.Nullable;
@@ -32,17 +35,90 @@ public class TranslationService {
     private final ArticleService articleService;
     private final EnrichmentService enrichmentService;
     private final Settings.Translation config;
-    private final @Nullable TranslationProvider provider;
+
+    /**
+     * Everything wired, which is nought, one or two of them.
+     *
+     * <p>A list rather than one bean, because {@code hugin.translation.provider}
+     * chooses between them at runtime — that is what makes putting the same
+     * articles through a brain and through a model directly a setting rather
+     * than a deployment.
+     *
+     * <p>Collected through an {@code ObjectProvider} rather than injected as a
+     * {@code List}: a required list with no candidates is a startup failure,
+     * and "no provider wired" is this service's normal, documented state. Both
+     * configurations return null when their credential is missing, so with
+     * neither configured this is simply empty.
+     */
+    private final List<TranslationProvider> providers;
+
+    /** Last provider announced, so a runtime switch appears in the log once. */
+    private final AtomicReference<@Nullable String> announced = new AtomicReference<>();
 
     public TranslationService(ArticleService articleService, EnrichmentService enrichmentService,
-            Settings settings, ObjectProvider<TranslationProvider> provider) {
+            Settings settings, ObjectProvider<TranslationProvider> providers) {
         this.articleService = articleService;
         this.enrichmentService = enrichmentService;
         this.config = settings.getTranslation();
-        // ObjectProvider rather than a @Nullable parameter: the provider
-        // bean may be absent entirely, or present-but-null when Ode is on
-        // the classpath unconfigured. Both mean the same thing here.
-        this.provider = provider.getIfAvailable();
+        this.providers = providers.stream().toList();
+    }
+
+    /**
+     * The provider that should do the work, or {@code null} when there is
+     * none to choose.
+     *
+     * <p>Resolved per call, so a change to {@code hugin.translation.provider}
+     * takes effect on the next article. Three cases, and the third is the
+     * reason this is not simply "the first one":
+     *
+     * <ul>
+     *   <li>the setting names one — that one, or nothing if the name is
+     *       unknown. Falling back to another provider would spend money the
+     *       operator did not ask to spend.</li>
+     *   <li>the setting is blank and one provider is wired — that one.</li>
+     *   <li>the setting is blank and several are wired — <b>nothing</b>, with
+     *       a warning. Two ways to pay for a translation and no instruction
+     *       which to use is a question, not a default.</li>
+     * </ul>
+     */
+    @Nullable
+    TranslationProvider provider() {
+        String wanted = config.provider().value().trim();
+        TranslationProvider resolved = resolve(wanted);
+        String name = resolved == null ? null : resolved.name();
+        String previous = announced.getAndSet(name);
+        if (!Objects.equals(previous, name) && name != null) {
+            log.info("Translating via {} ({} wired: {})", name, providers.size(), names());
+        }
+        return resolved;
+    }
+
+    private @Nullable TranslationProvider resolve(String wanted) {
+        if (!wanted.isEmpty()) {
+            for (TranslationProvider candidate : providers) {
+                if (candidate.name().equalsIgnoreCase(wanted)) {
+                    return candidate;
+                }
+            }
+            log.warn("hugin.translation.provider is '{}', which is not wired ({}) — "
+                    + "nothing translates until it names one of them", wanted, names());
+            return null;
+        }
+        if (providers.size() == 1) {
+            return providers.getFirst();
+        }
+        if (providers.size() > 1) {
+            log.warn("{} translation providers are wired ({}) and "
+                    + "hugin.translation.provider names none — set it to one of them",
+                    providers.size(), names());
+        }
+        return null;
+    }
+
+    private String names() {
+        return providers.isEmpty()
+                ? "none"
+                : String.join(", ", providers.stream().map(TranslationProvider::name).toList());
     }
 
     /**
@@ -62,24 +138,27 @@ public class TranslationService {
                             + " — articles will queue and nothing will translate them.",
                     config.pivotLanguage().value());
         } else if (!isAvailable()) {
-            log.warn("Pivot language '{}' is configured but no provider is wired — articles "
-                            + "will queue and nothing will translate them. "
-                            + "Set vance.ode.base-url to use a Vancetope brain.",
-                    config.pivotLanguage().value());
+            log.warn("Pivot language '{}' is configured but no provider will run — articles "
+                            + "will queue and nothing will translate them. Wired: {}. "
+                            + "Set vance.ode.base-url for a Vancetope brain or "
+                            + "hugin.gemini.apiKey for a model directly, and name one in "
+                            + "hugin.translation.provider when both are.",
+                    config.pivotLanguage().value(), names());
         } else {
             log.info("Translating into '{}' via {}",
                     config.pivotLanguage().value(), providerName());
         }
     }
 
-    /** {@code true} when something is wired that could do the work. */
+    /** {@code true} when something is wired and chosen that could do the work. */
     public boolean isAvailable() {
-        return provider != null;
+        return provider() != null;
     }
 
-    /** Name of the wired provider, or {@code null} when there is none. */
+    /** Name of the chosen provider, or {@code null} when there is none. */
     public @Nullable String providerName() {
-        return provider == null ? null : provider.name();
+        TranslationProvider chosen = provider();
+        return chosen == null ? null : chosen.name();
     }
 
     /**
@@ -88,6 +167,7 @@ public class TranslationService {
      * @return {@code true} when a translation was stored
      */
     public boolean translate(ArticleDocument article, Instant now) {
+        TranslationProvider provider = provider();
         if (provider == null) {
             return false;
         }

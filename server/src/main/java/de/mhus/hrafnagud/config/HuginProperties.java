@@ -30,6 +30,7 @@ public class HuginProperties {
 
     private final Translation translation = new Translation();
     private final Category category = new Category();
+    private final Gemini gemini = new Gemini();
 
     /**
      * The translation queue.
@@ -58,6 +59,16 @@ public class HuginProperties {
          * a legible state, and the startup log says so.
          */
         private boolean enabled = false;
+
+        /**
+         * Which provider does the work: {@code vance-ode} or {@code gemini}.
+         *
+         * <p>Empty means "the only one that is wired", which is the honest
+         * default while there is one — and an error state once there are
+         * several, because guessing which of two ways to spend money is not a
+         * default anybody should get by omission.
+         */
+        private String provider = "";
 
         /**
          * The one language everything is normalised into, as a BCP-47
@@ -114,6 +125,52 @@ public class HuginProperties {
          * teaser was expected is the case this guards against.
          */
         private int maxSourceChars = 8000;
+    }
+
+    /**
+     * Direct model access — the provider that does not go through a brain.
+     *
+     * <p>The other way to translate: instead of firing an event at a
+     * Vancetope brain, call Google's API from here. Kept as a second
+     * {@code TranslationProvider} rather than as a replacement, because the
+     * two are worth comparing on the same articles — which of them runs is
+     * {@code hugin.translation.provider}, a setting.
+     */
+    @Data
+    public static class Gemini {
+
+        /**
+         * The API key, and the reason this block is a property rather than a
+         * setting: a credential belongs where the deployment already keeps
+         * its credentials, not in the archive's own database. Empty means the
+         * provider is not wired at all — the same reading as a blank brain
+         * address. See {@code specs/settings.md} §5.
+         */
+        private String apiKey = "";
+
+        /**
+         * The model, as Google's API names it.
+         *
+         * <p>A setting rather than a constant because it is the one value an
+         * experiment turns: Flash-Lite is the cheap end, Flash the better
+         * one, and Google renames and retires these on its own schedule.
+         * Whatever answered is recorded per translation, so a change here is
+         * visible in the archive afterwards rather than only in the bill.
+         */
+        private String model = "gemini-3.5-flash-lite";
+
+        /**
+         * Low on purpose: translation is not a creative task, and the same
+         * text coming back differently on every call would make two runs
+         * incomparable.
+         */
+        private double temperature = 0.1;
+
+        /**
+         * One request's budget. Shorter than the brain path's, which waits
+         * for a script that waits for a model; here there is only the model.
+         */
+        private Duration timeout = Duration.ofSeconds(60);
     }
 
     /**

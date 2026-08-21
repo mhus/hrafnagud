@@ -17,7 +17,10 @@ import de.mhus.hrafnagud.munin.enrichment.EnrichmentDocument;
 import de.mhus.hrafnagud.munin.enrichment.EnrichmentService;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.jspecify.annotations.Nullable;
@@ -50,8 +53,15 @@ class TranslationServiceTest {
                 TestSettings.of(properties), objectProviderOf(provider));
     }
 
-    private static ObjectProvider<TranslationProvider> objectProviderOf(
-            @Nullable TranslationProvider provider) {
+    /**
+     * The service collects its providers through {@code stream()}, because a
+     * required {@code List} with no candidates would fail startup and "none
+     * wired" is a normal state. So that is the method a stub has to answer.
+     */
+    static ObjectProvider<TranslationProvider> objectProviderOf(
+            @Nullable TranslationProvider... provided) {
+        List<TranslationProvider> providers =
+                Arrays.stream(provided).filter(Objects::nonNull).toList();
         return new ObjectProvider<>() {
             @Override public TranslationProvider getObject() {
                 throw new UnsupportedOperationException();
@@ -60,10 +70,13 @@ class TranslationServiceTest {
                 throw new UnsupportedOperationException();
             }
             @Override public @Nullable TranslationProvider getIfAvailable() {
-                return provider;
+                return providers.size() == 1 ? providers.getFirst() : null;
             }
             @Override public @Nullable TranslationProvider getIfUnique() {
-                return provider;
+                return getIfAvailable();
+            }
+            @Override public Stream<TranslationProvider> stream() {
+                return providers.stream();
             }
         };
     }

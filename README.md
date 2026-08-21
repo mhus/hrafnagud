@@ -335,10 +335,28 @@ prompt dominates the token bill — roughly five times the length of the
 text itself — so a second call would double the expensive half to save
 nothing.
 
-Munin owns the queue but neither the engine nor the result. Who produces
-the translation is a `TranslationProvider`, and one ships: firing an event
-at a [Vancetope](https://github.com/mhus/vance) brain through
-[vance-ode](https://github.com/mhus/vance-ode).
+Munin owns the queue but neither the engine nor the result. Who produces the
+translation is a `TranslationProvider`, and **two** ship:
+
+| `hugin.translation.provider` | What it does |
+|---|---|
+| `vance-ode` | fires an event at a [Vancetope](https://github.com/mhus/vance) brain through [vance-ode](https://github.com/mhus/vance-ode); the brain owns the prompt |
+| `gemini` | calls Google's Gemini API directly through langchain4j; this service owns the prompt |
+
+Both can be wired at once, and the setting is resolved per article — so the
+same articles can go through both and be compared afterwards, because every
+translation records the `producer` and the `model` that answered. With both
+wired and the setting empty, nothing translates: picking one of two ways to
+spend money by accident is worse than saying so.
+
+```yaml
+hugin:
+  gemini:
+    apiKey: ${GEMINI_API_KEY:}        # empty = that provider is not wired
+    model: gemini-3.5-flash-lite      # a setting: it is what an experiment turns
+```
+
+The brain path:
 
 ```yaml
 vance:
@@ -469,7 +487,7 @@ that a single list stopped being readable:
 | [content-extraction](specs/content-extraction.md) | The four-rung ladder, images, script-aware word counts, the fixture corpus |
 | [enrichments](specs/enrichments.md) | Why a processing result is a document and not a field |
 | [settings](specs/settings.md) | Operational values in the database, what stays a start-up property, and when a change takes effect |
-| [translation](specs/translation.md) | The pivot language, the provider SPI, the Vancetope event, the nested timeouts |
+| [translation](specs/translation.md) | The pivot language, the two providers and why the choice is a setting, the Vancetope event, the nested timeouts |
 | [feed-source](specs/feed-source.md) | Serving the archive: streams, cursor, declared capabilities and the two declined ones |
 | [research-source](specs/research-source.md) | Relevance search, searching translation and original, the two contract rules |
 

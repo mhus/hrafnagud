@@ -64,6 +64,7 @@ public class Settings {
     private final Language language;
     private final Category category;
     private final Filter filter;
+    private final Gemini gemini;
 
     /** Shared HTTP behaviour, for whatever is decided per request. */
     public record Http(
@@ -121,6 +122,7 @@ public class Settings {
     /** The translation queue. */
     public record Translation(
             SettingBoolean enabled,
+            SettingString provider,
             SettingString pivotLanguage,
             SettingLanguages readableLanguages,
             SettingBoolean translateSummary,
@@ -145,6 +147,13 @@ public class Settings {
             SettingDuration retryDelay,
             SettingDuration claimLease,
             SettingDouble acceptConfidence) {
+    }
+
+    /** Direct model access for the Gemini provider. */
+    public record Gemini(
+            SettingString model,
+            SettingDouble temperature,
+            SettingDuration timeout) {
     }
 
     /** Filter re-evaluation. */
@@ -268,6 +277,12 @@ public class Settings {
                         "Whether the worker drains the translation backlog. Off leaves the "
                                 + "queue filling, which is the reason this is separate from "
                                 + "the pivot language."),
+                store.text("hugin.translation.provider",
+                        translationDefaults::getProvider,
+                        "Which provider translates: 'vance-ode' calls a brain, 'gemini' calls "
+                                + "Google's API directly. Empty picks the only one that is "
+                                + "wired, and is an error state when several are. Resolved per "
+                                + "article, so switching it is a setting rather than a deploy."),
                 store.text("hugin.translation.pivotLanguage",
                         translationDefaults::getPivotLanguage,
                         "The one language everything is normalised into, as a BCP-47 "
@@ -330,6 +345,18 @@ public class Settings {
                         matchingDefaults::getAcceptConfidence,
                         "Confidence at which the matching stage's answer counts as resolved "
                                 + "rather than as a guess."));
+
+        HuginProperties.Gemini geminiDefaults = hugin.getGemini();
+        this.gemini = new Gemini(
+                store.text("hugin.gemini.model", geminiDefaults::getModel,
+                        "The model, as Google's API names it — e.g. gemini-3.5-flash-lite for "
+                                + "the cheap end. Which one answered is recorded per "
+                                + "translation, so a change here stays visible afterwards."),
+                store.fraction("hugin.gemini.temperature", geminiDefaults::getTemperature,
+                        "Low on purpose: the same text coming back differently on every call "
+                                + "would make two runs incomparable."),
+                store.duration("hugin.gemini.timeout", geminiDefaults::getTimeout,
+                        "Budget for one request to the model."));
 
         MuninProperties.Filter filterDefaults = defaults.getFilter();
         this.filter = new Filter(

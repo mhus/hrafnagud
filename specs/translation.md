@@ -12,6 +12,7 @@ because they control different things:
 | `hugin.translation.pivotLanguage` | what everything is translated **into**, and what gets queued — decided at ingest | empty — nothing is ever queued |
 | `hugin.translation.readableLanguages` | which other languages need **no** translation | empty — only the pivot is exempt |
 | `hugin.translation.enabled` | whether the **worker** runs | `false` — the tick returns immediately |
+| `hugin.translation.provider` | **which** engine does the work | empty — the only one wired |
 
 ```yaml
 munin:
@@ -72,6 +73,40 @@ bean that is wired.
 One implementation ships: `OdeTranslationProvider`, which fires a Vancetope
 event.
 
+### 2.0a Two providers, and why the choice is a setting
+
+Two implementations ship:
+
+| Provider | Path | Owns the prompt |
+|---|---|---|
+| `vance-ode` | fires an event at a Vancetope brain | the brain (the [kit](../kits/translation), editable without a deployment) |
+| `gemini` | calls Google's API from here, through langchain4j | this service, in `GeminiTranslationProvider` |
+
+Both, not one. What the brain path buys is a prompt that changes without a
+release; what the direct path buys is one hop instead of three, which at
+headline volume is the difference between a bill and a smaller bill. Which is
+better is a question about *this* archive's articles, and the only way to answer
+it is to run both — so `hugin.translation.provider` is a **setting**, resolved
+per article, and switching it is not a deployment.
+
+The comparison then falls out of the storage that already exists: every
+translation is an [enrichment](enrichments.md) recording its `producer` and the
+`model` that answered, so two runs over the same articles are two rows to put
+side by side. That is the same property that makes re-running with a better
+model worthwhile, used for a different question.
+
+**With both wired and no instruction, nothing translates.** Not "the first
+one": which bean comes first is an accident of scanning order, and picking one
+of two ways to spend money by accident is worse than not translating and saying
+so. Same for a name nothing answers to — an operator who asked for one engine
+and silently got the other would compare the wrong two runs.
+
+The prompt in the direct path lives in compiled code, and that is the trade it
+makes: changing it needs a release. It is kept short and nearly all rules,
+because what a translating model does wrong is not the language — it is
+summarising, commenting and adding politeness the original lacks. The response
+*schema* does the structural work, so there is no markdown fence to strip.
+
 ### 2.1 Wiring is an `ObjectProvider`, not `@ConditionalOnBean`
 
 `@ConditionalOnBean` is only dependable inside an auto-configuration. On a
@@ -79,6 +114,10 @@ scanned `@Component` there is no defined ordering against user beans, so the
 provider could be skipped with Ode fully configured — and the symptom would be
 a backlog that never drains, with nothing to point at. `TranslateConfiguration`
 asks an `ObjectProvider` instead, and `TranslateWiringTest` pins both states.
+
+Providers are collected through `ObjectProvider.stream()` rather than injected
+as a `List`, because a required list with no candidates fails startup — and "no
+provider wired" is this service's normal, documented state.
 
 **A present client is not a configured brain.** Ode's auto-configuration is
 conditional on the *presence* of `vance.ode.base-url`, and `application.yml`

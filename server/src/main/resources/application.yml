@@ -274,6 +274,13 @@ hugin:
     # setting that with this off means a backlog nothing drains. The startup
     # log says which of the four states you are in.
     enabled: ${HRAFNAGUD_TRANSLATION_ENABLED:false}
+    # Which provider does the work: `vance-ode` fires an event at a brain,
+    # `gemini` calls Google's API from here. Empty means "the only one that
+    # is wired" — honest while there is one, an error state once there are
+    # two, because guessing which way to spend money is not a default. Both
+    # can be wired at once and switched at runtime; that is how the same
+    # articles get compared, since each result records its model.
+    provider: ${HRAFNAGUD_TRANSLATION_PROVIDER:}
     # The one language everything is normalised into. Empty means no
     # article is ever queued and the subsystem stays dormant. Setting it
     # starts filling a backlog — make sure something is wired to work it
@@ -303,6 +310,21 @@ hugin:
     retryDelay: PT5M
     claimLease: PT5M
     maxSourceChars: 8000
+
+  # Direct model access — the provider that skips the brain. Off unless a key
+  # is set; the key is a secret and therefore only ever an environment
+  # variable, never a setting (specs/settings.md §5).
+  gemini:
+    apiKey: ${GEMINI_API_KEY:}
+    # As Google's API names it. Flash-Lite is the cheap end; Google renames
+    # and retires these on its own schedule, which is why it is a setting.
+    model: ${HRAFNAGUD_GEMINI_MODEL:gemini-3.5-flash-lite}
+    # Translation is not a creative task, and the same text coming back
+    # differently on every call would make two runs incomparable.
+    temperature: 0.1
+    # Shorter than the brain path's PT150S: there, a script waits for a
+    # model; here there is only the model.
+    timeout: PT60S
 
   # The second stage of category normalisation: what stage one could not
   # settle is handed to a brain. Off by default, because it spends model time.

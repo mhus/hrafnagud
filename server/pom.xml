@@ -32,6 +32,19 @@
         <lombok.version>1.18.46</lombok.version>
         <jspecify.version>1.0.1</jspecify.version>
         <vance.ode.version>0.1.0</vance.ode.version>
+        <!--
+            langchain4j: the direct path to a model, for the translation
+            provider that does not go through a brain. Same version Vancetope
+            is on, deliberately — the two services translate the same articles
+            and comparing two runs is easier when the client below them is not
+            a second variable.
+
+            The plain module rather than its Spring Boot starter: one model,
+            one prompt, no agent, no tools. The starter would bring an
+            autoconfiguration tree for none of that, and a version opinion
+            about Spring Boot that this service does not need.
+        -->
+        <langchain4j.version>1.18.1</langchain4j.version>
         <!-- Rome: RSS 0.9x/1.0/2.0 + Atom 0.3/1.0 parsing. The feed zoo in the
              wild is broken in every way imaginable; Rome's XmlReader does
              encoding sniffing (XML decl vs. HTTP charset vs. BOM) which a
@@ -79,6 +92,16 @@
                 <groupId>com.github.pemistahl</groupId>
                 <artifactId>lingua</artifactId>
                 <version>${lingua.version}</version>
+            </dependency>
+            <!--
+                No BOM import for one artifact: the module pins its own
+                langchain4j-core and http-client at the same version, so a BOM
+                would only add a second place for that version to live.
+            -->
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-google-ai-gemini</artifactId>
+                <version>${langchain4j.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -139,6 +162,10 @@
         <dependency>
             <groupId>com.github.pemistahl</groupId>
             <artifactId>lingua</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-google-ai-gemini</artifactId>
         </dependency>
 
         <!--

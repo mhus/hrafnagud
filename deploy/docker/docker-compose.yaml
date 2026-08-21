@@ -55,6 +55,8 @@ services:
       VANCE_TENANT: ${VANCE_TENANT:-}
       VANCE_PROJECT: ${VANCE_PROJECT:-_tenant}
       VANCE_TRANSLATE_TOKEN: ${VANCE_TRANSLATE_TOKEN:-}
+      # The other translation path — a model called directly. Inert while empty.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # Catalogues: the layer that discovers source lists by itself.
       HRAFNAGUD_CATALOG_ENABLED: ${HRAFNAGUD_CATALOG_ENABLED:-true}
       HRAFNAGUD_INSTALL_BUNDLED_CATALOG: ${HRAFNAGUD_INSTALL_BUNDLED_CATALOG:-true}

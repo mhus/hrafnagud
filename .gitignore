@@ -4,6 +4,11 @@ target/
 *.iml
 .DS_Store
 
+# Local credentials for trying things out — API keys for a manual run, never
+# a deployment. Ignored wholesale, like the workbench's directory of the same
+# name: a file in here is a secret by default rather than by remembering.
+confidential/
+
 # Deploy credentials. The .example files are the committed ones; anything
 # filled in stays local.
 deploy/secrets.env
