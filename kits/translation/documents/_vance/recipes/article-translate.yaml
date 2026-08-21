@@ -1,0 +1,71 @@
+# Target path in the project: _vance/recipes/article-translate.yaml
+# (NOT `documents/_vance/...` — `_vance` is its own root folder beside
+# `documents/`, and RecipeLoader looks under `_vance/recipes/` only.)
+#
+# A LightLlm recipe, not a spawnable worker. Called from
+# _vance/scripts/translate-article.js through vance.llm.
+
+description: |
+  Translates an article's title and teaser in one call and returns both
+  as JSON.
+
+  One call rather than two, because at realistic volume the prompt
+  dominates the token bill — roughly five times the length of the text
+  itself. Two calls would double the expensive half to save nothing.
+
+  Pebble variables:
+    title       — title, in any language
+    summary     — teaser; may be empty
+    targetLang  — BCP-47 primary subtag of the target language (de, en, ja, …)
+
+engine: jeltz
+internal: true
+params:
+  model: default:fast
+  # Jeltz's schema loop may ask once more when the model does not return
+  # clean JSON.
+  maxAttempts: 2
+  # Translation is not a creative task: a low temperature keeps the same
+  # text from coming back differently on every call.
+  temperature: 0.1
+promptPrefix: |
+  You are a translator. Translate the title and teaser below into the
+  target language.
+
+  ## Target language
+
+  {{ targetLang }}
+
+  ## Title
+
+  {{ title }}
+
+  ## Teaser
+
+  {{ summary }}
+
+  ## Reply format
+
+  Respond with exactly ONE JSON object of this shape — no prose, no
+  markdown code fences:
+
+      {
+        "title":   "…",
+        "summary": "…"
+      }
+
+  ## Rules
+
+  - Translate, do not summarise, shorten or comment. The reply is
+    consumed by a program, not read by a person.
+  - Keep proper nouns, numbers, dates and units as they are.
+  - Preserve the register of the source: a headline stays a headline, a
+    news lede stays a news lede. Do not add politeness the original does
+    not have.
+  - If a field is already in the target language, return it unchanged.
+  - If the teaser is empty, return an empty string for `summary`. Do not
+    invent one from the title.
+  - Both fields are always present in the reply, even when one is empty.
+tags:
+  - internal
+  - translation

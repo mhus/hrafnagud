@@ -1,0 +1,44 @@
+# Target path in the project: _vance/events/translate-article.yaml
+#
+# Synchronous translation endpoint. Reachable at
+#   POST /brain/{tenant}/event/{project}/translate-article
+# JWT-free — the bearer token below is the whole guard.
+
+description: |
+  Translates the title and teaser of one article. Takes
+  {"title": "…", "summary": "…", "targetLang": "de"} and answers with
+  {"title": "…", "summary": "…", "model": "…"} under `output` in the same
+  response.
+
+script:
+  source: document
+  path: _vance/scripts/translate-article.js
+  # A model call is slow by HTTP standards. This bounds the synchronous
+  # wait; there is no additional event-level timeout, because nothing
+  # else is being waited for here.
+  timeoutSeconds: 120
+
+# GET would make no sense for a call that carries a body.
+methods: [POST]
+
+auth:
+  # Inline literal: keeps the kit runnable the moment it is installed,
+  # but every installation shares this token and it sits in clear text in
+  # a document operators edit. Change it before first use — and for
+  # anything reachable from outside the deployment's own network use
+  #   tokenSetting: translation.token
+  # instead, with the value as a PASSWORD setting. The consumer's half of
+  # the handshake is vance.ode.events.translate-article.token.
+  token: "change-me-translation-token"
+
+# Deliberately unset:
+#
+#   async:            script actions are synchronous by default, which is
+#                     exactly the point here.
+#   runAs:            the script calls a model and reads a setting — it
+#                     needs no foreign identity. Without runAs the output
+#                     also stays visible to event_fire, so an agent can
+#                     try the endpoint itself.
+tags:
+  - translation
+  - integration

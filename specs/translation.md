@@ -228,6 +228,20 @@ vance:
 Request: `{ title, summary, targetLang }`.
 Response `output`: `{ title, summary, model }`.
 
+The other half of that contract ships **in this repository**, as the
+`translation` kit under [`kits/translation`](../kits/translation): the event
+document, the script it runs and the recipe the script calls. It used to live
+in the Vancetope kit collection, which made the payload a contract spanning two
+repositories — and a payload change that can only be made in two commits is one
+that will eventually be made in one. The consumer owns the shape, so the
+consumer ships the kit; `kits/README.md` lists the three values that have to
+agree across the boundary (event name, token, project).
+
+A near-copy stays in the workbench under `qa/kits/translate-event-kit/`: it is
+the fixture for Vancetope's own end-to-end test of the chain, deliberately not
+a reference to anything outside that checkout. Two documents that look alike
+with different owners, and both need touching when the chain changes.
+
 ### 6.1 Why an event and not a model call
 
 The brain side is the `translation` kit — three documents:

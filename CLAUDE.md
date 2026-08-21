@@ -19,6 +19,11 @@ Satz Regeln für beide Codebasen.
   keine Task-Liste (siehe `specs/README.md`).
 - Planung / Brainstorming: `planning/` — Vorüberlegungen, Session-Exports,
   verworfene Wege. Was gebaut ist, wandert nach `specs/`, nicht hierhin.
+- Brain-Seite: `kits/` — Vancetope-Kits, die installiert werden, damit
+  `hugin/` etwas zum Rufen hat. Konvention ist `kits/<name>/kit.yaml`, damit
+  das Repo direkt als Kit-Quelle taugt. Ändert sich ein Payload in `hugin/`,
+  ändert sich das Kit im **selben** Commit — das ist der Grund, warum es hier
+  liegt und nicht in vance-kits.
 - Container-Build und Alt-Manifeste: `deploy/` (siehe unten)
 - Datengeneratoren: `scripts/` — z.B. `generate-mediatopics-tsv.py` für
   `server/src/main/resources/topics/iptc-mediatopics.tsv`

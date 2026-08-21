@@ -34,6 +34,9 @@ de.mhus.hrafnagud.
   server/     Entrypoint plus runtime wiring, nothing else.
 ```
 
+Beside `server/` sits [`kits/`](kits/) — the brain side of what `hugin/` calls,
+as Vancetope kits installable straight from this repository.
+
 **The two ravens are the layering.** Munin remembers: it collects, deduplicates
 and stores, and it does that without a brain anywhere near it. Hugin thinks:
 translation today, rating or clustering later. Hugin imports Munin, never the
@@ -348,10 +351,21 @@ vance:
         token: ${VANCE_TRANSLATE_TOKEN}
 ```
 
-The brain side is the `translation` kit: the event, the script and the
-recipe live there as documents, so the prompt and the model are editable
-without redeploying this service. That is the reason to integrate through
-an event rather than to call a model directly from here.
+The brain side is the **`translation` kit in this repository**
+([kits/translation](kits/translation)): the event, the script and the recipe
+live there as documents, so the prompt and the model are editable without
+redeploying this service. That is the reason to integrate through an event
+rather than to call a model directly from here — and the reason the kit ships
+here rather than in the kit collection next door is that the payload is one
+contract with two halves, so both change in the same commit.
+
+```bash
+# in the brain, for the project this service is configured against
+kit install https://github.com/mhus/hrafnagud.git --sub-path kits/translation
+```
+
+The event's token and `vance.ode.events.translate-article.token` have to agree;
+[kits/README.md](kits/README.md) lists the three values that span the boundary.
 
 Set a pivot language with no provider wired and the backlog grows with
 nothing draining it — a legible state, and the startup log says so

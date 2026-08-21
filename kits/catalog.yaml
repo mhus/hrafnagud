@@ -1,0 +1,14 @@
+# Title and description overrides for a tenant's kit catalogue, read when this
+# repository is imported as a kit source. Without this file each directory
+# under kits/ would be catalogued under its bare directory name.
+#
+# The name is namespaced: a tenant's catalogue holds kits from several sources,
+# and `translation` alone would be a land grab on a word several of them will
+# want.
+overrides:
+  translation:
+    name: hrafnagud/translation
+    title: Article translation
+    description: >-
+      Synchronous endpoint that translates an article's title and teaser in one
+      model call. The brain side of hrafnagud's translation queue.

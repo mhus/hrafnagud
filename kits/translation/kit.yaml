@@ -1,0 +1,81 @@
+name: translation
+description: |
+  The brain side of hrafnagud's translation: a synchronous endpoint that
+  takes an article's title and teaser and answers with both translated.
+
+  This kit is what makes `hugin.translation.*` work. Install it into the
+  project hrafnagud is configured against, and the event it registers is
+  the one `OdeTranslationProvider` fires. Nothing here is specific to
+  hrafnagud except the payload shape — any service with a lot of text in
+  changing languages can use it — but the two sides are one contract, so
+  the kit lives in the repository of the service that depends on it.
+
+  Three documents, one per layer of the chain:
+
+    _vance/events/translate-article.yaml    the endpoint: script action,
+                                            synchronous, bearer auth
+    _vance/scripts/translate-article.js     calls vance.llm
+    _vance/recipes/article-translate.yaml   the LightLlm config profile
+
+  The event is a `script:` action and therefore synchronous by default —
+  the script runs to the end and its return value comes back as `output`
+  in the HTTP response. No process spawn, no lane lock, no polling.
+
+  Request:
+
+    curl -X POST \
+      -H "Authorization: Bearer <token>" \
+      -H "Content-Type: application/json" \
+      -d '{"title": "Council approves plan",
+           "summary": "The vote ended a three-year debate.",
+           "targetLang": "de"}' \
+      https://<brain>/brain/<tenant>/event/<project>/translate-article
+
+    → {"event": "translate-article",
+       "workflowName": "script:_vance/scripts/translate-article.js",
+       "output": {"title": "Rat beschliesst Plan",
+                  "summary": "Die Abstimmung beendete eine dreijaehrige Debatte.",
+                  "model": "cortecs:deepseek-v4-pro"}}
+
+  Payload fields:
+    title       — title, in any language (required)
+    summary     — teaser; may be empty
+    targetLang  — BCP-47 primary subtag of the target language. Hrafnagud
+                  always sends it (its pivot language); a caller that
+                  omits it gets the script's own fallback, `de`.
+
+  Title and teaser go out in ONE model call. At realistic volume the
+  recipe prompt dominates the token bill — roughly five times the length
+  of the text itself — so a second call would double the expensive half
+  to save nothing.
+
+  The answer also names the model that produced it (`model`, may be
+  null). That is not derivable from the recipe: `params.model` is an
+  alias and a fallback chain may have substituted another model. A
+  consumer that archives translations needs the value to be able to
+  compare two runs later — and must store null as "unknown" rather than
+  as the model it assumed.
+
+  Model choice is the alias in the recipe's `params.model`
+  (`default:fast`). Wanting a different model for translation is a
+  change to that alias in the settings, not to the recipe.
+
+  ## Change the token before first use
+
+  The event carries its token **inline** (`auth.token`). That keeps the
+  kit runnable the moment it is installed, and it has two consequences
+  worth knowing: every installation of this kit shares the same token,
+  and it sits in clear text in a document operators edit.
+
+  For anything reachable from outside the deployment's own network, use
+
+    auth:
+      tokenSetting: translation.token
+
+  instead and keep the value as a PASSWORD setting in the cascade. On
+  hrafnagud's side the matching value is
+  `vance.ode.events.translate-article.token` — the two have to agree,
+  and hrafnagud keeps its half in the environment
+  (`VANCE_TRANSLATE_TOKEN`), never in the database.
+version: "1.0"
+hasEncryptedSecrets: false

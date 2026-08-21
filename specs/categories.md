@@ -210,6 +210,13 @@ the translation provider already uses (`OdeTranslationProvider` as the
 blueprint; the brain side is a kit, so prompt and model stay editable there).
 It answers with a Media Topic id, or with `NOT_A_TOPIC` / `IS_PLACE`.
 
+There is **no kit for it yet**. The translation chain ships its brain side as
+[`kits/translation`](../kits/translation); the resolver fires
+`classify-category` and nothing in this repository or next door answers it, so
+turning stage 2 on today means writing that event first. The blueprint is the
+translation kit, and the event contract is the one `OdeCategoryResolver`
+expects.
+
 Stage 2 is Hugin's and therefore off by default (`hugin.category.enabled`),
 and it needs a brain address on top of that switch — a blank
 `vance.ode.base-url` counts as none, for the reason
