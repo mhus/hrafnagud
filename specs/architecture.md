@@ -136,9 +136,23 @@ Both asynchronous pipelines — body fetching and translation — are driven by 
 status field on the article plus a partial index on the pending value:
 
 ```
-content_queue_idx      { contentNextAttemptAt: 1 }      partial: contentStatus = PENDING
-translation_queue_idx  { translationNextAttemptAt: 1 }  partial: translationStatus = PENDING
+content_queue_idx      { contentNextAttemptAt: 1 }   partial: contentStatus = PENDING
+translation_lifo_idx   { firstSeenAt: -1 }           partial: translationStatus = PENDING
 ```
+
+The two queues are ordered differently on purpose. Body fetching takes the
+oldest due article, translation takes the **newest** — see
+[translation.md](translation.md) §5.2 for why a news archive that falls behind
+should be current rather than complete. So the translation index sorts by
+arrival rather than by due time, and the due predicate is filtered rather than
+indexed: with a range on one field and a sort on another, one of the two is
+served by the index and the other is not, and sorting is the expensive half to
+get wrong.
+
+The older `translation_queue_idx { translationNextAttemptAt: 1 }` is no longer
+created. An existing deployment still has it — `auto-index-creation` adds
+indexes and never drops them — and it can be dropped by hand; nothing queries
+it any more.
 
 The partial filter is what keeps the index proportional to the *backlog*
 rather than to the archive — the difference between thousands of entries and

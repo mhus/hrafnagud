@@ -74,11 +74,25 @@ import org.springframework.data.mongodb.core.mapping.Language;
                 partialFilter = "{ 'contentStatus': 'PENDING' }"),
         // Near-duplicate detection: same story, different URL.
         @CompoundIndex(name = "content_hash_idx", def = "{ 'contentHash': 1 }"),
-        // The translation worker's claim query. Partial-filtered to
-        // PENDING so the index tracks the backlog rather than the whole
-        // archive — the same reason the content queue is.
-        @CompoundIndex(name = "translation_queue_idx",
-                def = "{ 'translationNextAttemptAt': 1 }",
+        // The translation worker's claim query: newest first, because a news
+        // archive that falls behind should be current rather than complete
+        // (specs/translation.md §5.2). Partial-filtered to PENDING so the
+        // index tracks the backlog rather than the whole archive — the same
+        // reason the content queue is.
+        //
+        // The claim also filters on translationNextAttemptAt, which this index
+        // does not cover: with a range predicate on one field and a sort on
+        // another, one of the two is served and the other is filtered, and
+        // sorting is the expensive half to get wrong. Walking newest-first and
+        // skipping the few that are leased or backed off is cheap, because in
+        // a healthy queue nearly every PENDING article is due.
+        //
+        // A new name rather than a new definition under the old one: Mongo
+        // refuses to redefine an index in place, so an existing deployment
+        // would fail to start. The old `translation_queue_idx` is now unused
+        // and can be dropped by hand — nothing creates it any more.
+        @CompoundIndex(name = "translation_lifo_idx",
+                def = "{ 'firstSeenAt': -1 }",
                 partialFilter = "{ 'translationStatus': 'PENDING' }"),
         // Re-evaluating the filter rules walks the archive oldest-examined
         // first, using policyAt as its progress marker so a capped run

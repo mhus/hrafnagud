@@ -277,6 +277,33 @@ client does not surface `Retry-After`, so for the Gemini path the configured
 cooldown is what is used — stated here because the code cannot make the header
 appear and pretending otherwise would be worse than the constant.
 
+### 5.2 Newest first, and therefore a cutoff
+
+The queue is worked **newest first** (`firstSeenAt` descending, still only what
+is due). For a news archive that is the useful order: when the worker cannot
+keep up — a free tier, a rate limit, an outage — what should come out of the
+queue is today's articles, not last week's. A reader asking the feed for the
+last hour cares about the last hour.
+
+The price is starvation, and it is real: an article that once fell behind is
+never reached again while new ones keep arriving. So the ordering comes with
+`hugin.translation.maxAge` (a week by default) — anything older is taken out of
+the queue as `SKIPPED`, with the reason on the article, by one bulk update at
+the start of each round. Without it the backlog would grow for ever and
+`translationBacklog` would stop meaning "work that will be done"; a number that
+only goes up is a decoration, not a metric.
+
+`SKIPPED` rather than `FAILED`, because nothing failed — the archive decided.
+And `PT0S` switches the cutoff off, which makes the queue exhaustive again at
+the price of a head that may never be reached. That trade is the operator's to
+make; what is not available is having neither.
+
+The index follows the ordering: `translation_lifo_idx { firstSeenAt: -1 }`,
+partial on `PENDING` ([architecture.md](architecture.md) §4.1). It replaces
+`translation_queue_idx` under a new name rather than a new definition, because
+Mongo refuses to redefine an index in place and an existing deployment would
+fail to start on it.
+
 `POST /api/v1/articles/{id}/translate` requeues one article.
 
 ## 6. The Vancetope side

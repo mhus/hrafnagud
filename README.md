@@ -390,6 +390,12 @@ nothing draining it — a legible state, and the startup log says so
 explicitly rather than leaving it to be discovered. `GET /api/v1/stats`
 reports `translationBacklog` for the same reason.
 
+**The queue is worked newest first**, so an archive that falls behind stays
+current rather than complete — and `hugin.translation.maxAge` (a week) takes out
+what the queue would therefore never reach, as `SKIPPED` with the reason on the
+article. Without the cutoff the backlog would grow for ever
+([translation.md](specs/translation.md) §5.2).
+
 **A rate limit is not a failure.** A `429` puts the article back in the queue
 with its attempt returned and pauses the whole worker for
 `hugin.translation.throttleCooldown` — on a free tier being throttled is the

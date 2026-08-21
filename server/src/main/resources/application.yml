@@ -315,6 +315,12 @@ hugin:
     # too, so the round stops instead of spending nine leases to hear it
     # again. See specs/translation.md §5.1.
     throttleCooldown: PT1M
+    # The queue is worked NEWEST FIRST: when the worker cannot keep up, what
+    # should come out of it is today's news. The price is that an article which
+    # fell behind is never reached again — so anything older than this is taken
+    # out as SKIPPED, once per round, and the backlog stays a number that means
+    # something. PT0S switches it off and makes the queue exhaustive again.
+    maxAge: P7D
     maxSourceChars: 8000
 
   # Direct model access — the provider that skips the brain. Off unless a key

@@ -131,6 +131,23 @@ public class HuginProperties {
         private Duration throttleCooldown = Duration.ofMinutes(1);
 
         /**
+         * How long an article may wait in the queue before the archive gives up
+         * on translating it.
+         *
+         * <p>The companion to working the queue newest-first. That ordering is
+         * what keeps today's news translated when the worker cannot keep up —
+         * and it means an article that once fell behind is never reached again,
+         * so without a cutoff the backlog grows for ever and its number stops
+         * meaning anything.
+         *
+         * <p>A week by default: long enough that a weekend outage is caught up
+         * on, short enough that the queue is a queue. {@code PT0S} switches it
+         * off and makes the queue exhaustive again — at the price of a head
+         * that may never be reached.
+         */
+        private Duration maxAge = Duration.ofDays(7);
+
+        /**
          * Longest source text handed to a provider in one go. A provider
          * is typically a model call, and an article body arriving where a
          * teaser was expected is the case this guards against.

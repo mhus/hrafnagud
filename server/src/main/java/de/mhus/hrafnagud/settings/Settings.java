@@ -131,6 +131,7 @@ public class Settings {
             SettingDuration retryDelay,
             SettingDuration claimLease,
             SettingDuration throttleCooldown,
+            SettingDuration maxAge,
             SettingInt maxSourceChars) {
     }
 
@@ -319,6 +320,12 @@ public class Settings {
                         "How long the worker waits after a provider rate-limited it. Applies "
                                 + "to the whole worker: a provider that refused this call will "
                                 + "refuse the next nine, and finding that out costs ten leases."),
+                store.duration("hugin.translation.maxAge",
+                        translationDefaults::getMaxAge,
+                        "How long an article may wait before the archive gives up translating "
+                                + "it. The queue works newest first, so without this an article "
+                                + "that fell behind is never reached again and the backlog grows "
+                                + "for ever. PT0S switches it off."),
                 store.integer("hugin.translation.maxSourceChars",
                         translationDefaults::getMaxSourceChars,
                         "Longest source text handed to a provider in one go."));

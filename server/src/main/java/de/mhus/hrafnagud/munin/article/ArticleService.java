@@ -14,6 +14,7 @@ import de.mhus.hrafnagud.munin.lang.LanguageResolver;
 import de.mhus.hrafnagud.munin.place.PlaceRegistry;
 import de.mhus.hrafnagud.settings.Settings;
 import de.mhus.hrafnagud.munin.source.SourceDocument;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -884,10 +885,13 @@ public class ArticleService {
         Instant leaseUntil = now.plus(translationConfig.claimLease().value());
         List<ArticleDocument> claimed = new ArrayList<>();
         for (int i = 0; i < limit; i++) {
+            // Newest first, deliberately — see specs/translation.md §5.2. The
+            // due predicate stays: a leased or backed-off article is not ready
+            // however new it is.
             Query query = Query.query(
                             Criteria.where(F_TRANSLATION_STATUS).is(TranslationStatus.PENDING)
                                     .and(F_TRANSLATION_NEXT_ATTEMPT_AT).lte(now))
-                    .with(Sort.by(Sort.Direction.ASC, F_TRANSLATION_NEXT_ATTEMPT_AT));
+                    .with(Sort.by(Sort.Direction.DESC, "firstSeenAt"));
             ArticleDocument article = mongoTemplate.findAndModify(query,
                     new Update().set(F_TRANSLATION_NEXT_ATTEMPT_AT, leaseUntil)
                             .inc("translationAttempts", 1),
@@ -954,6 +958,41 @@ public class ArticleService {
      * misconfigured would otherwise grow the backlog without bound, and
      * the status is what an operator reads to find out.
      */
+    /**
+     * Takes articles out of the translation queue that are older than the
+     * archive is willing to pay for.
+     *
+     * <p>The companion to claiming newest-first. Under continuous ingest an old
+     * article is never reached again, so without this the backlog grows for
+     * ever and {@code translationBacklog} stops meaning "work that will be
+     * done" — a number that only goes up is not a metric, it is a decoration.
+     *
+     * <p>They become {@code SKIPPED} rather than {@code FAILED}: nothing failed,
+     * the archive decided. The reason is written where the console already looks
+     * for one, so "why is this not translated" stays answerable.
+     *
+     * @param maxAge zero or negative switches this off, and then the queue is
+     *               exhaustive again — at the price of a head that may never be
+     *               reached
+     * @return how many were dropped
+     */
+    public long expireTranslationBacklog(Instant now, Duration maxAge) {
+        if (maxAge.isZero() || maxAge.isNegative()) {
+            return 0;
+        }
+        Instant cutoff = now.minus(maxAge);
+        return mongoTemplate.updateMulti(
+                Query.query(Criteria.where(F_TRANSLATION_STATUS).is(TranslationStatus.PENDING)
+                        .and("firstSeenAt").lt(cutoff)),
+                new Update()
+                        .set(F_TRANSLATION_STATUS, TranslationStatus.SKIPPED)
+                        .unset(F_TRANSLATION_NEXT_ATTEMPT_AT)
+                        .set("translationError",
+                                "not translated: still queued after " + maxAge
+                                        + ", and the queue works newest first"),
+                ArticleDocument.class).getModifiedCount();
+    }
+
     /**
      * Puts a claimed article back in the queue without charging it an attempt.
      *

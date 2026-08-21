@@ -83,6 +83,15 @@ public class TranslationTick {
      * @return number of articles attempted
      */
     int runRound(Instant now) {
+        // Before claiming: what the queue will never reach should not sit in it
+        // pretending otherwise. One bulk update per round, and normally zero
+        // rows — the alternative is a backlog number that only grows.
+        long expired = articleService.expireTranslationBacklog(
+                now, config.maxAge().value());
+        if (expired > 0) {
+            log.info("Translation: {} article(s) dropped from the queue, older than {}",
+                    expired, config.maxAge().value());
+        }
         List<ArticleDocument> claimed =
                 articleService.claimTranslationDue(now, config.batchSize().value());
         if (claimed.isEmpty()) {
